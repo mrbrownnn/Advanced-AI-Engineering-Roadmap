@@ -1,62 +1,48 @@
-# World Models & Embodied AI — 80/20 Architectural Literacy
+# World Models & Embodied AI
 
-An architectural literacy track covering world models, planning, and embodied AI. The goal is to understand how AI systems that interact with the physical world differ from text/retrieval systems, without turning this into a robotics engineering curriculum.
+## Why This Track Exists
 
-## Five Fundamental Questions
+Embodied AI requires models to predict and act within physical environments. This track explores predictive coding, state space models, and reinforcement learning loops.
 
-1. **Representation**: Observations → latent world state; actions; rewards
-2. **Architecture**: Latent dynamics models (Dreamer), vision-language-action models, embodied foundation models
-3. **Learning**: Model-based RL, action-conditioned prediction, imitation learning
-4. **Evaluation**: Prediction accuracy, task completion, sim-to-real transfer gap
-5. **Production**: Simulation cost, sim-to-real gap, safety, real-time control, embodied deployment
+## The Engineering Mastery Loop
 
-## Mental Model
+### 1. BUILD (Implementation)
+- **Task**: Implement a minimal recurrent predictive model (e.g., a simple RNN or SSM) that predicts the next frame in a sequence.
+- **Goal**: Do not rely on high-level abstractions. Build the mechanism so you understand the fundamental constraints.
 
-```
-Observation → Representation → World State → Predict Future → Plan → Action → New Observation
-```
+### 2. MEASURE (Quantitative Reasoning)
+- **Task**: Measure the training instability. Calculate the horizon length before the model's predictions diverge from reality.
+- **Goal**: Instrument the system. Establish a quantitative baseline and derive expected behavior before running the code.
 
-## Modules
+### 3. BREAK (Falsification & Failure)
+- **Task**: Introduce stochasticity or out-of-distribution actions that cause the world model to hallucinate physically impossible states.
+- **Goal**: Break the assumption that the system scales linearly or handles all inputs gracefully. Force a catastrophic failure.
 
-| Module | Focus |
-|--------|-------|
-| [01 — Model-Based Learning](01-model-based-learning/) | Model-based RL intuition, prediction for planning |
-| [02 — Latent World Models](02-latent-world-models/) | Latent dynamics, Dreamer-style systems |
-| [03 — Planning](03-planning/) | Planning with learned models, search, policies |
-| [04 — Vision-Language-Action](04-vision-language-action/) | VLA models, embodied foundation models |
-| [05 — Embodied Agents](05-embodied-agents/) | Robot manipulation, navigation, real-world deployment |
-| [06 — Simulation & Sim-to-Real](06-simulation-sim2real/) | Simulation environments, domain randomization, transfer |
+### 4. EXPLAIN (Diagnosis)
+- **Task**: Diagnose the state collapse. Explain why deterministic models fail in stochastic environments.
+- **Goal**: Formulate a falsifiable hypothesis explaining exactly why the system broke at that specific point using profiling or traces.
 
-## Connection to Core Track
+### 5. IMPROVE (Optimization)
+- **Task**: Implement a latent variable model (e.g., VAE) or a discrete bottleneck (VQ) to handle uncertainty.
+- **Goal**: Apply an optimization, adaptation, or architectural change based on evidence from the failure.
 
-```
-World Models → reasoning and planning (Module 06)
-             → agent loops (Module 12)
-             → multimodal perception (Module 21)
-             → evaluation (Module 15)
-             → safety (Module 18)
-```
+### 6. DEFEND (Production Trade-offs)
+- **Task**: Defend an architecture for a robotics planning system (e.g., model-based RL vs behavior cloning).
+- **Goal**: Present the final engineering decision. Defend the trade-offs with empirical evidence and acknowledge remaining uncertainties.
 
-## The Learner Should Finish Understanding
+## Source-Code Reading
+- **Task**: Read the architecture of DreamerV3 or similar open-source world models.
 
-- What a world model is and how it differs from an LLM/VLM
-- How prediction interacts with action in a control loop
-- Why simulation is essential and what the sim-to-real gap means
-- Why world models matter for the future of autonomous AI
+## Expected Artifacts
+- **Engineering Report**: Document the entire BUILD → MEASURE → BREAK → DEFEND loop with empirical evidence.
+- **Implementation Code**: The scratch code demonstrating the mechanism.
 
-## Recommended Timing
-
-Month 5, alongside core Modules 14–16.
-
-## Competency Target
+## Competency Targets
 
 ```yaml
 competency:
-  bloom: Understand → Apply → Analyze
-  solo: Multistructural → Relational
-  dreyfus: Advanced Beginner
+  sfia: 5
+  bloom: Evaluate -> Create
+  solo: Relational -> Extended Abstract
+  dreyfus: Competent
 ```
-
-## Status
-
-🏗️ Skeleton established. Content to be developed.

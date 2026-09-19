@@ -1,51 +1,48 @@
-# Vision-Language Models — 80/20 Architectural Literacy
+# Vision-Language Models (VLMs)
 
-An architectural literacy track covering vision-language models. The goal is to understand how vision is integrated into LLMs well enough to read papers, evaluate production systems, and identify where the domain connects to the core AI engineering stack.
+## Why This Track Exists
 
-## Five Fundamental Questions
+VLMs combine LLM reasoning with visual understanding. Engineering these systems requires managing heterogeneous modalities, massive token sequences, and cross-attention architectures.
 
-1. **Representation**: How are images converted into tokens that an LLM can process? (Patches, ViT, learned features)
-2. **Architecture**: How are vision and language combined? (Encoder-projector-LM, cross-attention, native multimodal)
-3. **Learning**: How are multimodal models trained? (Pre-training on image-text pairs, instruction tuning, alignment)
-4. **Evaluation**: How do we evaluate VLM outputs? (Hallucination benchmarks, grounding, OCR/document accuracy)
-5. **Production**: What are the serving and systems costs of visual tokens? (Memory, compute, TTFT, throughput)
+## The Engineering Mastery Loop
 
-## Modules
+### 1. BUILD (Implementation)
+- **Task**: Implement a visual embedding projection layer that maps CLIP patch embeddings into an LLM's vocabulary space.
+- **Goal**: Do not rely on high-level abstractions. Build the mechanism so you understand the fundamental constraints.
 
-| Module | Focus |
-|--------|-------|
-| [01 — Vision Representation](01-vision-representation/) | Patches, ViT, visual features, resolution strategies |
-| [02 — Contrastive Learning](02-contrastive-learning/) | CLIP, SigLIP, shared embedding spaces |
-| [03 — VLM Architectures](03-vlm-architectures/) | Encoder-projector-LM (LLaVA), cross-attention, unified models |
-| [04 — Multimodal Training](04-multimodal-training/) | Image-text pre-training, instruction tuning, data mixtures |
-| [05 — Grounding, Documents, OCR](05-grounding-documents-ocr/) | Document understanding, OCR, bounding box prediction |
-| [06 — VLM Evaluation](06-vlm-evaluation/) | Hallucination (POPE), grounding, multimodal benchmarks |
-| [07 — VLM Serving](07-vlm-serving/) | Visual tokens in KV cache, serving memory, TTFT, throughput |
+### 2. MEASURE (Quantitative Reasoning)
+- **Task**: Calculate the token budget consumed by a 4K image. Measure the TTFT (Time To First Token) impact of visual context.
+- **Goal**: Instrument the system. Establish a quantitative baseline and derive expected behavior before running the code.
 
-## Connection to Core Track
+### 3. BREAK (Falsification & Failure)
+- **Task**: Create a multi-turn conversation with high-resolution images in every turn, breaking the KV cache limit.
+- **Goal**: Break the assumption that the system scales linearly or handles all inputs gracefully. Force a catastrophic failure.
 
-```
-VLM → visual tokens in KV cache (Module 03)
-    → serving memory and TTFT (Module 02, 04)
-    → multimodal retrieval / RAG (Module 09, 10)
-    → evaluation of multimodal outputs (Module 15)
-    → cost modeling for visual tokens (Module 22)
-    → unified multimodal systems (Module 21)
-```
+### 4. EXPLAIN (Diagnosis)
+- **Task**: Diagnose the KV cache exhaustion. Explain how visual tokens fragment memory differently than text.
+- **Goal**: Formulate a falsifiable hypothesis explaining exactly why the system broke at that specific point using profiling or traces.
 
-## Recommended Timing
+### 5. IMPROVE (Optimization)
+- **Task**: Implement visual token compression (e.g., Perceiver Resampler) or dynamic image resolution scaling.
+- **Goal**: Apply an optimization, adaptation, or architectural change based on evidence from the failure.
 
-Month 2 of the program, alongside core Modules 03–05.
+### 6. DEFEND (Production Trade-offs)
+- **Task**: Defend a production choice between early fusion (native VLM) and late fusion (pipeline models).
+- **Goal**: Present the final engineering decision. Defend the trade-offs with empirical evidence and acknowledge remaining uncertainties.
 
-## Competency Target
+## Source-Code Reading
+- **Task**: Read the visual encoding and projection logic in the LLaVA repository.
+
+## Expected Artifacts
+- **Engineering Report**: Document the entire BUILD → MEASURE → BREAK → DEFEND loop with empirical evidence.
+- **Implementation Code**: The scratch code demonstrating the mechanism.
+
+## Competency Targets
 
 ```yaml
 competency:
-  bloom: Understand → Apply → Analyze
-  solo: Multistructural → Relational
-  dreyfus: Advanced Beginner
+  sfia: 5
+  bloom: Evaluate -> Create
+  solo: Relational -> Extended Abstract
+  dreyfus: Competent
 ```
-
-## Status
-
-🏗️ Skeleton established. Content to be developed.
