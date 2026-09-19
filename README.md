@@ -31,21 +31,27 @@ Satellite tracks are **NOT** superficial keyword surveys. They reach architectur
 
 ---
 
-## Central Engineering Loop
+## The Engineering Evidence Philosophy
+
+This program rejects "topic coverage." Understanding an API or reading a paper is insufficient. The curriculum is governed by a strict [Depth Contract](advanced-ai-engineering/DEPTH-CONTRACT.md), demanding empirical engineering evidence for every completed module.
+
+### Central Engineering Loop
+
+Defined fully in the [Engineering Learning Protocol](advanced-ai-engineering/ENGINEERING-LEARNING-PROTOCOL.md):
 
 ```
 BUILD → MEASURE → BREAK → EXPLAIN → IMPROVE → DEFEND
 ```
 
-A system merely "working" is not considered completion.
+A system merely "working" is not considered completion. You must break it, diagnose the failure, and defend the trade-offs of your fix.
 
-## Central Literature Loop
+### Central Literature Loop
 
 ```
 READ → REPRODUCE → CHALLENGE → CONNECT → APPLY
 ```
 
-A paper merely "read" is not considered understood.
+A paper merely "read" is not considered understood. You must reproduce its core mechanism and identify where it fails.
 
 ---
 
@@ -90,6 +96,8 @@ Intensive AI Engineer/
 ├── COMPETENCY.md                   ← SFIA, Bloom, SOLO, Dreyfus framework
 │
 ├── advanced-ai-engineering/        ← CORE: 25-module deep track
+│   ├── DEPTH-CONTRACT.md           ← Defines the standard for mastery vs topic coverage
+│   └── ENGINEERING-LEARNING-PROTOCOL.md ← The rigorous loops used to execute modules
 │
 ├── vision-language-models/         ← SATELLITE: VLM 80/20
 ├── speech-ai/                      ← SATELLITE: Speech 80/20
@@ -105,9 +113,10 @@ Intensive AI Engineer/
 
 1. Read [ROADMAP.md](ROADMAP.md) for the 26-week schedule
 2. Read [COMPETENCY.md](COMPETENCY.md) for the competency framework
-3. Start with [advanced-ai-engineering/](advanced-ai-engineering/) Module 00
-4. Satellite tracks integrate starting Month 2
+3. Read [DEPTH-CONTRACT.md](advanced-ai-engineering/DEPTH-CONTRACT.md) and [ENGINEERING-LEARNING-PROTOCOL.md](advanced-ai-engineering/ENGINEERING-LEARNING-PROTOCOL.md) to understand the required rigor.
+4. Start with [advanced-ai-engineering/](advanced-ai-engineering/) Module 00
+5. Satellite tracks integrate starting Month 2
 
 ## Status
 
-🏗️ **Repository skeleton established.** Content is being progressively developed over 6 months.
+🏗️ **Curriculum Depth Upgrade Completed.** The repository architecture and mastery contracts are in place. Content is being progressively developed over 6 months.
