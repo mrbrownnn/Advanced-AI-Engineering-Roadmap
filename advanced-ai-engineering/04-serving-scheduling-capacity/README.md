@@ -4,69 +4,45 @@
 
 The scheduler is the brain of an inference serving system. It decides what runs, when, and in what combination. Poor scheduling turns expensive GPUs into idle hardware or causes SLO violations under moderate load. This module connects queueing theory to practical scheduler design.
 
-## Key Engineering Questions
+## The Engineering Mastery Loop
 
-- What is the throughput difference between static, dynamic, and continuous batching?
-- How does chunked prefill prevent decode latency spikes?
-- At what arrival rate does the system saturate? How do I predict the saturation knee?
-- How do I apply Little's Law to capacity planning for LLM serving?
-- How do I design admission control and load shedding policies?
-- How do I plan capacity for a given SLO, traffic pattern, and growth rate?
+### 1. BUILD (Implementation)
+- **Task**: Implement a minimal continuous batching scheduler (iteration-level scheduling) that handles request arrivals and departures dynamically.
+- **Goal**: Do not rely on high-level abstractions. Build the mechanism so you understand the fundamental constraints.
 
-## Prerequisites
+### 2. MEASURE (Quantitative Reasoning)
+- **Task**: Measure the throughput (tokens/sec) and goodput (requests meeting SLO). Model the queue using Little's Law.
+- **Goal**: Instrument the system. Establish a quantitative baseline and derive expected behavior before running the code.
 
-- Module 02 (TTFT, TPOT, throughput, goodput)
-- Module 03 (KV cache lifecycle, memory pressure)
+### 3. BREAK (Falsification & Failure)
+- **Task**: Inject a burst of traffic that exceeds the service rate. Observe the saturation knee where tail latency explodes.
+- **Goal**: Break the assumption that the system scales linearly or handles all inputs gracefully. Force a catastrophic failure.
 
-## Topics
+### 4. EXPLAIN (Diagnosis)
+- **Task**: Diagnose the queue buildup. Explain the mathematical relationship between utilization and queueing delay as utilization approaches 100%.
+- **Goal**: Formulate a falsifiable hypothesis explaining exactly why the system broke at that specific point using profiling or traces.
 
-### Batching Strategies
-- Static batching as baseline: wait for batch, process, return
-- Dynamic batching: group arriving requests
-- Continuous batching (iteration-level scheduling): add/remove requests per iteration
-- Chunked prefill: breaking long prefills into chunks to reduce decode interference
+### 5. IMPROVE (Optimization)
+- **Task**: Implement an admission control and load shedding policy to protect the SLO during traffic bursts.
+- **Goal**: Apply an optimization, adaptation, or architectural change based on evidence from the failure.
 
-### Scheduling
-- Priority scheduling: latency-sensitive vs throughput-optimized requests
-- Fairness: preventing starvation under mixed workloads
-- Admission control: rejecting requests to protect SLOs
-- SLO-aware scheduling: optimizing for goodput, not just throughput
+### 6. DEFEND (Production Trade-offs)
+- **Task**: Defend a capacity plan for a given expected traffic pattern and strict p99 latency SLO.
+- **Goal**: Present the final engineering decision. Defend the trade-offs with empirical evidence and acknowledge remaining uncertainties.
 
-### Queueing Fundamentals
-- Arrival rate, service rate, utilization
-- Little's Law: L = λW
-- Burstiness and its impact on tail latency
-- Saturation knee: the utilization point where latency explodes
-- Queueing latency vs processing latency
-
-### Capacity and Resilience
-- Backpressure: propagating overload signals upstream
-- Load shedding: graceful degradation under extreme load
-- Capacity planning: sizing for steady state, bursts, and growth
-- Multi-model and multi-tenant scheduling
+## Source-Code Reading
+- **Task**: Trace the scheduling loop in vLLM's `Scheduler` class.
 
 ## Expected Artifacts
-
-1. **Batching comparison** — benchmark static vs dynamic vs continuous batching for the same workload
-2. **Saturation analysis** — identify the saturation knee for a specific system and workload
-3. **Capacity plan** — produce a capacity plan for a given SLO, traffic pattern, and growth projection
-4. **Engineering report** — scheduling strategy recommendation with evidence
-
-## Exit Criteria
-
-The learner can:
-- Explain why continuous batching outperforms static batching for autoregressive generation
-- Predict and measure the saturation knee for a serving system
-- Apply Little's Law to estimate queue depth and latency
-- Design an admission control policy for a given SLO and traffic pattern
-- Produce a defensible capacity plan with quantitative justification
+- **Engineering Report**: Document the entire BUILD → MEASURE → BREAK → DEFEND loop with empirical evidence.
+- **Implementation Code**: The scratch code demonstrating the mechanism.
 
 ## Competency Targets
 
 ```yaml
 competency:
   sfia: 5
-  bloom: Evaluate
-  solo: Relational
+  bloom: Evaluate -> Create
+  solo: Relational -> Extended Abstract
   dreyfus: Competent
 ```

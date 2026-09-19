@@ -4,72 +4,45 @@
 
 You cannot engineer systems around models you do not understand. This module builds a precise mental model of the modern decoder-only transformer — every layer, every normalization, every attention variant — so that subsequent modules on inference, caching, and optimization connect to concrete architectural reality.
 
-## Key Engineering Questions
+## The Engineering Mastery Loop
 
-- Given a model card, can I compute the parameter count from first principles?
-- Given a model and sequence length, can I estimate the FLOP count for a forward pass?
-- Given a model and batch of sequences, can I compute the KV cache memory requirement?
-- How does the choice of attention mechanism (MHA/MQA/GQA/MLA) affect memory and compute?
-- How does MoE change the parameter-vs-compute relationship?
+### 1. BUILD (Implementation)
+- **Task**: Implement a minimal decoder-only Transformer layer in PyTorch from scratch, focusing on matrix dimensions and memory layout.
+- **Goal**: Do not rely on high-level abstractions. Build the mechanism so you understand the fundamental constraints.
 
-## Prerequisites
+### 2. MEASURE (Quantitative Reasoning)
+- **Task**: Calculate the exact parameter count, FLOPs per token, and theoretical memory bandwidth requirement for the forward pass.
+- **Goal**: Instrument the system. Establish a quantitative baseline and derive expected behavior before running the code.
 
-- Module 00 (experimental methodology)
-- Linear algebra basics (matrix multiplication, dimensions)
-- PyTorch fundamentals (tensors, autograd not required)
+### 3. BREAK (Falsification & Failure)
+- **Task**: Increase the batch size until the forward pass OOMs. Predict the exact batch size where this will happen before running it.
+- **Goal**: Break the assumption that the system scales linearly or handles all inputs gracefully. Force a catastrophic failure.
 
-## Topics
+### 4. EXPLAIN (Diagnosis)
+- **Task**: Diagnose the OOM by mapping the activation sizes at each layer. Explain which intermediate tensor consumed the most memory.
+- **Goal**: Formulate a falsifiable hypothesis explaining exactly why the system broke at that specific point using profiling or traces.
 
-### Decoder Architecture
-- Full decoder-only transformer walkthrough
-- Token embedding and un-embedding
-- Residual stream as the central data flow
-- Layer structure: attention → FFN with residual connections
+### 5. IMPROVE (Optimization)
+- **Task**: Implement gradient checkpointing or activation offloading to trade compute for memory.
+- **Goal**: Apply an optimization, adaptation, or architectural change based on evidence from the failure.
 
-### Normalization and Activation
-- RMSNorm: why it replaced LayerNorm in modern architectures
-- SwiGLU: gated linear unit activation in FFN
+### 6. DEFEND (Production Trade-offs)
+- **Task**: Defend a hardware selection (e.g., A100 vs H100) based on the calculated arithmetic intensity of the model.
+- **Goal**: Present the final engineering decision. Defend the trade-offs with empirical evidence and acknowledge remaining uncertainties.
 
-### Positional Encoding
-- RoPE: rotary position embedding mechanism and properties
-
-### Attention Variants
-- Multi-Head Attention (MHA): full KV heads per attention head
-- Multi-Query Attention (MQA): single KV head shared across all query heads
-- Grouped-Query Attention (GQA): KV heads shared across groups of query heads
-- Multi-head Latent Attention (MLA): compressed KV via low-rank projection
-
-### Mixture of Experts
-- MoE layer structure: router + expert FFNs
-- Sparse activation: active parameters vs total parameters
-- Load balancing and routing
-
-### Accounting
-- Parameter counting: embedding, attention, FFN, output
-- FLOP estimation: per-layer, per-token, per-sequence
-- KV cache accounting: bytes per token per layer as a function of attention variant
+## Source-Code Reading
+- **Task**: Trace the forward pass of `LlamaForCausalLM` in the Hugging Face Transformers library.
 
 ## Expected Artifacts
-
-1. **Parameter accounting spreadsheet** — compute parameter counts for 2-3 real models from architecture specs
-2. **FLOP estimation** — estimate FLOPs for prefill and decode for a specific model and workload
-3. **KV cache calculator** — compute KV memory requirements as a function of batch size, sequence length, and attention variant
-4. **Architecture annotated diagram** — trace data flow through a specific model
-
-## Exit Criteria
-
-The learner can:
-- Given a model's architecture specification, compute parameter count, FLOP estimate, and KV cache size without reference materials
-- Explain how GQA reduces KV memory relative to MHA and the quality trade-off
-- Explain how MoE decouples parameter count from per-token compute cost
-- Trace a token through the full forward pass from embedding to logits
+- **Engineering Report**: Document the entire BUILD → MEASURE → BREAK → DEFEND loop with empirical evidence.
+- **Implementation Code**: The scratch code demonstrating the mechanism.
 
 ## Competency Targets
 
 ```yaml
 competency:
   sfia: 4-5
-  bloom: Analyze
-  solo: Relational
-  dreyfus: Advanced Beginner → Competent
+  bloom: Evaluate -> Create
+  solo: Relational -> Extended Abstract
+  dreyfus: Competent
 ```

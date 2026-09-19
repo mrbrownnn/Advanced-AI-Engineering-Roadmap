@@ -4,66 +4,45 @@
 
 Models fail in predictable ways. Understanding failure taxonomy, calibration, and uncertainty enables engineering controls: selective prediction, abstention, escalation, and regression testing. This module shifts from "the model works" to "I know when and how the model fails."
 
-## Key Engineering Questions
+## The Engineering Mastery Loop
 
-- What type of failure is this? (hallucination, instruction failure, reasoning failure, retrieval failure, tool failure)
-- How calibrated is the model? Is its confidence meaningful?
-- When should the system abstain or escalate instead of answering?
-- How do I detect behavior regression after model or prompt changes?
-- How do I handle distribution shift in production?
+### 1. BUILD (Implementation)
+- **Task**: Implement an abstention layer based on token logprobs or semantic entropy.
+- **Goal**: Do not rely on high-level abstractions. Build the mechanism so you understand the fundamental constraints.
 
-## Prerequisites
+### 2. MEASURE (Quantitative Reasoning)
+- **Task**: Measure the calibration curve of the model. Calculate precision, recall, and AUROC for the abstention threshold.
+- **Goal**: Instrument the system. Establish a quantitative baseline and derive expected behavior before running the code.
 
-- Module 00 (measurement, experimental design)
-- Module 01 (model architecture)
+### 3. BREAK (Falsification & Failure)
+- **Task**: Create an adversarial dataset that exploits the model's overconfidence, breaking the calibration curve.
+- **Goal**: Break the assumption that the system scales linearly or handles all inputs gracefully. Force a catastrophic failure.
 
-## Topics
+### 4. EXPLAIN (Diagnosis)
+- **Task**: Diagnose why the model is confident but wrong (e.g., training data bias, prompt formatting).
+- **Goal**: Formulate a falsifiable hypothesis explaining exactly why the system broke at that specific point using profiling or traces.
 
-### Failure Taxonomy
-- Hallucination types: factual, reasoning, attribution
-- Instruction failure: ignoring or misinterpreting instructions
-- Reasoning failure: logical errors, arithmetic errors
-- Retrieval failure: wrong context selected, relevant context missed
-- Tool failure: incorrect tool calls, missing parameters
+### 5. IMPROVE (Optimization)
+- **Task**: Implement a multi-sample consistency check to improve uncertainty estimation.
+- **Goal**: Apply an optimization, adaptation, or architectural change based on evidence from the failure.
 
-### Calibration and Uncertainty
-- Calibration: does 80% confidence mean 80% correct?
-- Overconfidence: when models are wrong but certain
-- Model disagreement: using multiple models or samples to estimate uncertainty
-- Consistency: does the model give the same answer when asked differently?
+### 6. DEFEND (Production Trade-offs)
+- **Task**: Defend a selective prediction strategy that balances safety (abstention) with utility (answering).
+- **Goal**: Present the final engineering decision. Defend the trade-offs with empirical evidence and acknowledge remaining uncertainties.
 
-### Decision Under Uncertainty
-- Selective prediction: only answer when confidence is high enough
-- Abstention: refusing to answer with explicit uncertainty signal
-- Escalation: routing to human or more capable system
-- Threshold selection: precision-recall trade-offs for abstention
-
-### Production Behavior
-- Distribution shift: when production inputs differ from training/evaluation data
-- Behavior regression: detecting degradation after changes
-- Monitoring model behavior over time
+## Source-Code Reading
+- **Task**: Read calibration methodologies in model safety papers.
 
 ## Expected Artifacts
-
-1. **Failure taxonomy for a specific system** — categorize failures from a real or realistic evaluation set
-2. **Calibration analysis** — measure calibration of a model on a specific task
-3. **Selective prediction investigation** — implement and evaluate an abstention strategy
-4. **Engineering report** — recommendation for handling uncertainty in a specific application
-
-## Exit Criteria
-
-The learner can:
-- Classify model failures by type and identify the root cause
-- Measure calibration and assess whether model confidence is usable
-- Design and evaluate a selective prediction / abstention strategy
-- Set up behavior regression testing for model or prompt changes
+- **Engineering Report**: Document the entire BUILD → MEASURE → BREAK → DEFEND loop with empirical evidence.
+- **Implementation Code**: The scratch code demonstrating the mechanism.
 
 ## Competency Targets
 
 ```yaml
 competency:
   sfia: 5
-  bloom: Evaluate
-  solo: Relational
+  bloom: Evaluate -> Create
+  solo: Relational -> Extended Abstract
   dreyfus: Competent
 ```

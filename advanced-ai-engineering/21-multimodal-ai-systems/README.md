@@ -4,57 +4,45 @@
 
 Modern AI engineering extends beyond text to vision, audio, and multimodal coordination. This module bridges the core engineering curriculum with the satellite tracks, focusing on the systems engineering challenges of multimodal ingestion, cross-modal embedding, token budget management, and multi-stream synchronization in production.
 
-## Key Engineering Questions
+## The Engineering Mastery Loop
 
-- How do visual and audio tokens impact KV cache sizing, TTFT, and serving memory bandwidth?
-- How do I design pipelines that ingest, compress, and route heterogeneous media streams (video, audio, text) without introducing latency bottlenecks?
-- How do cross-attention and projection layers affect distributed model partitioning (tensor parallelism vs pipeline parallelism)?
-- How do I evaluate multimodal outputs where errors can originate in perception, reasoning, or cross-modal alignment?
+### 1. BUILD (Implementation)
+- **Task**: Implement a multimodal pipeline that calculates the token budget for mixed image and text inputs.
+- **Goal**: Do not rely on high-level abstractions. Build the mechanism so you understand the fundamental constraints.
 
-## Prerequisites
+### 2. MEASURE (Quantitative Reasoning)
+- **Task**: Measure the TTFT impact of a 4K image vs a 1080p image. Calculate the memory consumption of visual tokens in the KV cache.
+- **Goal**: Instrument the system. Establish a quantitative baseline and derive expected behavior before running the code.
 
-- Module 02 (Inference & GPU Systems Fundamentals)
-- Module 03 (KV Cache Engineering)
-- Module 04 (Serving, Scheduling & Capacity Engineering)
-- Satellite tracks (Vision-Language Models, Speech AI)
+### 3. BREAK (Falsification & Failure)
+- **Task**: Overwhelm the batch scheduler with heterogeneous inputs (short text vs high-res images) causing massive padding waste or OOM.
+- **Goal**: Break the assumption that the system scales linearly or handles all inputs gracefully. Force a catastrophic failure.
 
-## Topics
+### 4. EXPLAIN (Diagnosis)
+- **Task**: Diagnose the batching inefficiency. Explain the KV cache fragmentation caused by the visual tokens.
+- **Goal**: Formulate a falsifiable hypothesis explaining exactly why the system broke at that specific point using profiling or traces.
 
-### Multimodal Token Mechanics & System Costs
-- Image patchification and visual token count calculation (ViT, CLIP, SigLIP)
-- Audio frame representations and token dilation
-- Memory and computational overhead of high-resolution image and video inputs
-- Token compression techniques (spatial pooling, cross-attention resamplers)
+### 5. IMPROVE (Optimization)
+- **Task**: Implement image tiling, token compression (e.g. cross-attention resamplers), or heterogeneous batching strategies.
+- **Goal**: Apply an optimization, adaptation, or architectural change based on evidence from the failure.
 
-### Serving Multimodal Models
-- Heterogeneous batching: handling variable image resolutions and audio lengths
-- Memory footprint: KV cache allocation for large image/video context prefixes
-- Prefill vs decode balance when prefill consists of thousands of visual tokens
+### 6. DEFEND (Production Trade-offs)
+- **Task**: Defend an architecture choice between a native multimodal model vs a decoupled pipeline (STT -> LLM -> TTS).
+- **Goal**: Present the final engineering decision. Defend the trade-offs with empirical evidence and acknowledge remaining uncertainties.
 
-### Cross-Track Synthesis & End-to-End Pipelines
-- Real-time voice-to-voice architectures: STT → LLM → TTS vs native speech-to-speech
-- Multimodal document understanding (OCR-free vs OCR-augmented)
-- Integrating satellite track principles into the core AI Runtime Platform
+## Source-Code Reading
+- **Task**: Read the visual token extraction logic in the LLaVA codebase.
 
 ## Expected Artifacts
-
-1. **Multimodal token and latency profiler** — measurement tool computing TTFT and memory cost as a function of image resolution and audio duration
-2. **Dynamic resolution handler** — preprocessing and serving module implementing token-efficient image tiling
-3. **Engineering report** — architectural analysis comparing decoupled multimodal pipelines vs unified native multimodal models
-
-## Exit Criteria
-
-The learner can:
-- Accurately calculate and optimize the memory and compute footprint of multimodal inputs
-- Architect serving systems capable of handling mixed-modality workloads without degrading text throughput
-- Design end-to-end multimodal systems that synthesize text, vision, and speech components
+- **Engineering Report**: Document the entire BUILD → MEASURE → BREAK → DEFEND loop with empirical evidence.
+- **Implementation Code**: The scratch code demonstrating the mechanism.
 
 ## Competency Targets
 
 ```yaml
 competency:
   sfia: 5
-  bloom: Analyze → Evaluate
-  solo: Relational
+  bloom: Evaluate -> Create
+  solo: Relational -> Extended Abstract
   dreyfus: Competent
 ```

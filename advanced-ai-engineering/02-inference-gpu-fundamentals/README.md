@@ -4,67 +4,45 @@
 
 LLM inference is not "just a forward pass." Understanding GPU execution, memory hierarchy, and the compute-vs-memory-bound distinction is essential for diagnosing performance problems, choosing optimizations, and making capacity decisions. Without this module, optimization becomes cargo-culting.
 
-## Key Engineering Questions
+## The Engineering Mastery Loop
 
-- Is my workload compute-bound or memory-bound? How do I determine this?
-- Where is time being spent during prefill vs decode?
-- What does the Roofline model tell me about my kernel's efficiency?
-- How do I measure TTFT, TPOT, throughput, and goodput correctly?
-- What is the difference between throughput and goodput under SLO constraints?
+### 1. BUILD (Implementation)
+- **Task**: Write a simple CUDA kernel (or Triton equivalent) for vector addition and matrix multiplication.
+- **Goal**: Do not rely on high-level abstractions. Build the mechanism so you understand the fundamental constraints.
 
-## Prerequisites
+### 2. MEASURE (Quantitative Reasoning)
+- **Task**: Profile the kernel using Nsight Systems. Measure TTFT and TPOT on a simple LLM inference run.
+- **Goal**: Instrument the system. Establish a quantitative baseline and derive expected behavior before running the code.
 
-- Module 00 (measurement methodology)
-- Module 01 (LLM architecture, FLOP and memory accounting)
+### 3. BREAK (Falsification & Failure)
+- **Task**: Create a workload with massive memory fragmentation by allocating and freeing tensors randomly before launching the kernel.
+- **Goal**: Break the assumption that the system scales linearly or handles all inputs gracefully. Force a catastrophic failure.
 
-## Topics
+### 4. EXPLAIN (Diagnosis)
+- **Task**: Diagnose the performance collapse using the Roofline model. Show exactly where the workload fell off the compute bound.
+- **Goal**: Formulate a falsifiable hypothesis explaining exactly why the system broke at that specific point using profiling or traces.
 
-### GPU Execution Model
-- Kernel launches, warps, thread blocks
-- Occupancy and latency hiding
-- Synchronization points
+### 5. IMPROVE (Optimization)
+- **Task**: Re-engineer the memory access pattern to achieve coalesced global memory access.
+- **Goal**: Apply an optimization, adaptation, or architectural change based on evidence from the failure.
 
-### Memory Hierarchy
-- Register → shared memory (SRAM) → HBM → system memory
-- Bandwidth at each level
-- Why HBM bandwidth is the primary bottleneck for decode
+### 6. DEFEND (Production Trade-offs)
+- **Task**: Defend whether a specific workload is compute-bound or memory-bound and what optimization strategy should apply.
+- **Goal**: Present the final engineering decision. Defend the trade-offs with empirical evidence and acknowledge remaining uncertainties.
 
-### Arithmetic Intensity and Roofline
-- Arithmetic intensity: FLOPs / bytes transferred
-- Roofline model: identifying compute-bound vs memory-bound regions
-- Applying Roofline to prefill (compute-bound) and decode (memory-bound)
-
-### Profiling
-- GPU profiling tools and methodology
-- Identifying bottlenecks from profiling traces
-- Common profiling pitfalls
-
-### Latency Metrics
-- TTFT (Time to First Token): prefill latency
-- TPOT (Time per Output Token): decode latency
-- Throughput: tokens/second
-- Goodput: throughput under SLO constraints (requests that meet latency targets)
+## Source-Code Reading
+- **Task**: Read the CUDA programming guide sections on memory coalescing and warp scheduling.
 
 ## Expected Artifacts
-
-1. **Roofline analysis** — plot and analyze a real inference workload against the Roofline model
-2. **Prefill vs decode characterization** — measure and explain the different bottlenecks
-3. **Latency measurement report** — correctly measure TTFT, TPOT, throughput with appropriate statistics
-
-## Exit Criteria
-
-The learner can:
-- Determine whether a given workload is compute-bound or memory-bound
-- Use profiling tools to identify the dominant bottleneck in an inference pipeline
-- Correctly measure and report TTFT, TPOT, throughput, and goodput
-- Explain why prefill is compute-bound and decode is memory-bound
+- **Engineering Report**: Document the entire BUILD → MEASURE → BREAK → DEFEND loop with empirical evidence.
+- **Implementation Code**: The scratch code demonstrating the mechanism.
 
 ## Competency Targets
 
 ```yaml
 competency:
   sfia: 4-5
-  bloom: Analyze
-  solo: Relational
-  dreyfus: Advanced Beginner → Competent
+  bloom: Evaluate -> Create
+  solo: Relational -> Extended Abstract
+  dreyfus: Competent
 ```

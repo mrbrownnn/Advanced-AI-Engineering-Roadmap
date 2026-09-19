@@ -4,67 +4,45 @@
 
 Data quality determines model quality. This module covers the engineering of data systems for AI — from provenance and validation through drift detection and active learning. It focuses on the infrastructure and processes that ensure data reliability, not on data science methodology.
 
-## Key Engineering Questions
+## The Engineering Mastery Loop
 
-- Can I trace every data point back to its origin?
-- How do I detect and prevent data leakage and contamination?
-- How do I validate data quality at scale?
-- How do I detect and respond to data drift?
-- When is synthetic data appropriate and how do I validate it?
+### 1. BUILD (Implementation)
+- **Task**: Build a data validation pipeline that detects exact and near-duplicates, schema violations, and test-set leakage.
+- **Goal**: Do not rely on high-level abstractions. Build the mechanism so you understand the fundamental constraints.
 
-## Prerequisites
+### 2. MEASURE (Quantitative Reasoning)
+- **Task**: Measure the false positive rate of the near-duplicate detection at scale using MinHash.
+- **Goal**: Instrument the system. Establish a quantitative baseline and derive expected behavior before running the code.
 
-- Module 00 (measurement, experimental design)
-- Module 06 (failure taxonomy — data-related failures)
+### 3. BREAK (Falsification & Failure)
+- **Task**: Inject subtle train-test leakage that standard exact-match filters miss, causing an artificially inflated evaluation score.
+- **Goal**: Break the assumption that the system scales linearly or handles all inputs gracefully. Force a catastrophic failure.
 
-## Topics
+### 4. EXPLAIN (Diagnosis)
+- **Task**: Diagnose the leakage path. Explain why the evaluation metric is now fundamentally compromised.
+- **Goal**: Formulate a falsifiable hypothesis explaining exactly why the system broke at that specific point using profiling or traces.
 
-### Data Lifecycle
-- Provenance: where did this data come from?
-- Lineage: what transformations were applied?
-- Versioning: reproducible snapshots of datasets
-- Data contracts: schema and quality agreements between producers and consumers
+### 5. IMPROVE (Optimization)
+- **Task**: Implement semantic deduplication and rigorous cryptographic hashing of train/test splits.
+- **Goal**: Apply an optimization, adaptation, or architectural change based on evidence from the failure.
 
-### Quality
-- Validation: schema validation, statistical validation, semantic validation
-- Deduplication: near-duplicate detection at scale
-- Leakage: train-test leakage, evaluation contamination
-- Contamination: benchmark data in training sets
+### 6. DEFEND (Production Trade-offs)
+- **Task**: Defend a data provenance and versioning strategy for a production AI pipeline.
+- **Goal**: Present the final engineering decision. Defend the trade-offs with empirical evidence and acknowledge remaining uncertainties.
 
-### Distribution
-- Slicing: analyzing performance across data subgroups
-- Imbalance: detection and mitigation strategies
-- Drift: covariate shift, concept drift, label drift
-- Monitoring drift in production
-
-### Data Generation
-- Human annotation: guidelines, inter-rater agreement, quality control
-- Weak labeling: programmatic labeling with noise-aware training
-- Synthetic data: generation, validation, and risks
-- Active learning: selecting the most informative examples for labeling
-- Hard-example mining: finding the data the model struggles with
+## Source-Code Reading
+- **Task**: Read the data preparation pipeline scripts for a major open-source dataset like Dolma.
 
 ## Expected Artifacts
-
-1. **Data validation pipeline** — implement quality checks for a dataset
-2. **Leakage audit** — check for data contamination in an evaluation setup
-3. **Drift detection** — implement and test a drift detection mechanism
-4. **Engineering report** — data quality strategy for a specific application
-
-## Exit Criteria
-
-The learner can:
-- Design a data validation pipeline with provenance tracking
-- Detect data leakage and contamination in an evaluation setup
-- Implement drift detection and define response policies
-- Evaluate the quality and risks of synthetic data
+- **Engineering Report**: Document the entire BUILD → MEASURE → BREAK → DEFEND loop with empirical evidence.
+- **Implementation Code**: The scratch code demonstrating the mechanism.
 
 ## Competency Targets
 
 ```yaml
 competency:
   sfia: 5
-  bloom: Evaluate
-  solo: Relational
+  bloom: Evaluate -> Create
+  solo: Relational -> Extended Abstract
   dreyfus: Competent
 ```

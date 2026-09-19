@@ -4,71 +4,45 @@
 
 LLM agents are stateful, long-running, non-deterministic processes with side effects. They fail in the middle, need to be resumed, fan out into parallel sub-tasks, and interact with humans. This module treats agent execution as a systems engineering problem: state management, durability, failure handling, and correctness.
 
-## Key Engineering Questions
+## The Engineering Mastery Loop
 
-- How do I checkpoint and resume agent execution across failures?
-- How do I handle partial failures in fan-out/join patterns?
-- How do I make agent steps idempotent when the LLM is non-deterministic?
-- How do I manage side effects (API calls, writes) in a resumable workflow?
-- How do I version models and prompts without breaking running agents?
+### 1. BUILD (Implementation)
+- **Task**: Implement an agent runtime with checkpointing that can serialize its state (DAG node, memory) and resume from failure.
+- **Goal**: Do not rely on high-level abstractions. Build the mechanism so you understand the fundamental constraints.
 
-## Prerequisites
+### 2. MEASURE (Quantitative Reasoning)
+- **Task**: Measure the state serialization overhead. Track the end-to-end latency of resumed workflows.
+- **Goal**: Instrument the system. Establish a quantitative baseline and derive expected behavior before running the code.
 
-- Module 06 (model failure modes)
-- Module 10 (context management)
+### 3. BREAK (Falsification & Failure)
+- **Task**: Force a crash during a non-idempotent tool call. Observe the duplicate side-effect upon resumption.
+- **Goal**: Break the assumption that the system scales linearly or handles all inputs gracefully. Force a catastrophic failure.
 
-## Topics
+### 4. EXPLAIN (Diagnosis)
+- **Task**: Diagnose the lack of idempotency. Explain the theoretical limits of distributed state across LLMs and external systems.
+- **Goal**: Formulate a falsifiable hypothesis explaining exactly why the system broke at that specific point using profiling or traces.
 
-### Execution Models
-- Execution graphs: DAG-based workflow composition
-- State machines: explicit state transitions with guard conditions
-- Hybrid models: graphs with state machine nodes
+### 5. IMPROVE (Optimization)
+- **Task**: Implement a transactional outbox or explicit compensation steps for tool side-effects.
+- **Goal**: Apply an optimization, adaptation, or architectural change based on evidence from the failure.
 
-### Durability
-- Checkpoint: serializing agent state for later resumption
-- Resume: rehydrating agent state and continuing execution
-- Idempotency: ensuring retried steps don't cause duplicate side effects
-- Retries: exponential backoff, jitter, retry budgets
-- Timeout and cancellation: bounding execution time
+### 6. DEFEND (Production Trade-offs)
+- **Task**: Defend a failure recovery strategy for a long-running, multi-step agent workflow.
+- **Goal**: Present the final engineering decision. Defend the trade-offs with empirical evidence and acknowledge remaining uncertainties.
 
-### Parallelism and Failure
-- Fan-out / join: parallel sub-task execution with aggregation
-- Partial failure: what happens when some branches fail?
-- Transactional outbox: reliable side-effect delivery
-- Compensation: undoing side effects when a workflow fails
-
-### Human-in-the-Loop (HITL)
-- Approval gates: pausing for human review
-- Escalation: routing to humans on uncertainty
-- Feedback integration: incorporating human corrections
-
-### Agent-Specific Challenges
-- Non-deterministic LLM replay: same prompt, different output on retry
-- Model / prompt versioning: upgrading without breaking running workflows
-- Side-effect boundaries: separating computation from effects
+## Source-Code Reading
+- **Task**: Read the checkpointing mechanisms in temporal.io or LangGraph.
 
 ## Expected Artifacts
-
-1. **Checkpoint/resume prototype** — implement basic agent state persistence and recovery
-2. **Idempotency analysis** — identify and solve idempotency challenges in an agent workflow
-3. **Failure injection test** — verify agent behavior under partial failures
-4. **Engineering report** — agent runtime architecture for a specific use case
-
-## Exit Criteria
-
-The learner can:
-- Design an agent runtime with checkpoint, resume, and failure recovery
-- Implement idempotent agent steps despite non-deterministic LLM output
-- Handle fan-out/join with partial failure recovery
-- Manage side-effect boundaries in resumable workflows
-- Reason about model/prompt versioning for running agents
+- **Engineering Report**: Document the entire BUILD → MEASURE → BREAK → DEFEND loop with empirical evidence.
+- **Implementation Code**: The scratch code demonstrating the mechanism.
 
 ## Competency Targets
 
 ```yaml
 competency:
   sfia: 5
-  bloom: Create
-  solo: Relational → Extended Abstract
+  bloom: Evaluate -> Create
+  solo: Relational -> Extended Abstract
   dreyfus: Competent
 ```

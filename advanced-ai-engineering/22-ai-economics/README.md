@@ -4,68 +4,45 @@
 
 Every engineering decision is an economic decision. This module teaches cost modeling, optimization, and the quality-latency-cost trade-off space. The engineer who can quantify the economic impact of technical decisions is far more valuable than one who only optimizes for technical metrics.
 
-## Key Engineering Questions
+## The Engineering Mastery Loop
 
-- What does a request actually cost? What does a successful task cost?
-- How do I model the cost-quality-latency Pareto frontier for my workload?
-- When should I route to a cheaper model? When does that hurt more than it saves?
-- When should I build vs use an API?
-- How do I plan capacity across reserved and elastic resources?
+### 1. BUILD (Implementation)
+- **Task**: Build a comprehensive cost model for an inference workload, factoring in HBM usage, compute utilization, network egress, and engineering time.
+- **Goal**: Do not rely on high-level abstractions. Build the mechanism so you understand the fundamental constraints.
 
-## Prerequisites
+### 2. MEASURE (Quantitative Reasoning)
+- **Task**: Calculate the blended cost per successful task (including retries and failure rates).
+- **Goal**: Instrument the system. Establish a quantitative baseline and derive expected behavior before running the code.
 
-- Module 04 (capacity planning)
-- Module 05 (optimization trade-offs)
-- Module 02 (throughput, goodput)
+### 3. BREAK (Falsification & Failure)
+- **Task**: Design a 'cheap' architecture (e.g., small model + massive search) that technically meets the quality bar but explodes the infrastructure cost at scale.
+- **Goal**: Break the assumption that the system scales linearly or handles all inputs gracefully. Force a catastrophic failure.
 
-## Topics
+### 4. EXPLAIN (Diagnosis)
+- **Task**: Diagnose the false economy. Explain the difference between marginal cost and fixed cost in this scenario.
+- **Goal**: Formulate a falsifiable hypothesis explaining exactly why the system broke at that specific point using profiling or traces.
 
-### Cost Modeling
-- Cost per request: compute + memory + network + storage
-- Cost per token: input tokens vs output tokens
-- Cost per successful task: including retries, fallbacks, and failures
-- GPU utilization economics: idle GPUs, batching efficiency, right-sizing
+### 5. IMPROVE (Optimization)
+- **Task**: Implement a dynamic model routing strategy (cascade) that balances cost and quality.
+- **Goal**: Apply an optimization, adaptation, or architectural change based on evidence from the failure.
 
-### Optimization Strategies
-- Model routing: directing requests to the cheapest model that meets quality requirements
-- Cascades: try cheap model first, escalate to expensive model on failure/uncertainty
-- Fallback: graceful degradation when the primary model is unavailable or over budget
-- Semantic caching: reusing responses for similar queries
-- Workload segmentation: different strategies for different traffic classes
+### 6. DEFEND (Production Trade-offs)
+- **Task**: Defend a build-vs-buy decision for a specific enterprise AI use case.
+- **Goal**: Present the final engineering decision. Defend the trade-offs with empirical evidence and acknowledge remaining uncertainties.
 
-### Trade-off Analysis
-- Quality-latency-cost Pareto frontier: mapping the feasible trade-off space
-- Multi-objective optimization: balancing competing concerns
-- Marginal cost analysis: the cost of the next unit of quality or speed
-- Opportunity cost: what you give up by choosing one strategy
-
-### Strategic Decisions
-- Build vs API: total cost of ownership analysis
-- Reserved vs elastic capacity: when to commit vs when to scale on demand
-- Model size selection: larger model with lower utilization vs smaller model with higher utilization
+## Source-Code Reading
+- **Task**: Read industry pricing models and TCO analyses.
 
 ## Expected Artifacts
-
-1. **Cost model** — compute cost per request and per successful task for a real workload
-2. **Routing experiment** — implement and evaluate a model routing strategy
-3. **Pareto analysis** — map the quality-latency-cost frontier for a specific task
-4. **Engineering report** — cost optimization strategy with ROI analysis
-
-## Exit Criteria
-
-The learner can:
-- Build a complete cost model for an AI workload
-- Design and evaluate model routing and cascade strategies
-- Map and navigate the quality-latency-cost Pareto frontier
-- Produce a build-vs-API analysis with total cost of ownership
-- Make capacity planning decisions with economic justification
+- **Engineering Report**: Document the entire BUILD → MEASURE → BREAK → DEFEND loop with empirical evidence.
+- **Implementation Code**: The scratch code demonstrating the mechanism.
 
 ## Competency Targets
 
 ```yaml
 competency:
   sfia: 5-6
-  bloom: Evaluate → Create
-  solo: Relational → Extended Abstract
-  dreyfus: Competent → Proficient
+  bloom: Evaluate -> Create
+  solo: Relational -> Extended Abstract
+  dreyfus: Competent
 ```

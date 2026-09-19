@@ -4,56 +4,45 @@
 
 AI systems degrade over time not just from data drift, but from upstream model upgrades, provider API changes, and shifting user distributions. Upgrading a foundational model or modifying prompt harnesses in production is fraught with regressions. Harness evolution establishes the discipline of continuous migration, automated prompt optimization, model routing, and backward compatibility.
 
-## Key Engineering Questions
+## The Engineering Mastery Loop
 
-- How do I safely upgrade an underlying foundation model (e.g., from version N to N+1) without breaking downstream agent behaviors?
-- How do automated prompt optimization techniques (e.g., DSPy, MIPRO, TextGrad) fit into an engineering workflow?
-- When should prompt optimizations be baked into a fine-tuned adapter versus kept in dynamic harness layers?
-- How do I design shadow-routing and canary pipelines specifically for generative AI harnesses?
-- What are the rollback criteria when a prompt or harness change exhibits subtle semantic degradation?
+### 1. BUILD (Implementation)
+- **Task**: Build an automated prompt optimization loop (e.g. using DSPy) that optimizes few-shot examples against a metric.
+- **Goal**: Do not rely on high-level abstractions. Build the mechanism so you understand the fundamental constraints.
 
-## Prerequisites
+### 2. MEASURE (Quantitative Reasoning)
+- **Task**: Measure the improvement on the evaluation set. Measure the variance of the optimizer across different random seeds.
+- **Goal**: Instrument the system. Establish a quantitative baseline and derive expected behavior before running the code.
 
-- Module 13 (Harness Engineering)
-- Module 15 (Evaluation Engineering)
-- Module 16 (Falsification & Adversarial Engineering)
+### 3. BREAK (Falsification & Failure)
+- **Task**: Allow the optimizer to overfit to the evaluation set. Observe the catastrophic collapse on a hold-out test set.
+- **Goal**: Break the assumption that the system scales linearly or handles all inputs gracefully. Force a catastrophic failure.
 
-## Topics
+### 4. EXPLAIN (Diagnosis)
+- **Task**: Diagnose the overfitting. Explain how prompt optimization acts exactly like gradient descent in finding spurious correlations.
+- **Goal**: Formulate a falsifiable hypothesis explaining exactly why the system broke at that specific point using profiling or traces.
 
-### Model Upgrade and Migration Engineering
-- Behavioral diffing between model checkpoints and provider revisions
-- Detecting silent capability collapse and prompt sensitivity shifts
-- Maintaining backward compatibility in multi-step agent workflows
+### 5. IMPROVE (Optimization)
+- **Task**: Implement cross-validation, strict data splits, and semantic similarity bounding for the optimizer.
+- **Goal**: Apply an optimization, adaptation, or architectural change based on evidence from the failure.
 
-### Automated Prompt and Harness Optimization
-- Metric-driven prompt tuning frameworks (DSPy teleprompters, search algorithms)
-- Few-shot bootstrapping and automated demonstration selection
-- Overfitting to evaluation sets and out-of-distribution generalization
+### 6. DEFEND (Production Trade-offs)
+- **Task**: Defend the deployment of an optimized harness via a shadow routing / canary rollout strategy.
+- **Goal**: Present the final engineering decision. Defend the trade-offs with empirical evidence and acknowledge remaining uncertainties.
 
-### Progressive Rollout and Lifecycle Management
-- Canary routing strategies based on task complexity and semantic similarity
-- Shadow evaluation against live production traffic
-- Automated rollback triggers based on judge scores and user feedback loops
+## Source-Code Reading
+- **Task**: Read the implementation of the DSPy teleprompter.
 
 ## Expected Artifacts
-
-1. **Migration harness** — automated test runner comparing model N vs model N+1 outputs on a suite of golden tasks
-2. **Automated harness optimization pipeline** — end-to-end DSPy or custom compilation script optimizing prompt demonstrations against a test metric
-3. **Engineering report** — migration analysis document detailing regression rates, cost differences, and go/no-go rollback decisions
-
-## Exit Criteria
-
-The learner can:
-- Execute a zero-downtime model migration with quantifiable behavioral regression bounds
-- Use automated prompt optimization with safeguards against evaluation set leakage
-- Establish canary routing and automated rollback mechanisms for production harnesses
+- **Engineering Report**: Document the entire BUILD → MEASURE → BREAK → DEFEND loop with empirical evidence.
+- **Implementation Code**: The scratch code demonstrating the mechanism.
 
 ## Competency Targets
 
 ```yaml
 competency:
   sfia: 5-6
-  bloom: Evaluate → Create
-  solo: Extended Abstract
-  dreyfus: Proficient
+  bloom: Evaluate -> Create
+  solo: Relational -> Extended Abstract
+  dreyfus: Competent
 ```

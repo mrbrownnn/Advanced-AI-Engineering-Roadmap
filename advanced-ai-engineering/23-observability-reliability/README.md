@@ -6,69 +6,45 @@ You cannot improve what you cannot observe. This module covers the instrumentati
 
 > **Note:** Observability concepts are progressively introduced starting in Module 02. This module integrates and deepens them into a complete operational practice.
 
-## Key Engineering Questions
+## The Engineering Mastery Loop
 
-- What telemetry do I need to diagnose a problem I haven't seen before?
-- How do I trace a request through inference, retrieval, agent execution, and evaluation?
-- How do I detect quality degradation before users report it?
-- How do I define and enforce SLOs for AI systems?
-- How do I attribute costs to specific features, models, or users?
+### 1. BUILD (Implementation)
+- **Task**: Implement a distributed tracing system (e.g., OpenTelemetry) across an LLM, a retrieval database, and an agent tool.
+- **Goal**: Do not rely on high-level abstractions. Build the mechanism so you understand the fundamental constraints.
 
-## Prerequisites
+### 2. MEASURE (Quantitative Reasoning)
+- **Task**: Define and measure specific SLOs (latency, quality, cost) for the system.
+- **Goal**: Instrument the system. Establish a quantitative baseline and derive expected behavior before running the code.
 
-- Module 04 (latency metrics, SLOs)
-- Module 12 (evaluation — online quality measurement)
-- Module 17 (cost attribution)
+### 3. BREAK (Falsification & Failure)
+- **Task**: Simulate a silent failure (e.g., an upstream API degrades subtly but doesn't throw errors). Watch standard metrics fail to catch it.
+- **Goal**: Break the assumption that the system scales linearly or handles all inputs gracefully. Force a catastrophic failure.
 
-## Topics
+### 4. EXPLAIN (Diagnosis)
+- **Task**: Diagnose the observability gap. Explain why traditional APM metrics (CPU, HTTP 500s) are insufficient for AI.
+- **Goal**: Formulate a falsifiable hypothesis explaining exactly why the system broke at that specific point using profiling or traces.
 
-### Distributed Tracing
-- Trace structure: spans, attributes, parent-child relationships
-- Tracing across system boundaries: inference, retrieval, agents, tools
-- Correlation IDs: connecting user actions to system behavior
+### 5. IMPROVE (Optimization)
+- **Task**: Implement semantic monitoring (e.g., tracking embedding distances or LLM-as-a-judge scores in the telemetry pipeline).
+- **Goal**: Apply an optimization, adaptation, or architectural change based on evidence from the failure.
 
-### AI-Specific Telemetry
-- Scheduler telemetry: queue depth, batch composition, preemption events
-- Retrieval telemetry: query latency, recall estimation, cache hit rates
-- Agent traces: step-by-step agent execution with tool calls and decisions
-- Model telemetry: token throughput, latency distributions, error rates
-- Online quality signals: automated quality checks on production traffic
+### 6. DEFEND (Production Trade-offs)
+- **Task**: Defend an incident response runbook and the chosen alerting thresholds.
+- **Goal**: Present the final engineering decision. Defend the trade-offs with empirical evidence and acknowledge remaining uncertainties.
 
-### Operational Practice
-- Drift detection: monitoring for distribution shift in production
-- SLO definition and enforcement for AI systems (latency, quality, cost)
-- Alerting: what to alert on, thresholds, noise reduction
-- Cost attribution: associating costs with features, teams, or customers
-
-### Incident Response
-- Incident response process for AI systems
-- Runbooks: structured diagnostic procedures
-- Post-incident review: learning from failures
-- Connection to [incidents/](../incidents/) methodology
+## Source-Code Reading
+- **Task**: Read the OpenTelemetry specification for generative AI spans.
 
 ## Expected Artifacts
-
-1. **Instrumentation design** — define the telemetry schema for a specific AI system
-2. **Trace analysis** — trace a request through a multi-component system and identify bottlenecks
-3. **SLO definition** — define SLOs and alerting for an AI application
-4. **Runbook** — write a diagnostic runbook for a specific failure mode
-5. **Engineering report** — observability architecture recommendation
-
-## Exit Criteria
-
-The learner can:
-- Design instrumentation for an AI system that supports diagnosis of novel problems
-- Implement distributed tracing across inference, retrieval, and agent components
-- Define meaningful SLOs and alerting for AI systems
-- Attribute costs to specific features and traffic classes
-- Write and follow incident response runbooks
+- **Engineering Report**: Document the entire BUILD → MEASURE → BREAK → DEFEND loop with empirical evidence.
+- **Implementation Code**: The scratch code demonstrating the mechanism.
 
 ## Competency Targets
 
 ```yaml
 competency:
   sfia: 5
-  bloom: Create
-  solo: Relational
+  bloom: Evaluate -> Create
+  solo: Relational -> Extended Abstract
   dreyfus: Competent
 ```

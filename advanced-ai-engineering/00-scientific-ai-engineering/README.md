@@ -6,71 +6,45 @@ Every subsequent module depends on the ability to form hypotheses, design experi
 
 This module establishes the scientific rigor that separates an advanced engineer from someone who can follow tutorials.
 
-## Key Engineering Questions
+## The Engineering Mastery Loop
 
-- How do I know my measurement is reliable?
-- How do I distinguish signal from noise?
-- How do I design an experiment that actually answers my question?
-- How do I avoid fooling myself with confounders?
-- How do I make decisions under uncertainty?
-- How do I communicate engineering evidence?
+### 1. BUILD (Implementation)
+- **Task**: Build a benchmark harness that measures a simple noisy function (e.g. matrix multiplication). Ensure proper warmup and caching isolation.
+- **Goal**: Do not rely on high-level abstractions. Build the mechanism so you understand the fundamental constraints.
 
-## Prerequisites
+### 2. MEASURE (Quantitative Reasoning)
+- **Task**: Measure latency. Calculate the required sample size to achieve 95% confidence with a 5% margin of error.
+- **Goal**: Instrument the system. Establish a quantitative baseline and derive expected behavior before running the code.
 
-- Basic programming proficiency (Python)
-- Basic statistics awareness (mean, median, standard deviation)
-- No ML-specific prerequisites — this module is domain-general
+### 3. BREAK (Falsification & Failure)
+- **Task**: Introduce a hidden confounder (e.g., thermal throttling or CPU background task) that skews the p99 latency without affecting the mean.
+- **Goal**: Break the assumption that the system scales linearly or handles all inputs gracefully. Force a catastrophic failure.
 
-## Topics
+### 4. EXPLAIN (Diagnosis)
+- **Task**: Diagnose the confounder by analyzing the latency distribution (e.g., bimodal distribution). Explain why the mean is misleading.
+- **Goal**: Formulate a falsifiable hypothesis explaining exactly why the system broke at that specific point using profiling or traces.
 
-### Measurement and Reproducibility
-- What makes a measurement reliable
-- Sources of variance: hardware, software, environment, workload
-- Reproducibility: pinning environments, seeds, configurations
-- Reporting methodology
+### 5. IMPROVE (Optimization)
+- **Task**: Implement strict environment pinning, CPU affinity, and statistical outlier rejection.
+- **Goal**: Apply an optimization, adaptation, or architectural change based on evidence from the failure.
 
-### Experimental Design
-- Hypothesis formation: falsifiable, specific, quantitative
-- Independent, dependent, and controlled variables
-- Confounders and how to control for them
-- Ablation studies: isolating the contribution of each component
-- Sample size and statistical power
+### 6. DEFEND (Production Trade-offs)
+- **Task**: Defend the methodology used to claim a 'statistically significant speedup' in an engineering report.
+- **Goal**: Present the final engineering decision. Defend the trade-offs with empirical evidence and acknowledge remaining uncertainties.
 
-### Distributions and Statistics
-- Distributions: normal, skewed, heavy-tailed
-- Percentiles (p50, p95, p99) and why mean is often misleading
-- Variance and standard deviation
-- Confidence intervals and bootstrap intuition
-- Effect size: practical significance vs statistical significance
-
-### Evaluation Strategies
-- Offline evaluation: static datasets, hold-out sets, cross-validation
-- Shadow deployment: running new systems against production traffic without serving
-- Canary deployment: gradual rollout with monitoring
-- A/B testing: controlled experiments in production
-- Rollback: criteria, mechanisms, and decision framework
+## Source-Code Reading
+- **Task**: Read the measurement logic in the MLPerf inference benchmark.
 
 ## Expected Artifacts
-
-1. **Experiment report** — a complete investigation following the [engineering report template](../templates/engineering-report.md) on a simple measurement task
-2. **Measurement reliability analysis** — demonstrate that a measurement is (or isn't) trustworthy
-3. **Ablation study** — isolate the contribution of components in a simple system
-
-## Exit Criteria
-
-The learner can:
-- Design a controlled experiment for a given engineering question
-- Identify confounders in an experimental setup
-- Collect measurements with appropriate warmup, sample size, and variance reporting
-- Distinguish meaningful differences from noise using confidence intervals
-- Write a complete engineering report with predictions, measurements, and decision rationale
+- **Engineering Report**: Document the entire BUILD → MEASURE → BREAK → DEFEND loop with empirical evidence.
+- **Implementation Code**: The scratch code demonstrating the mechanism.
 
 ## Competency Targets
 
 ```yaml
 competency:
   sfia: 4-5
-  bloom: Analyze
-  solo: Relational
+  bloom: Evaluate -> Create
+  solo: Relational -> Extended Abstract
   dreyfus: Competent
 ```

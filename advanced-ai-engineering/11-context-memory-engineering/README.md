@@ -4,65 +4,45 @@
 
 Context is the most constrained resource in an LLM system. Every token of context costs latency, compute, and money. This module covers the engineering of context selection, compression, and memory systems — deciding what goes into the context window and what stays outside it.
 
-## Key Engineering Questions
+## The Engineering Mastery Loop
 
-- Given a task and limited context budget, what information is most valuable to include?
-- How does context length affect quality, latency, and cost?
-- What memory architecture is appropriate for my application?
-- How do I exploit prefix stability and cache reuse?
-- Where does long-context performance degrade and why?
+### 1. BUILD (Implementation)
+- **Task**: Implement a tiered memory system: short-term working memory (context) and long-term semantic memory (retrieval).
+- **Goal**: Do not rely on high-level abstractions. Build the mechanism so you understand the fundamental constraints.
 
-## Prerequisites
+### 2. MEASURE (Quantitative Reasoning)
+- **Task**: Measure the token budget allocation. Quantify the 'lost in the middle' effect for the specific model being used.
+- **Goal**: Instrument the system. Establish a quantitative baseline and derive expected behavior before running the code.
 
-- Module 03 (KV cache, memory costs)
-- Module 08-09 (retrieval as an alternative to long context)
+### 3. BREAK (Falsification & Failure)
+- **Task**: Overflow the context window with perfectly relevant semantic memory, crowding out the system instructions and causing instruction-following failure.
+- **Goal**: Break the assumption that the system scales linearly or handles all inputs gracefully. Force a catastrophic failure.
 
-## Topics
+### 4. EXPLAIN (Diagnosis)
+- **Task**: Diagnose the attention degradation. Explain why relevance does not equal utility in context window allocation.
+- **Goal**: Formulate a falsifiable hypothesis explaining exactly why the system broke at that specific point using profiling or traces.
 
-### Context Engineering
-- Context selection: choosing what to include given a budget
-- Context budgeting: allocating tokens across system prompt, history, retrieval, user input
-- Context compression: summarization, pruning, distillation
-- Task utility vs context cost: is this context worth its tokens?
+### 5. IMPROVE (Optimization)
+- **Task**: Implement context compression (summarization or embedding distillation) and strict token budgeting.
+- **Goal**: Apply an optimization, adaptation, or architectural change based on evidence from the failure.
 
-### Memory Architectures
-- Working memory: current conversation state
-- Episodic memory: past interaction summaries
-- Semantic memory: structured knowledge stores
-- Persistent application state: state that outlives a conversation
+### 6. DEFEND (Production Trade-offs)
+- **Task**: Defend a context layout architecture that optimizes for KV cache reuse (prefix stability) across turns.
+- **Goal**: Present the final engineering decision. Defend the trade-offs with empirical evidence and acknowledge remaining uncertainties.
 
-### Context Behavior
-- Long-context degradation: quality loss with increasing context length
-- Position effects: "lost in the middle" phenomenon
-- Context isolation: preventing cross-contamination between users/sessions
-- Prefix stability: keeping system prompt and common prefix constant for cache reuse
-
-### Cache Integration
-- KV cache reuse (connection to Module 03)
-- Prefix caching for stable context portions
-- Dynamic context vs cacheable context partitioning
+## Source-Code Reading
+- **Task**: Read the context management logic in a framework like MemGPT.
 
 ## Expected Artifacts
-
-1. **Context budgeting experiment** — measure quality as a function of context allocation strategy
-2. **Position effect analysis** — quantify the "lost in the middle" effect for a specific model and task
-3. **Memory architecture design** — propose a memory system for a specific application
-4. **Engineering report** — context strategy recommendation with cost-quality analysis
-
-## Exit Criteria
-
-The learner can:
-- Design a context budgeting strategy for a specific application
-- Measure and mitigate long-context degradation
-- Choose between retrieval, long context, and memory systems based on evidence
-- Optimize context layout for KV cache reuse
+- **Engineering Report**: Document the entire BUILD → MEASURE → BREAK → DEFEND loop with empirical evidence.
+- **Implementation Code**: The scratch code demonstrating the mechanism.
 
 ## Competency Targets
 
 ```yaml
 competency:
   sfia: 5
-  bloom: Evaluate
-  solo: Relational
+  bloom: Evaluate -> Create
+  solo: Relational -> Extended Abstract
   dreyfus: Competent
 ```
