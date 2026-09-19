@@ -4,56 +4,45 @@
 
 In production, models are never invoked in isolation. They operate inside an execution harness that formats prompts, enforces schemas, parses structured outputs, manages retries, handles fallbacks, and isolates failures. Harness engineering treats prompts and invocation protocols as software engineering artifacts with rigorous versioning, typing, and validation.
 
-## Key Engineering Questions
+## The Engineering Mastery Loop
 
-- How do I structure output constraints (JSON schema, Pydantic, regex, grammar-based decoding) without degrading model reasoning quality?
-- When does constrained decoding (e.g. grammar-guided sampling) cause latency spikes or degenerative repetition?
-- How do I build deterministic fallback and recovery pipelines when a model violates the harness contract?
-- How should temperature, top-p, seed, and stop tokens be systematically configured per task archetype?
-- How do I version, test, and lint prompt templates as production code?
+### 1. BUILD (Implementation)
+- **Task**: Implement a prompt execution harness that enforces structured JSON output using grammar-guided decoding (e.g., using a finite state machine).
+- **Goal**: Do not rely on high-level abstractions. Build the mechanism so you understand the fundamental constraints.
 
-## Prerequisites
+### 2. MEASURE (Quantitative Reasoning)
+- **Task**: Measure the exact TTFT and TPOT overhead introduced by the grammar constraint mechanism compared to unconstrained generation.
+- **Goal**: Instrument the system. Establish a quantitative baseline and derive expected behavior before running the code.
 
-- Module 01 (Foundation Model Internals & token mechanics)
-- Module 07 (Model Behavior, Uncertainty & Calibration)
-- Module 12 (Agent Loop Engineering)
+### 3. BREAK (Falsification & Failure)
+- **Task**: Construct a prompt and schema combination that forces the grammar decoder into an invalid state or a generative loop (e.g., forcing a closing bracket prematurely).
+- **Goal**: Break the assumption that the system scales linearly or handles all inputs gracefully. Force a catastrophic failure.
 
-## Topics
+### 4. EXPLAIN (Diagnosis)
+- **Task**: Diagnose the truncation or looping failure. Explain how the constrained sampling logic interacted poorly with the model's logits.
+- **Goal**: Formulate a falsifiable hypothesis explaining exactly why the system broke at that specific point using profiling or traces.
 
-### Structured Outputs and Constrained Generation
-- JSON mode vs schema enforcement vs grammar-guided decoding (GBNF, Outlines, guidance)
-- Performance impact of constrained decoding on TTFT and TPOT
-- Handling schema truncation and invalid token states
+### 5. IMPROVE (Optimization)
+- **Task**: Implement a fallback cascade: try constrained decoding first, fallback to unconstrained + client-side retry/repair on failure.
+- **Goal**: Apply an optimization, adaptation, or architectural change based on evidence from the failure.
 
-### Harness Reliability Patterns
-- Fallback cascades: retry with increased temperature, retry with correction prompt, fallback to stronger model
-- Stop token discipline and runaway output prevention
-- Deterministic extraction: few-shot exemplars, scratchpads, and delimiter engineering
+### 6. DEFEND (Production Trade-offs)
+- **Task**: Defend the choice between engine-level grammar constraints vs client-side validation based on empirical throughput and reliability metrics.
+- **Goal**: Present the final engineering decision. Defend the trade-offs with empirical evidence and acknowledge remaining uncertainties.
 
-### Prompt Engineering as Software Engineering
-- Prompt template modularity, parameter typing, and linting
-- CI/CD pipelines for prompt regression testing
-- Environment parity: testing prompts against varying model quantizations and runtime backends
+## Source-Code Reading
+- **Task**: Trace the outlines or guidance library to see how regex is compiled into logit processors.
 
 ## Expected Artifacts
-
-1. **Structured output harness** — an implementation comparing grammar-guided sampling vs schema validation + retry across 1,000 synthetic outputs
-2. **Harness latency benchmark** — measurement of token generation overhead introduced by grammar constraints
-3. **Engineering report** — contract design, error budgets, and fallback strategies for structured extraction
-
-## Exit Criteria
-
-The learner can:
-- Design a type-safe, production-grade model harness with explicit error boundaries
-- Quantify the latency and throughput trade-off between client-side retries and engine-level grammar constraints
-- Implement automated regression testing for prompt modifications
+- **Engineering Report**: Document the entire BUILD → MEASURE → BREAK → DEFEND loop with empirical evidence.
+- **Implementation Code**: The scratch code demonstrating the mechanism.
 
 ## Competency Targets
 
 ```yaml
 competency:
   sfia: 5
-  bloom: Apply → Analyze
-  solo: Relational
+  bloom: Evaluate -> Create
+  solo: Relational -> Extended Abstract
   dreyfus: Competent
 ```

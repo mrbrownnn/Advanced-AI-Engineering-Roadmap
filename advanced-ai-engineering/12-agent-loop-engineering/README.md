@@ -4,69 +4,45 @@
 
 Before building durable agent runtimes (Module 14), the engineer must understand the fundamental agent loop: observe → reason → plan → act → observe. This module covers the core engineering patterns of agent execution — tool integration, action selection, error recovery, and the critical boundary between model decisions and system actions.
 
-## Key Engineering Questions
+## The Engineering Mastery Loop
 
-- What are the fundamental agent loop patterns and when does each apply?
-- How do I design tool interfaces that are robust to model misuse?
-- How do I handle tool execution failures within the agent loop?
-- How do I control agent behavior without over-constraining it?
-- What is the right level of autonomy for a given task and risk level?
+### 1. BUILD (Implementation)
+- **Task**: Build a minimal ReAct (Reason + Act) loop from scratch. Implement a strict tool schema parser and action dispatcher. Do not use LangChain.
+- **Goal**: Do not rely on high-level abstractions. Build the mechanism so you understand the fundamental constraints.
 
-## Prerequisites
+### 2. MEASURE (Quantitative Reasoning)
+- **Task**: Measure the overhead of the agent loop (tokens consumed by reasoning vs tokens consumed by tool outputs). Track the latency of the loop iterations.
+- **Goal**: Instrument the system. Establish a quantitative baseline and derive expected behavior before running the code.
 
-- Module 07 (model behavior and failure modes)
-- Module 11 (context management — agents need context engineering)
+### 3. BREAK (Falsification & Failure)
+- **Task**: Provide the agent with a tool that intermittently fails, times out, or returns a schema violation. Break the loop into an infinite retry or hallucination state.
+- **Goal**: Break the assumption that the system scales linearly or handles all inputs gracefully. Force a catastrophic failure.
 
-## Topics
+### 4. EXPLAIN (Diagnosis)
+- **Task**: Diagnose the loop pathology. Explain why the LLM failed to recover from the broken tool state (e.g., context window flooding with error messages).
+- **Goal**: Formulate a falsifiable hypothesis explaining exactly why the system broke at that specific point using profiling or traces.
 
-### Agent Loop Patterns
-- ReAct: interleaved reasoning and acting
-- Plan-then-execute: generate plan, then execute steps
-- Reflexion: observe outcome, reflect, retry
-- Multi-agent patterns: delegation, debate, specialization
+### 5. IMPROVE (Optimization)
+- **Task**: Implement a robust escalation policy, strict retry budgets, and context summarization during long loops.
+- **Goal**: Apply an optimization, adaptation, or architectural change based on evidence from the failure.
 
-### Tool Engineering
-- Tool interface design: schemas, input validation, output formatting
-- Tool discovery and selection
-- Tool execution: synchronous, asynchronous, streaming
-- Error handling: tool failures, timeouts, partial results
-- Tool composition: chaining tools, parallel tool calls
+### 6. DEFEND (Production Trade-offs)
+- **Task**: Defend the level of autonomy granted to the agent. When should the loop pause for human-in-the-loop (HITL) approval?
+- **Goal**: Present the final engineering decision. Defend the trade-offs with empirical evidence and acknowledge remaining uncertainties.
 
-### Control and Safety
-- Action selection: when to act vs when to ask
-- Autonomy levels: fully autonomous → human-in-the-loop → human-on-the-loop
-- Guardrails: action filtering, output validation
-- Escalation policies: when to stop and ask for help
-- Budget and resource limits: token budgets, time budgets, action counts
-
-### Observation and Feedback
-- Observation parsing: structured vs unstructured tool outputs
-- Memory within a loop: what to remember across iterations
-- Stopping conditions: how the agent knows when to stop
-- Loop pathology: infinite loops, oscillation, goal drift
+## Source-Code Reading
+- **Task**: Read the core execution loop in AutoGen or LangGraph to understand state transitions.
 
 ## Expected Artifacts
-
-1. **Agent loop implementation** — build a basic observe-reason-act loop with tool integration
-2. **Tool failure analysis** — systematically test agent behavior under tool failures
-3. **Autonomy level design** — design control policies for a specific use case
-4. **Engineering report** — agent loop architecture for a given task and risk profile
-
-## Exit Criteria
-
-The learner can:
-- Implement the core agent loop patterns and choose between them
-- Design robust tool interfaces with proper error handling
-- Set appropriate autonomy levels and escalation policies
-- Diagnose loop pathologies (infinite loops, oscillation, drift)
-- Reason about the cost of agent execution in tokens, time, and actions
+- **Engineering Report**: Document the entire BUILD → MEASURE → BREAK → DEFEND loop with empirical evidence.
+- **Implementation Code**: The scratch code demonstrating the mechanism.
 
 ## Competency Targets
 
 ```yaml
 competency:
   sfia: 5
-  bloom: Apply → Evaluate
-  solo: Relational
+  bloom: Evaluate -> Create
+  solo: Relational -> Extended Abstract
   dreyfus: Competent
 ```

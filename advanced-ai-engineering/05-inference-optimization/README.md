@@ -4,71 +4,45 @@
 
 Optimization without understanding the bottleneck is guessing. This module is organized by **bottleneck** rather than by tool, teaching the learner to diagnose first and optimize second. Every optimization has a cost — complexity, quality, compatibility — and this module trains the judgment to choose wisely.
 
-## Key Engineering Questions
+## The Engineering Mastery Loop
 
-- Is this workload memory-bound or compute-bound? Which optimization class applies?
-- What is the actual speedup and what did it cost (quality, complexity, compatibility)?
-- When does quantization hurt quality enough to matter for my use case?
-- When does speculative decoding help vs hurt? What determines the acceptance rate?
-- How do I write and debug a Triton kernel?
+### 1. BUILD (Implementation)
+- **Task**: Implement a basic IO-aware attention kernel (e.g., in Triton) that uses tiling to minimize HBM round-trips, recreating the core mechanism of FlashAttention.
+- **Goal**: Do not rely on high-level abstractions. Build the mechanism so you understand the fundamental constraints.
 
-## Prerequisites
+### 2. MEASURE (Quantitative Reasoning)
+- **Task**: Use PyTorch Profiler or Nsight to measure the arithmetic intensity of standard attention vs your tiled attention. Prove that the workload shifted from memory-bound toward compute-bound.
+- **Goal**: Instrument the system. Establish a quantitative baseline and derive expected behavior before running the code.
 
-- Module 02 (Roofline, arithmetic intensity, profiling)
-- Module 03 (KV cache memory)
-- Module 04 (batching, throughput, latency metrics)
+### 3. BREAK (Falsification & Failure)
+- **Task**: Push the sequence length or batch size until the optimized kernel OOMs or hits register spilling limits. Break the assumption that tiling solves all memory scaling issues.
+- **Goal**: Break the assumption that the system scales linearly or handles all inputs gracefully. Force a catastrophic failure.
 
-## Topics
+### 4. EXPLAIN (Diagnosis)
+- **Task**: Diagnose the register spilling or shared memory bottleneck using profiling traces. Explain exactly why the optimization hit a wall.
+- **Goal**: Formulate a falsifiable hypothesis explaining exactly why the system broke at that specific point using profiling or traces.
 
-### Memory Traffic Optimization
-- FlashAttention: IO-aware tiling to reduce HBM reads/writes
-- FlashAttention-2: improved parallelism and work partitioning
-- FlashInfer: specialized attention kernels for serving
-- Kernel fusion: reducing intermediate HBM round-trips
+### 5. IMPROVE (Optimization)
+- **Task**: Apply speculative decoding (draft-then-verify) on top of the optimized kernel.
+- **Goal**: Apply an optimization, adaptation, or architectural change based on evidence from the failure.
 
-### Quantization (organized by what you quantize)
-- Weight quantization: FP8, INT8, INT4
-- GPTQ: one-shot post-training weight quantization
-- AWQ: activation-aware weight quantization
-- SmoothQuant: migrating quantization difficulty from activations to weights
-- KV cache quantization: reducing KV memory footprint
-- Quality-compression trade-offs for each approach
+### 6. DEFEND (Production Trade-offs)
+- **Task**: Defend the choice between FlashAttention-2 vs Speculative Decoding for a given workload (e.g., high-batch vs low-batch). Which optimizes throughput? Which optimizes latency?
+- **Goal**: Present the final engineering decision. Defend the trade-offs with empirical evidence and acknowledge remaining uncertainties.
 
-### Speculative Decoding
-- Core idea: draft-then-verify for faster autoregressive generation
-- Separate draft models
-- Medusa: self-speculative multi-head prediction
-- EAGLE: feature-level speculation
-- Acceptance rate analysis: when speculation helps vs hurts
-- Integration with serving systems
-
-### Kernel Development
-- Triton fundamentals: writing GPU kernels in Python
-- When custom kernels are warranted vs using existing implementations
-- Benchmarking and profiling custom kernels
+## Source-Code Reading
+- **Task**: Read the Triton FlashAttention implementation to understand block size tuning and hardware constraints.
 
 ## Expected Artifacts
-
-1. **Bottleneck diagnosis** — profile a real workload, identify the bottleneck, select the appropriate optimization class
-2. **Quantization comparison** — benchmark quality and speed for GPTQ vs AWQ at different bit widths on a specific task
-3. **Speculative decoding analysis** — measure acceptance rate and speedup for a specific model pair and workload
-4. **Engineering report** — optimization recommendation with evidence, trade-offs, and rollback criteria
-
-## Exit Criteria
-
-The learner can:
-- Diagnose whether a workload needs memory traffic reduction, quantization, or speculative decoding
-- Explain how FlashAttention reduces memory traffic and when it helps
-- Choose between quantization methods based on quality, speed, and deployment constraints
-- Predict when speculative decoding will provide a speedup and verify experimentally
-- Write a simple Triton kernel and benchmark it against a reference implementation
+- **Engineering Report**: Document the entire BUILD → MEASURE → BREAK → DEFEND loop with empirical evidence.
+- **Implementation Code**: The scratch code demonstrating the mechanism.
 
 ## Competency Targets
 
 ```yaml
 competency:
   sfia: 5
-  bloom: Evaluate
-  solo: Relational
+  bloom: Evaluate -> Create
+  solo: Relational -> Extended Abstract
   dreyfus: Competent
 ```

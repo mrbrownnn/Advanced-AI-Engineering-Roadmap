@@ -4,71 +4,45 @@
 
 Evaluation is the hardest unsolved problem in AI engineering. Bad evaluation leads to bad decisions. This module treats evaluation as an engineering discipline: measurement design, calibration, regression testing, and understanding the gap between offline metrics and production behavior.
 
-## Key Engineering Questions
+## The Engineering Mastery Loop
 
-- How do I evaluate something that doesn't have a single right answer?
-- How do I calibrate and validate an LLM judge?
-- How do I detect evaluation dataset contamination?
-- How do I test for regression after model/prompt/system changes?
-- Why do my offline evaluations disagree with production behavior?
+### 1. BUILD (Implementation)
+- **Task**: Build an LLM-as-a-judge evaluation pipeline. Define explicit grading rubrics and implement inter-rater agreement tracking (e.g., Cohen's Kappa).
+- **Goal**: Do not rely on high-level abstractions. Build the mechanism so you understand the fundamental constraints.
 
-## Prerequisites
+### 2. MEASURE (Quantitative Reasoning)
+- **Task**: Measure the calibration of the judge: does a score of 4/5 correlate strongly with human preference? Measure the cost per evaluation.
+- **Goal**: Instrument the system. Establish a quantitative baseline and derive expected behavior before running the code.
 
-- Module 00 (measurement, experimental design)
-- Module 06 (failure taxonomy)
-- Module 07 (data quality, leakage, contamination)
+### 3. BREAK (Falsification & Failure)
+- **Task**: Create an adversarial response that is completely incorrect but highly verbose, perfectly formatted, and confident. Fool the LLM judge into giving it a perfect score.
+- **Goal**: Break the assumption that the system scales linearly or handles all inputs gracefully. Force a catastrophic failure.
 
-## Topics
+### 4. EXPLAIN (Diagnosis)
+- **Task**: Diagnose the judge's bias (e.g., verbosity bias, style bias, position bias). Formulate a hypothesis on why the judge failed.
+- **Goal**: Formulate a falsifiable hypothesis explaining exactly why the system broke at that specific point using profiling or traces.
 
-### Evaluation Methods
-- Deterministic evaluation: exact match, string matching, code execution
-- Semantic evaluation: embedding similarity, entailment, LLM-as-judge
-- Pairwise evaluation: comparing outputs head-to-head
-- Trajectory evaluation: evaluating multi-step agent behavior
-- Tool evaluation: correctness of tool calls and parameters
-- Retrieval evaluation: quality of retrieved context (Recall@K, MRR, NDCG)
-- Human evaluation: annotation protocols, guidelines, calibration
+### 5. IMPROVE (Optimization)
+- **Task**: Implement Chain-of-Thought reasoning for the judge before it outputs a score, and calibrate it against a golden human dataset.
+- **Goal**: Apply an optimization, adaptation, or architectural change based on evidence from the failure.
 
-### Judge Engineering
-- Judge calibration: is the LLM judge's scoring consistent and meaningful?
-- Inter-rater agreement: do multiple judges agree? (Cohen's kappa, Krippendorff's alpha)
-- Judge bias: position bias, verbosity bias, style bias
-- Evaluator overfitting: when the system optimizes for the evaluator rather than the task
+### 6. DEFEND (Production Trade-offs)
+- **Task**: Defend the validity of the evaluation metric. Prove that an improvement in the offline metric will translate to an improvement in production.
+- **Goal**: Present the final engineering decision. Defend the trade-offs with empirical evidence and acknowledge remaining uncertainties.
 
-### Evaluation Infrastructure
-- Regression testing: automated evaluation on every change
-- Dataset versioning: tracking evaluation set changes over time
-- Slicing: evaluating performance on specific subgroups
-- Leakage: evaluation data appearing in training or fine-tuning data
-- Contamination: benchmark data in model pretraining
-
-### Production Gap
-- Offline-online mismatch: when lab results don't match production behavior
-- Distribution mismatch between evaluation data and production traffic
-- Temporal drift: evaluation sets becoming stale
+## Source-Code Reading
+- **Task**: Read the Prometheus or MT-Bench evaluation implementation.
 
 ## Expected Artifacts
-
-1. **Evaluation framework** — implement a multi-method evaluation for a specific task
-2. **Judge calibration study** — measure and improve LLM judge reliability
-3. **Regression test suite** — automated evaluation triggered on changes
-4. **Engineering report** — evaluation strategy for a production system
-
-## Exit Criteria
-
-The learner can:
-- Design an evaluation strategy combining multiple methods
-- Calibrate an LLM judge and measure inter-rater agreement
-- Detect evaluation contamination and leakage
-- Build regression testing into the development workflow
-- Explain and mitigate offline-online evaluation mismatch
+- **Engineering Report**: Document the entire BUILD → MEASURE → BREAK → DEFEND loop with empirical evidence.
+- **Implementation Code**: The scratch code demonstrating the mechanism.
 
 ## Competency Targets
 
 ```yaml
 competency:
   sfia: 5
-  bloom: Evaluate
-  solo: Relational
+  bloom: Evaluate -> Create
+  solo: Relational -> Extended Abstract
   dreyfus: Competent
 ```

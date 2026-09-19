@@ -4,70 +4,45 @@
 
 This is NOT an introductory embeddings or vector database tutorial. This module covers the engineering of retrieval systems at depth: index structures, hybrid retrieval, reranking architectures, and the latency-memory-quality trade-off space. The goal is to make engineering decisions about retrieval, not to call an API.
 
-## Key Engineering Questions
+## The Engineering Mastery Loop
 
-- What are the recall-latency-memory trade-offs of different index structures?
-- When does hybrid retrieval (BM25 + dense) outperform either alone?
-- What reranking architecture is appropriate for my latency budget?
-- How do I measure retrieval quality correctly (Recall@K, MRR, NDCG)?
-- How do I diagnose retrieval failures: was the document not indexed, not retrieved, or not ranked high enough?
+### 1. BUILD (Implementation)
+- **Task**: Implement a minimal HNSW (Hierarchical Navigable Small World) graph and a simple Inverted File (IVF) index from scratch. Do not use FAISS or Qdrant.
+- **Goal**: Do not rely on high-level abstractions. Build the mechanism so you understand the fundamental constraints.
 
-## Prerequisites
+### 2. MEASURE (Quantitative Reasoning)
+- **Task**: Calculate the memory footprint of the index vs the raw vectors. Measure Recall@K and p99 query latency.
+- **Goal**: Instrument the system. Establish a quantitative baseline and derive expected behavior before running the code.
 
-- Module 00 (measurement methodology)
-- Module 02 (latency measurement)
+### 3. BREAK (Falsification & Failure)
+- **Task**: Construct an adversarial dataset containing clustered points that forces the IVF index to scan a massive number of vectors, breaking its latency bounds.
+- **Goal**: Break the assumption that the system scales linearly or handles all inputs gracefully. Force a catastrophic failure.
 
-## Topics
+### 4. EXPLAIN (Diagnosis)
+- **Task**: Diagnose the failure by analyzing the distribution of vectors across IVF centroids. Formulate a hypothesis on why the clustering degraded performance.
+- **Goal**: Formulate a falsifiable hypothesis explaining exactly why the system broke at that specific point using profiling or traces.
 
-### Sparse Retrieval
-- BM25: term frequency, inverse document frequency, scoring
-- Inverted index: structure, construction, query processing
+### 5. IMPROVE (Optimization)
+- **Task**: Implement Product Quantization (PQ) to compress the vectors, or implement hybrid retrieval (BM25 + dense) to fix recall issues on rare keywords.
+- **Goal**: Apply an optimization, adaptation, or architectural change based on evidence from the failure.
 
-### Dense Retrieval — Index Structures
-- HNSW: multi-layer graph, construction parameters, recall-latency trade-offs
-- IVF: inverted file index, coarse quantization, nprobe
-- PQ: product quantization, codebook design, memory-quality trade-offs
-- Combinations: IVF-PQ, HNSW with PQ compression
+### 6. DEFEND (Production Trade-offs)
+- **Task**: Defend a production architecture choice: when to use HNSW (high memory, low latency) vs IVF-PQ (low memory, higher latency).
+- **Goal**: Present the final engineering decision. Defend the trade-offs with empirical evidence and acknowledge remaining uncertainties.
 
-### Hybrid Retrieval
-- Combining sparse and dense scores
-- RRF (Reciprocal Rank Fusion): merging ranked lists
-- Learned hybrid scoring
-
-### Reranking
-- Cross encoders: high quality, high latency
-- Late interaction (ColBERT): token-level similarity with precomputed representations
-- Adaptive retrieval: deciding retrieval depth dynamically
-- Query decomposition: breaking complex queries into sub-queries
-
-### Evaluation
-- Recall@K: what fraction of relevant documents are in the top K?
-- MRR (Mean Reciprocal Rank): how high is the first relevant result?
-- NDCG (Normalized Discounted Cumulative Gain): quality of the full ranking
-- Latency-memory-quality trade-off visualization
+## Source-Code Reading
+- **Task**: Trace the FAISS IVF-PQ implementation or Lucene's HNSW graph traversal.
 
 ## Expected Artifacts
-
-1. **Index comparison** — benchmark HNSW vs IVF-PQ for recall, latency, and memory on a real dataset
-2. **Hybrid retrieval experiment** — measure when BM25 + dense outperforms either alone
-3. **Reranking pipeline** — build and evaluate a retrieve-then-rerank pipeline
-4. **Engineering report** — retrieval architecture recommendation for a specific use case
-
-## Exit Criteria
-
-The learner can:
-- Select an index structure based on dataset size, latency budget, and memory constraints
-- Design and evaluate a hybrid retrieval pipeline
-- Choose a reranking strategy appropriate for the latency budget
-- Correctly compute and interpret Recall@K, MRR, and NDCG
-- Diagnose retrieval failures at the index, retrieval, and ranking stages
+- **Engineering Report**: Document the entire BUILD → MEASURE → BREAK → DEFEND loop with empirical evidence.
+- **Implementation Code**: The scratch code demonstrating the mechanism.
 
 ## Competency Targets
 
 ```yaml
 competency:
   sfia: 5
-  bloom: Evaluate
-  solo: Relational
+  bloom: Evaluate -> Create
+  solo: Relational -> Extended Abstract
   dreyfus: Competent
 ```

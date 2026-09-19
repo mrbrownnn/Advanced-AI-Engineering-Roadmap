@@ -4,69 +4,45 @@
 
 Large models don't fit on a single GPU. This module covers the parallelism strategies and communication primitives needed to serve models across multiple GPUs and nodes. The goal is architectural understanding and capacity reasoning, NOT an NCCL implementation course.
 
-## Key Engineering Questions
+## The Engineering Mastery Loop
 
-- Which parallelism strategy (TP, PP, DP, EP) is appropriate for my model and hardware?
-- What are the communication costs and how do they scale?
-- How does the interconnect (NVLink, PCIe, InfiniBand) constrain my options?
-- How do I place MoE experts across devices?
-- When does P/D disaggregation make sense?
+### 1. BUILD (Implementation)
+- **Task**: Implement a minimal pipeline parallel (PP) execution across two simulated devices. Manage the micro-batch scheduling (e.g., 1F1B schedule).
+- **Goal**: Do not rely on high-level abstractions. Build the mechanism so you understand the fundamental constraints.
 
-## Prerequisites
+### 2. MEASURE (Quantitative Reasoning)
+- **Task**: Derive the communication cost equation. Measure the bubble time (idle time) in the pipeline as a function of micro-batch size.
+- **Goal**: Instrument the system. Establish a quantitative baseline and derive expected behavior before running the code.
 
-- Module 02 (GPU execution, memory hierarchy)
-- Module 03 (KV cache)
-- Module 04 (serving, scheduling)
+### 3. BREAK (Falsification & Failure)
+- **Task**: Create a workload with highly variable generation lengths. Break the pipeline efficiency, causing massive bubble times and synchronization stalls.
+- **Goal**: Break the assumption that the system scales linearly or handles all inputs gracefully. Force a catastrophic failure.
 
-## Topics
+### 4. EXPLAIN (Diagnosis)
+- **Task**: Diagnose the straggler effect. Explain why static pipeline schedules fail under variable decode workloads.
+- **Goal**: Formulate a falsifiable hypothesis explaining exactly why the system broke at that specific point using profiling or traces.
 
-### Parallelism Strategies
-- Tensor Parallelism (TP): splitting individual operations across GPUs
-- Pipeline Parallelism (PP): splitting model layers across GPUs
-- Data Parallelism (DP): replicating the model, splitting data
-- Context Parallelism / Sequence Parallelism (CP/SP): splitting along sequence dimension
-- Expert Parallelism (EP): distributing MoE experts across GPUs
+### 5. IMPROVE (Optimization)
+- **Task**: Implement a dynamic scheduling mechanism or continuous batching across the pipeline stages to minimize idle time.
+- **Goal**: Apply an optimization, adaptation, or architectural change based on evidence from the failure.
 
-### Communication Primitives
-- All-reduce: aggregating gradients/activations across replicas
-- All-gather: collecting distributed tensors
-- Reduce-scatter: combined reduction and distribution
-- All-to-all: redistribution for MoE expert routing
+### 6. DEFEND (Production Trade-offs)
+- **Task**: Defend the choice between Tensor Parallelism (TP) and Pipeline Parallelism (PP) for a given interconnect topology (e.g., NVLink vs PCIe).
+- **Goal**: Present the final engineering decision. Defend the trade-offs with empirical evidence and acknowledge remaining uncertainties.
 
-### Interconnects
-- PCIe: bandwidth, latency, topology constraints
-- NVLink: intra-node GPU-to-GPU high bandwidth
-- NVSwitch: full bisection bandwidth within a node
-- RDMA / InfiniBand: inter-node high-performance networking
-- How interconnect topology constrains parallelism choices
-
-### Advanced Patterns
-- MoE placement: expert distribution strategies for load balance and communication
-- P/D disaggregation: separate GPU pools for prefill and decode (connection to DistServe)
-- Hybrid parallelism: combining TP + PP + DP
+## Source-Code Reading
+- **Task**: Trace the communication primitives in Megatron-LM or vLLM's distributed executor.
 
 ## Expected Artifacts
-
-1. **Parallelism analysis** — determine the optimal strategy for a specific model on specific hardware
-2. **Communication cost model** — estimate communication overhead for different parallelism configurations
-3. **Topology-aware placement** — design expert/layer placement for a given interconnect topology
-4. **Engineering report** — distributed serving architecture with cost-performance analysis
-
-## Exit Criteria
-
-The learner can:
-- Select a parallelism strategy based on model size, hardware, and interconnect topology
-- Estimate communication costs for different configurations
-- Reason about MoE expert placement across devices
-- Decide when P/D disaggregation is beneficial
-- Produce a deployment plan for a multi-GPU/multi-node configuration
+- **Engineering Report**: Document the entire BUILD → MEASURE → BREAK → DEFEND loop with empirical evidence.
+- **Implementation Code**: The scratch code demonstrating the mechanism.
 
 ## Competency Targets
 
 ```yaml
 competency:
   sfia: 5
-  bloom: Evaluate
-  solo: Relational
+  bloom: Evaluate -> Create
+  solo: Relational -> Extended Abstract
   dreyfus: Competent
 ```
