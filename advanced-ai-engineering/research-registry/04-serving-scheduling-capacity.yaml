@@ -1,0 +1,473 @@
+module: "04-serving-scheduling-capacity"
+registry_version: "1.1.0"
+previous_version: "1.0.0"
+research_cutoff: "2026-09"
+change_reason: "REFERENCE QA PATCH: Removed universal prefill/decode bottleneck wording, removed a false percentile-headroom implication from mean queueing theory, made the memory feedback loop explicitly conditional, distinguished overload controls, and replaced the legacy vLLM V0 scheduler trace with a directly verified V1 source path at a pinned 2026 revision."
+
+changed_claims:
+  - "CLM-001"
+  - "CLM-002"
+  - "CLM-002b"
+  - "CLM-003"
+  - "CLM-004"
+  - "CLM-005"
+  - "CLM-006"
+  - "CLM-007"
+  - "CLM-008"
+  - "CLM-009"
+  - "CLM-009b"
+  - "CLM-010"
+  - "CLM-011"
+  - "CLM-012"
+  - "CLM-013"
+  - "CLM-014"
+
+out_of_scope_candidates:
+  - "Distributed tensor/pipeline parallelism execution across multi-node fabrics (assigned to Module 16 / Module 20)"
+  - "FlashAttention low-level SRAM tiling kernel optimization (assigned to Module 05)"
+  - "PagedAttention virtual memory translation implementation (assigned to Module 03)"
+
+claims:
+  - id: CLM-001
+    claim: "Continuous batching (iteration-level scheduling) evaluates batch membership at each autoregressive generation step, allowing requests that finish early to exit immediately and newly arrived requests to be joined into the running batch without waiting for the slowest request in a static batch to complete."
+    provenance: "VERIFIED_FACT"
+    domain: "serving_scheduling"
+    concepts:
+      - "continuous_batching"
+      - "iteration_level_scheduling"
+      - "static_batching"
+      - "execution_bubble"
+    confidence: "high"
+    currentness_status: "REFERENCE / BASELINE"
+    evidence:
+      - source_type: "paper"
+        tier: 1
+        title: "Orca: A Distributed Serving System for {Transformer-Based} Generative Models"
+        authors: "Gyeong-In Yu, Joo Seong Jeong, Geon-Woo Kim, Soojeong Kim, Byung-Gon Chun"
+        year: "2022"
+        url: "https://www.usenix.org/conference/osdi22/presentation/yu"
+        section: "Section 3 & 4 (Iteration-Level Scheduling and Selective Batching)"
+        accessed_at: "2026-09"
+    limitations:
+      - "Requires per-iteration runtime scheduling overhead."
+      - "Exposes running decodes to variable memory and compute contention from new arrivals."
+    applicability: "Modern LLM serving engines executing multi-tenant autoregressive workloads."
+    curriculum_usage:
+      lessons: ["4.2"]
+      labs: ["LAB-A"]
+      assessments: ["Mastery-04"]
+
+  - id: CLM-002
+    claim: "DistServe and Splitwise report asymmetric prefill and decode resource behavior on their evaluated models, hardware, batch shapes, and workloads; these measurements motivate phase-aware scheduling, but do not establish that every prefill is compute-bound or every decode is memory-bandwidth-bound."
+    provenance: "VERIFIED_FACT"
+    domain: "serving_architecture"
+    concepts:
+      - "prefill_decode_asymmetry"
+      - "arithmetic_intensity"
+      - "compute_bound"
+      - "memory_bandwidth_bound"
+    confidence: "high"
+    currentness_status: "WORKLOAD-DEPENDENT"
+    evidence:
+      - source_type: "paper"
+        tier: 1
+        title: "DistServe: Disaggregating Prefill and Decoding for Goodput-optimized Large Language Model Serving"
+        authors: "Yinmin Zhong, Shengyu Liu, Junda Chen, Jianbo Hu, Yibo Zhu, Xuanzhe Liu, Xin Jin, Hao Zhang"
+        year: "2024"
+        url: "https://www.usenix.org/conference/osdi24/presentation/zhong-yinmin"
+        section: "Section 2.1 (Characterization of LLM Serving)"
+        accessed_at: "2026-09"
+      - source_type: "paper"
+        tier: 1
+        title: "Splitwise: Efficient Generative LLM Serving Using Phase Splitting"
+        authors: "Pratyush Patel, Esha Choukse, Chaojie Zhang, Aashaka Shah, Inigo Goiri, Saeed Maleki, Ricardo Bianchini"
+        year: "2024"
+        url: "https://www.microsoft.com/en-us/research/publication/splitwise-efficient-generative-llm-inference-using-phase-splitting/"
+        section: "Section II & III"
+        accessed_at: "2026-09"
+    limitations:
+      - "The realized bottleneck depends on hardware, model architecture, precision, kernels, batch size, prompt length, output length, and cache behavior."
+      - "A Roofline prediction must be checked with counters for the actual workload."
+    applicability: "Phase-aware analysis of autoregressive serving; classification of an actual deployment requires profiling."
+    related_claims: ["CLM-002b", "CLM-003", "CLM-014"]
+    curriculum_usage:
+      lessons: ["4.1", "4.3"]
+      labs: ["LAB-B"]
+      assessments: ["Mastery-04", "Incident-04.1"]
+
+  - id: CLM-002b
+    claim: "When long prefill work and active decode work share a device, scheduling or resource contention can increase decode ITL; whether compute occupancy, memory traffic, launch ordering, or another shared resource dominates is an engineering hypothesis to test."
+    provenance: "HYPOTHESIS"
+    domain: "serving_architecture"
+    concepts:
+      - "prefill_decode_interference"
+      - "inter_token_latency"
+      - "kernel_queueing"
+    confidence: "high"
+    currentness_status: "WORKLOAD-DEPENDENT"
+    hypothesis:
+      prediction: "Introducing long prefills while holding decode concurrency constant will produce time-aligned decode ITL increases if the phases interfere on the shared execution path."
+      measurement_target: "Correlate request phase, scheduler step composition, kernel timeline, SM activity, memory traffic, and per-output gaps."
+      falsifying_observation: "Decode ITL remains unchanged across repeated controlled long-prefill injections, or the increase persists when prefills are removed and correlates with a different subsystem."
+    limitations:
+      - "Interference magnitude is mitigated if chunked prefill bounds the prefill execution slice."
+    applicability: "Co-located prefill/decode serving engines without disaggregation."
+    related_claims: ["CLM-002", "CLM-003"]
+    curriculum_usage:
+      lessons: ["4.3"]
+      labs: ["LAB-B"]
+      assessments: ["Mastery-04", "Incident-04.1"]
+
+  - id: CLM-003
+    claim: "Sarathi-Serve reports that splitting long prefills into chunks and combining chunks with decodes improved selected throughput/latency trade-offs on its evaluated configurations; chunk size and token budget remain workload-dependent controls."
+    provenance: "VERIFIED_FACT"
+    domain: "serving_scheduling"
+    concepts:
+      - "chunked_prefill"
+      - "iteration_time_bounding"
+      - "itl_stabilization"
+    confidence: "high"
+    currentness_status: "WORKLOAD-DEPENDENT"
+    evidence:
+      - source_type: "paper"
+        tier: 1
+        title: "Taming Throughput-Latency Tradeoff in LLM Inference with Sarathi-Serve"
+        authors: "Amey Agrawal, Nitin Kedia, Ashish Panwar, Jayashree Mohan, Nipun Kwatra, Bhargav S. Gulavani, Alexey Tumanov, Ramachandran Ramjee"
+        year: "2024"
+        url: "https://www.usenix.org/conference/osdi24/presentation/agrawal"
+        section: "Section 3 & 4 (Chunked Prefill Design)"
+        accessed_at: "2026-09"
+    limitations:
+      - "Small chunks can add scheduling and kernel inefficiency; large chunks can reintroduce decode stalls."
+      - "TTFT, ITL, throughput, and fairness may move in different directions."
+    applicability: "Serving workloads where long prompt work competes with active decode work."
+    curriculum_usage:
+      lessons: ["4.3"]
+      labs: ["LAB-B"]
+      assessments: ["Mastery-04"]
+
+  - id: CLM-004
+    claim: "For a stable observed population with consistent boundaries, Little's Law relates long-run averages as L=lambda*W. Separately, an initially empty deterministic fluid model with constant arrival and departure rates, no loss, and lambda>mu gives Q(t)=(lambda-mu)t; that transient equation is not a consequence of Little's Law and is not a universal LLM queue trajectory."
+    provenance: "DERIVED"
+    domain: "queueing_theory"
+    concepts:
+      - "littles_law"
+      - "arrival_rate"
+      - "service_rate"
+      - "queue_growth"
+      - "stability_condition"
+    confidence: "high"
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions:
+      - "The steady-state form of Little's Law uses a stable population, finite long-run averages, and identical arrival/residence boundaries."
+      - "The fluid backlog equation additionally assumes constant rates, an initially empty queue, no drops/cancellations, and no state-dependent service-rate change."
+    derivation: "Little's Law follows from time-average conservation of customer-time over a stable observation horizon. In the separate fluid exercise, cumulative arrivals are lambda*t and departures are mu*t while backlog remains positive, so Q(t)=max(0,(lambda-mu)t) from an initially empty queue."
+    limitations:
+      - "A finite-window transient needs boundary corrections or a sample-path formulation; plugging instantaneous burst rates into the steady-state identity is invalid."
+      - "Batching, admission, cancellations, retries, and preemption can make effective departures state-dependent and invalidate the constant-rate fluid path."
+    applicability: "Capacity planning, concurrency sizing, and queue residency estimation."
+    curriculum_usage:
+      lessons: ["4.4"]
+      labs: ["LAB-C"]
+      assessments: ["Mastery-04"]
+
+  - id: CLM-005
+    claim: "In a stable FCFS M/G/1 model, the Pollaczek-Khinchine mean is W_q=lambda*E[S^2]/(2*(1-rho))=lambda*(sigma_S^2+1/mu^2)/(2*(1-rho)). Under those assumptions, greater service-time variance raises mean waiting; the equation neither identifies the tail distribution nor makes output-length variance equal service-time variance in a batching LLM runtime."
+    provenance: "DERIVED"
+    domain: "queueing_theory"
+    concepts:
+      - "pollaczek_khinchine_formula"
+      - "service_time_variance"
+      - "traffic_intensity"
+      - "queue_wait_inflation"
+    confidence: "high"
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions:
+      - "Poisson arrival process (independent exponential inter-arrival times)."
+      - "Single server queueing abstraction with general service distribution G."
+      - "Independent, identically distributed service demands independent of arrivals."
+      - "Work-conserving FCFS service discipline without service-time-dependent priorities."
+      - "Utilization rho < 1."
+    derivation: "From P-K transform: Mean residual service time seen by an arrival is R = lambda * E[S^2] / 2 = lambda * (sigma^2 + 1/mu^2) / 2. By Little's Law, W_q = R / (1 - rho)."
+    limitations:
+      - "LLM continuous batching is multi-tenant and multi-token per step rather than a pure single-server FCFS queue."
+      - "Arrivals in real systems often exhibit burstiness with dispersion parameter > 1."
+    applicability: "Mean-wait sensitivity analysis and a check on whether measured service-demand variance could materially affect average queue residence under an explicit M/G/1 approximation."
+    curriculum_usage:
+      lessons: ["4.4"]
+      labs: ["LAB-C"]
+      assessments: ["Mastery-04", "Incident-04.1"]
+
+  - id: CLM-006
+    claim: "At vLLM commit 25b0add7b8a1c944d5c4e364f2de6aa82497a2ad, Scheduler.schedule() assigns token work to running requests before traversing waiting queues, constrains work with scheduled/input token budgets, and calls KVCacheManager.allocate_slots() before scheduling work that requires KV capacity."
+    provenance: "VERIFIED_FACT"
+    domain: "runtime_implementation"
+    concepts:
+      - "step_level_scheduling"
+      - "queue_prioritization"
+      - "token_budgeting"
+      - "vllm_scheduler"
+    confidence: "high"
+    currentness_status: "CURRENT VLLM SNAPSHOT"
+    evidence:
+      - source_type: "source_code"
+        tier: 1
+        title: "vLLM V1 scheduler"
+        repository: "https://github.com/vllm-project/vllm"
+        commit: "25b0add7b8a1c944d5c4e364f2de6aa82497a2ad"
+        verification_date: "2026-09-25"
+        file: "vllm/v1/core/sched/scheduler.py"
+        symbol: "Scheduler.schedule"
+        entry_point: "Scheduler.schedule(throttle_prefills=False)"
+        execution_path: "schedule -> KVCacheManager.allocate_slots -> schedule running work; then traverse waiting/skipped_waiting queues"
+        url: "https://github.com/vllm-project/vllm/blob/25b0add7b8a1c944d5c4e364f2de6aa82497a2ad/vllm/v1/core/sched/scheduler.py"
+        accessed_at: "2026-09"
+    limitations:
+      - "Specific scheduling loop abstractions evolve across engine versions (e.g. vLLM V0 step scheduler vs V1 asynchronous scheduler)."
+    applicability: "Engine-level request scheduling and execution planning."
+    related_claims: ["CLM-013"]
+    curriculum_usage:
+      lessons: ["4.5"]
+      labs: ["LAB-A", "LAB-D"]
+      assessments: ["Production-Source-Trace"]
+
+  - id: CLM-007
+    claim: "The original vLLM/PagedAttention design describes swap and recomputation as alternative preemption mechanisms; this is a historical/runtime-specific observation, not the current vLLM V1 preemption definition or a universal scheduler requirement."
+    provenance: "VERIFIED_FACT"
+    domain: "runtime_scheduling"
+    concepts:
+      - "preemption_mechanisms"
+      - "kv_swapping"
+      - "kv_recomputation"
+      - "scheduler_thrashing"
+    confidence: "high"
+    currentness_status: "REFERENCE / LEGACY IMPLEMENTATION"
+    evidence:
+      - source_type: "paper"
+        tier: 1
+        title: "Efficient Memory Management for Large Language Model Serving with PagedAttention"
+        authors: "Woosuk Kwon, Zhuohan Li, Siyuan Zhuang, Ying Sheng, Lianmin Zheng, Cody Hao Yu, Joseph E. Gonzalez, Hao Zhang, Ion Stoica"
+        year: "2023"
+        url: "https://arxiv.org/abs/2309.06180"
+        section: "Section 4.4 (Preemption)"
+        accessed_at: "2026-09"
+    limitations:
+      - "Current vLLM V1 at the separately pinned 2026 revision resets progress and requeues a preempted request; no PreemptionMode.SWAP branch exists in that source path."
+      - "Other runtimes may pause, swap, migrate, recompute, or reject work using different policies."
+    applicability: "Reference design and comparison of preemption cost models."
+    curriculum_usage:
+      lessons: ["4.5"]
+      labs: ["LAB-D"]
+      assessments: ["Incident-04.1", "Mastery-04"]
+
+  - id: CLM-008
+    claim: "For a client-observed streamed request with N_out >= 2, T_e2e = TTFT + sum ITL_i and request-level TPOT = (T_e2e - TTFT)/(N_out - 1). Initial waiting before first output contributes to TTFT; pauses, preemption, network delivery, or scheduler delays after the first output can contribute to ITL."
+    provenance: "DERIVED"
+    domain: "latency_metrics"
+    concepts:
+      - "latency_decomposition"
+      - "ttft"
+      - "itl"
+      - "tpot"
+      - "e2e_latency"
+    confidence: "high"
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions:
+      - "Streaming output where first token is emitted immediately upon prefill completion."
+      - "N_out >= 2 for meaningful TPOT denominator."
+    derivation: "By definition: Arrival at t0, scheduled at t1 (T_queue = t1 - t0), prefill finishes and token 1 emitted at t2 (T_TTFT = t2 - t0 = T_queue + (t2 - t1)). Subsequent tokens emitted at t3, ..., t_{N_out}. Total time is t_{N_out} - t0 = T_TTFT + sum(ITL_i)."
+    limitations:
+      - "Speculative decoding alters the 1-token-per-iteration assumption (addressed in Module 05)."
+    applicability: "All latency profiling, SLO attribution, and bottleneck discrimination."
+    curriculum_usage:
+      lessons: ["4.1", "4.7"]
+      labs: ["LAB-A", "LAB-B", "LAB-C"]
+      assessments: ["Mastery-04", "Incident-04.1"]
+
+  - id: CLM-009
+    claim: "Under the stated M/G/1 assumptions, mean waiting contains a 1/(1-rho) term and diverges as rho approaches one; this supplies useful mean-value intuition but does not prove a universal knee location or tail-latency behavior for a batching LLM server."
+    provenance: "DERIVED"
+    domain: "capacity_planning"
+    concepts:
+      - "saturation_knee"
+      - "utilization_cliff"
+      - "capacity_headroom"
+    confidence: "high"
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions:
+      - "A stable queueing model with finite mean service demand is a useful approximation over the observation window."
+      - "Effective service capacity does not improve enough with added load to offset the increase in offered work."
+    derivation: "In queueing models such as M/G/1, the mean waiting term contains a factor 1/(1-rho), so it diverges as rho approaches one. Real LLM servers can depart from this model because batching makes service rate state-dependent; the knee must therefore be measured."
+    limitations:
+      - "No exact utilization threshold transfers from this model to a state-dependent batching runtime; the workload-specific knee must be measured."
+    applicability: "Production sizing, autoscaling triggers, and SLO headroom provisioning."
+    related_claims: ["CLM-005", "CLM-009b"]
+    curriculum_usage:
+      lessons: ["4.4", "4.6", "4.7"]
+      labs: ["LAB-C"]
+      assessments: ["Mastery-04", "Incident-04.1"]
+
+  - id: CLM-009b
+    claim: "A memory-pressure feedback loop can occur when resident admissions and sequence growth increase KV demand until preemption or migration overhead lowers effective completion rate, but queue growth alone does not imply that queued requests consume KV or that this loop is active."
+    provenance: "HYPOTHESIS"
+    domain: "capacity_planning"
+    concepts:
+      - "goodput_collapse"
+      - "memory_feedback_loop"
+      - "preemption_cascade"
+    confidence: "high"
+    currentness_status: "WORKLOAD-DEPENDENT"
+    hypothesis:
+      prediction: "KV occupancy and preemption/migration work rise before effective completion rate and SLO-compliant goodput decline under a controlled concurrency or arrival-rate sweep."
+      measurement_target: "Time-aligned admitted/running/waiting counts, per-request KV demand, free blocks, preemption or transfer work, completion rate, and goodput."
+      falsifying_observation: "Queue growth occurs while resident concurrency, KV occupancy, preemption/transfer work, and effective service rate remain stable, or the service-rate decline precedes memory pressure and is explained by another resource."
+    limitations:
+      - "Mitigated by proactive admission control or KV cache tiering."
+    applicability: "Memory-constrained serving clusters operating near saturation."
+    related_claims: ["CLM-004", "CLM-007", "CLM-009"]
+    curriculum_usage:
+      lessons: ["4.4", "4.5", "4.6"]
+      labs: ["LAB-D"]
+      assessments: ["Mastery-04", "Incident-04.1"]
+
+  - id: CLM-010
+    claim: "Queue limiting, rate limiting, concurrency limiting, admission control, backpressure, and load shedding are distinct overload controls; bounded queues and deliberate shedding can prevent unbounded resource consumption, while concrete status codes and control placement are deployment-specific."
+    provenance: "VERIFIED_FACT"
+    domain: "reliability_engineering"
+    concepts:
+      - "admission_control"
+      - "load_shedding"
+      - "goodput_protection"
+      - "backpressure"
+    confidence: "high"
+    currentness_status: "REFERENCE / BASELINE"
+    evidence:
+      - source_type: "official_docs"
+        tier: 2
+        title: "Google SRE Book: Addressing Cascading Failures"
+        authors: "Mike Dahlin, Vivek Rau"
+        year: "2016"
+        url: "https://sre.google/sre-book/addressing-cascading-failures/"
+        section: "Queue Management and Load Shedding"
+        accessed_at: "2026-09"
+    limitations:
+      - "Client applications must implement exponential backoff and jitter to prevent thundering herd retries."
+    applicability: "Production gateway, ingress controller, and runtime queue configuration."
+    curriculum_usage:
+      lessons: ["4.6"]
+      labs: ["LAB-D"]
+      assessments: ["Mastery-04"]
+
+  - id: CLM-011
+    claim: "Production serving degradation can be diagnosed by ranking the relative contributions of interacting queueing, compute, and memory bottlenecks and detecting state transitions (e.g. an ingress queue burst transitioning into KV cache memory exhaustion and preemption thrashing) using correlated latency decomposition, queue residency, and memory pool telemetry."
+    provenance: "HYPOTHESIS"
+    domain: "diagnostic_methodology"
+    concepts:
+      - "bottleneck_discrimination"
+      - "interacting_bottlenecks"
+      - "bottleneck_transitions"
+      - "diagnostic_ranking"
+    confidence: "high"
+    currentness_status: "REFERENCE / BASELINE"
+    hypothesis:
+      prediction: "Simultaneous telemetry tracking of queue wait (T_queue), prefill compute (T_prefill), decode step time (ITL), free KV block ratio, and preemption counters will identify whether a system is predominantly queueing-dominated, compute-saturated, or memory-exhausted, and will reveal causal transitions where one bottleneck triggers another."
+      measurement_target: "Time-aligned correlation and lead-lag relationships between queue residency T_queue, iteration step time T_step, KV block exhaustion events, and preemption counters under non-stationary traffic."
+      falsifying_observation: "A degraded serving incident where severe latency collapse occurs across both TTFT and ITL while all telemetry metrics (queue depth, step times, KV block utilization, GPU compute activity, and preemption counts) remain flat, within nominal thresholds, and uncorrelated with the failure."
+    limitations:
+      - "Complex multi-tier systems may experience uninstrumented bottlenecks such as host PCIe lock contention or gateway serialization."
+    applicability: "Root cause analysis, incident diagnosis, and capacity profiling."
+    curriculum_usage:
+      lessons: ["4.7"]
+      labs: ["LAB-C", "LAB-D"]
+      assessments: ["Incident-04.1", "Mastery-04"]
+
+  - id: CLM-012
+    claim: "For an analytical capacity planning exercise, assume an enterprise serving node: NVIDIA H100 SXM5 (80 GiB HBM3, 3.35 TB/s memory bandwidth), hosting a 70B FP16 parameter model (140 GiB across 2 GPUs via tensor parallelism TP=2, leaving ~10 GiB per GPU for KV cache and activations). Workload: mean prompt 1024 tokens, mean decode 256 tokens, target TTFT P95 < 500 ms, target ITL P95 < 35 ms."
+    provenance: "EXERCISE_ASSUMPTION"
+    domain: "capacity_planning"
+    concepts:
+      - "reference_workload"
+      - "capacity_headroom"
+      - "slo_budget"
+    confidence: "high"
+    currentness_status: "WORKLOAD-DEPENDENT"
+    assumptions:
+      - "TP=2 over NVLink interconnect."
+      - "Parameters consume 70 GiB per GPU."
+      - "Runtime buffers consume 2 GiB per GPU."
+      - "Net available KV pool is 8 GiB per GPU."
+    applicability: "Worked examples, capacity exercises, and mastery scenario."
+    curriculum_usage:
+      lessons: ["4.1", "4.4", "4.7"]
+      labs: ["LAB-A", "LAB-C"]
+      assessments: ["Mastery-04"]
+
+  - id: CLM-013
+    claim: "At vLLM commit 25b0add7b8a1c944d5c4e364f2de6aa82497a2ad, allocation failure in Scheduler.schedule() selects a victim, calls Scheduler._preempt_request(), frees its KV blocks, sets PREEMPTED, resets num_computed_tokens to zero, increments num_preemptions, and prepends the request to the waiting queue."
+    provenance: "VERIFIED_FACT"
+    domain: "runtime_implementation"
+    concepts:
+      - "vllm_source_trace"
+      - "allocate_slots"
+      - "preempt_request"
+    confidence: "high"
+    currentness_status: "CURRENT VLLM SNAPSHOT"
+    evidence:
+      - source_type: "source_code"
+        tier: 1
+        title: "vLLM V1 scheduler"
+        repository: "https://github.com/vllm-project/vllm"
+        commit: "25b0add7b8a1c944d5c4e364f2de6aa82497a2ad"
+        verification_date: "2026-09-25"
+        file: "vllm/v1/core/sched/scheduler.py"
+        symbol: "Scheduler.schedule; Scheduler._preempt_request"
+        entry_point: "Scheduler.schedule(throttle_prefills=False)"
+        execution_path: "schedule -> KVCacheManager.allocate_slots returns None -> victim selection -> _preempt_request -> _free_request_blocks -> waiting.prepend_request"
+        url: "https://github.com/vllm-project/vllm/blob/25b0add7b8a1c944d5c4e364f2de6aa82497a2ad/vllm/v1/core/sched/scheduler.py"
+        accessed_at: "2026-09"
+    limitations:
+      - "Static source inspection was completed; the path was not executed in this repository."
+      - "The pinned revision is an upstream snapshot, not evidence of every stable vLLM release."
+    applicability: "Required production source trace artifact."
+    related_claims: ["CLM-006", "CLM-007"]
+    curriculum_usage:
+      lessons: ["4.5"]
+      labs: ["LAB-D"]
+      assessments: ["Production-Source-Trace"]
+
+  - id: CLM-014
+    claim: "DistServe and Mooncake report workload-specific SLO/capacity benefits from separating prefill and decode placement, while their designs introduce KV transfer, network, placement, synchronization, load-balancing, and recovery costs."
+    provenance: "VERIFIED_FACT"
+    domain: "serving_architecture"
+    concepts:
+      - "prefill_decode_disaggregation"
+      - "kv_transfer_fabric"
+      - "slo_attainment"
+    confidence: "high"
+    currentness_status: "FRONTIER"
+    evidence:
+      - source_type: "paper"
+        tier: 1
+        title: "Mooncake: Trading More Storage for Less Computation - A KVCache-centric Architecture for Serving LLM Chatbot"
+        authors: "Ruoyu Qin, Zheming Li, Weiran He, Jialei Cui, Feng Ren, Mingxing Zhang, Yongwei Wu, Weimin Zheng, Xinran Xu"
+        year: "2025"
+        url: "https://www.usenix.org/conference/fast25/presentation/qin"
+        section: "Sections 1, 3, and 5"
+        accessed_at: "2026-09"
+      - source_type: "paper"
+        tier: 1
+        title: "DistServe: Disaggregating Prefill and Decoding for Goodput-optimized Large Language Model Serving"
+        authors: "Yinmin Zhong, Shengyu Liu, Junda Chen, Jianbo Hu, Yibo Zhu, Xuanzhe Liu, Xin Jin, Hao Zhang"
+        year: "2024"
+        url: "https://www.usenix.org/conference/osdi24/presentation/zhong-yinmin"
+        section: "Section 4"
+        accessed_at: "2026-09"
+    limitations:
+      - "Benefits depend on prompt/output distributions, phase ratios, cache locality, topology, and effective transfer bandwidth."
+      - "Disaggregation reduces selected forms of interference; it does not eliminate network or scheduling interference."
+    applicability: "Large-scale serving deployments where phase specialization can repay transfer and coordination overhead."
+    related_claims: ["CLM-002", "CLM-002b", "CLM-003"]
+    curriculum_usage:
+      lessons: ["4.3", "4.7"]
+      labs: ["LAB-B"]
+      assessments: ["Mastery-04"]

@@ -1,0 +1,174 @@
+module: "04-serving-scheduling-capacity"
+registry_version: "1.1.0"
+
+required_concepts:
+  - "continuous_batching"
+  - "iteration_level_scheduling"
+  - "prefill_decode_interference"
+  - "chunked_prefill"
+  - "ttft_itl_decomposition"
+  - "littles_law"
+  - "pollaczek_khinchine_formula"
+  - "preemption_mechanisms"
+  - "admission_control"
+  - "load_shedding"
+  - "saturation_knee"
+  - "bottleneck_discrimination"
+
+prerequisite_concepts:
+  - "paged_kv_management"
+  - "kv_cache_footprint"
+  - "arithmetic_intensity"
+  - "roofline_model"
+  - "hbm_bandwidth_saturation"
+
+first_occurrence_concepts:
+  - "iteration_level_scheduling"
+  - "chunked_prefill"
+  - "ttft_itl_decomposition"
+  - "pollaczek_khinchine_formula"
+  - "goodput_collapse"
+
+concept_dependencies:
+  - concept: "continuous_batching"
+    depends_on: ["paged_kv_management", "kv_cache_footprint"]
+  - concept: "chunked_prefill"
+    depends_on: ["continuous_batching", "prefill_decode_interference", "roofline_model"]
+  - concept: "saturation_knee"
+    depends_on: ["littles_law", "pollaczek_khinchine_formula", "preemption_mechanisms"]
+  - concept: "bottleneck_discrimination"
+    depends_on: ["ttft_itl_decomposition", "saturation_knee", "admission_control"]
+
+mechanisms:
+  - id: "MECH-01"
+    description: "Iteration-level continuous batching: The serving engine can reevaluate completion and admission at step boundaries, release resources for terminated requests, and replace eligible finished slots with waiting work. This avoids fixed batch-membership delay, but it does not guarantee full hardware utilization or eliminate all masked work, admission gaps, or scheduler overhead."
+    evidence_ids: ["CLM-001"]
+    derived_from: []
+
+  - id: "MECH-02"
+    description: "Prefill/decode interference: Prefill and decode can stress shared GPU resources differently, but the realized regime depends on model, batch shape, prompt/output lengths, hardware, kernels, and scheduling. Co-scheduling or serializing long prefills with active decodes can increase decode ITL; profiler evidence is required before attributing the increase to compute or memory bandwidth."
+    evidence_ids: ["CLM-002", "CLM-002b"]
+    derived_from: []
+
+  - id: "MECH-03"
+    description: "Chunked prefill time-slicing: Long prompt work is divided across scheduling steps and constrained by a token/work budget. This can reduce long decode interruptions, but chunk size and budget trade TTFT, ITL, throughput, scheduler overhead, and kernel efficiency; no setting improves every workload."
+    evidence_ids: ["CLM-003"]
+    derived_from: []
+
+  - id: "MECH-04"
+    description: "Scheduler arbitration: A runtime allocates a bounded amount of token work and KV capacity among running and waiting requests according to its policy. Priority, fairness, admission, and preemption behavior are implementation-specific and must be verified at a pinned revision rather than inferred from generic serving terminology."
+    evidence_ids: ["CLM-006"]
+    derived_from: []
+
+  - id: "MECH-05"
+    description: "Preemption strategies: A serving runtime may discard and recompute state, transfer state to another memory tier, pause without reclaiming all state, or reject/delay other work. These strategies impose different compute, bandwidth, latency, and fairness costs. Current vLLM V1 at the pinned revision frees a victim's KV blocks, resets computed-token progress, and requeues the request for recomputation; it does not implement the older V0 swap/recompute mode branch in this path."
+    evidence_ids: ["CLM-007"]
+    derived_from: []
+
+  - id: "MECH-06"
+    description: "Overload controls operate at different layers: rate limiting constrains request or token rate; concurrency limiting caps in-flight work; queue limiting bounds waiting work; admission control decides whether work may enter a constrained subsystem; backpressure signals upstream slowdown; load shedding rejects or abandons work to protect selected service objectives. Their policies and status codes are deployment-specific."
+    evidence_ids: ["CLM-010"]
+    derived_from: []
+
+  - id: "MECH-07"
+    description: "Diagnostic hypothesis ranking: Correlate client latency, queue residency, scheduler decisions, batch/token work, KV capacity, host timing, and GPU counters to discriminate among interacting bottlenecks and state transitions. No single signal, including GPU activity or KV occupancy, proves a unique root cause."
+    evidence_ids: ["CLM-011"]
+    derived_from: []
+
+mathematical_models:
+  - id: "MATH-01"
+    description: "Latency decomposition model: T_e2e = T_queue + T_TTFT_compute + sum_{i=1}^{N_out - 1} ITL_i, where T_TTFT = T_queue + T_TTFT_compute and TPOT = (T_e2e - T_TTFT) / (N_out - 1). Distinguishes queue residency from execution latency."
+    evidence_ids: ["CLM-008"]
+    derived_from: []
+
+  - id: "MATH-02"
+    description: "Little's Law and queue stability: Average concurrency L = lambda * W in steady state. For arrival rate exceeding maximum service rate (lambda > mu), queue depth grows linearly at rate dL_q/dt = lambda - mu."
+    evidence_ids: ["CLM-004"]
+    derived_from: []
+
+  - id: "MATH-03"
+    description: "M/G/1 Pollaczek-Khinchine mean waiting time: W_q = lambda * (sigma^2 + 1/mu^2) / (2 * (1 - rho)). Explains super-linear queue growth as traffic intensity rho approaches 1, and shows how high variance in request length (sigma^2) inflates TTFT queue wait."
+    evidence_ids: ["CLM-005"]
+    derived_from: []
+
+  - id: "MATH-04"
+    description: "Capacity headroom model: Little's Law and queueing approximations can sanity-check mean behavior under explicit assumptions, but they do not yield a universal safe utilization or percentile guarantee for state-dependent LLM service. Select headroom empirically from open-loop load sweeps that preserve workload distributions, identify the SLO-constrained goodput knee, and validate burst, overload, recovery, and failure scenarios."
+    evidence_ids: ["CLM-009", "CLM-009b", "CLM-012"]
+    derived_from: ["MATH-03"]
+
+implementation_mechanisms:
+  - id: "IMPL-01"
+    description: "vLLM V1 step scheduler at commit 25b0add7b8a1c944d5c4e364f2de6aa82497a2ad: Scheduler.schedule() assigns work under max_num_scheduled_tokens and max_num_batched_tokens, schedules running requests before traversing waiting queues, and calls KVCacheManager.allocate_slots() for required KV capacity."
+    evidence_ids: ["CLM-006", "CLM-013"]
+    derived_from: []
+
+  - id: "IMPL-02"
+    description: "vLLM V1 preemption path at the pinned commit: when allocate_slots() cannot provide blocks, Scheduler.schedule() selects a victim according to PRIORITY or queue order and calls Scheduler._preempt_request(); that method frees request blocks, marks PREEMPTED, resets num_computed_tokens to zero, increments num_preemptions, and prepends the request to the waiting queue."
+    evidence_ids: ["CLM-007", "CLM-013"]
+    derived_from: []
+
+failure_modes:
+  - id: "FAIL-01"
+    description: "Preemption thrashing: When continuous batching admits too many concurrent long-output requests, memory exhaustion causes requests to repeatedly swap or recompute without completing, reducing goodput to near zero."
+    evidence_ids: ["CLM-007", "CLM-009b"]
+    derived_from: []
+
+  - id: "FAIL-02"
+    description: "Decode ITL spikes from monolithic prefills: Large unchunked prompt arrivals seize the GPU compute pipeline, stalling all running decodes for hundreds of milliseconds and violating streaming TPOT SLOs."
+    evidence_ids: ["CLM-002b", "CLM-003"]
+    derived_from: []
+
+  - id: "FAIL-03"
+    description: "Unbounded queue collapse: Arrival rate exceeding service capacity without admission control causes queue residency to grow indefinitely, leading to client timeouts after GPU compute has already been expended."
+    evidence_ids: ["CLM-004", "CLM-010"]
+    derived_from: []
+
+production_connections:
+  - id: "PROD-01"
+    description: "Production-capable serving runtimes expose scheduler, batching, queue, or chunking controls, but names, defaults, and effective behavior differ by runtime and release. Any curriculum claim about a concrete control must cite that runtime's pinned documentation or source."
+    evidence_ids: ["CLM-003", "CLM-006"]
+    derived_from: []
+
+  - id: "PROD-02"
+    description: "Public API rate-limit responses demonstrate externally visible overload contracts, but they do not reveal a provider's internal admission, queueing, or scheduling architecture. The module therefore teaches generic overload controls without attributing undisclosed mechanisms to commercial providers."
+    evidence_ids: ["CLM-010"]
+    derived_from: []
+
+research_connections:
+  - id: "RES-01"
+    description: "Prefill-decode disaggregation separates phase placement and can reduce direct same-device interference, while introducing KV transfer, placement, network contention, synchronization, load-balancing, and failure-recovery costs. Its benefit is workload- and topology-dependent."
+    evidence_ids: ["CLM-014"]
+    derived_from: []
+
+  - id: "RES-02"
+    description: "Sarathi/Sarathi-Serve provides evidence that chunked prefills and decode piggybacking can improve selected throughput/latency trade-offs on its evaluated models, hardware, and workloads; it does not establish elimination of all bubbles or a universally optimal token budget."
+    evidence_ids: ["CLM-003"]
+    derived_from: []
+
+todo_verify:
+  - id: "TODO-01"
+    description: "Execute the pinned vLLM V1 scheduler tests and a controlled memory-pressure workload to confirm the statically inspected schedule(), KVCacheManager.allocate_slots(), and _preempt_request() path under the curriculum's selected release configuration."
+    evidence_ids: ["CLM-013"]
+    derived_from: []
+
+candidate_capabilities:
+  - capability: "Decompose client-observed serving latency using explicit timestamp boundaries, including queue residence, first-output work, and inter-output gaps, then use aligned telemetry to rank causes of SLO regressions."
+    mapped_mechanisms: ["MECH-01", "MATH-01", "MECH-07"]
+
+  - capability: "Model continuous batching execution dynamics, contrast them with fixed batch membership, and measure workload-specific occupancy, latency, and throughput effects."
+    mapped_mechanisms: ["MECH-01"]
+
+  - capability: "Evaluate chunked-prefill parameters across TTFT, ITL, throughput, fairness, and scheduler overhead under heterogeneous prompt distributions."
+    mapped_mechanisms: ["MECH-02", "MECH-03", "FAIL-02"]
+
+  - capability: "Apply Little's Law and qualified queueing approximations as mean-value sanity checks, then determine SLO-constrained operating headroom from workload-faithful load, burst, overload, and recovery measurements."
+    mapped_mechanisms: ["MATH-02", "MATH-03", "MATH-04"]
+
+  - capability: "Analyze scheduler priority policies, KV memory exhaustion, and delay, rejection, recomputation, transfer, or reservation trade-offs, including workloads that trigger repeated preemption."
+    mapped_mechanisms: ["MECH-04", "MECH-05", "IMPL-01", "IMPL-02", "FAIL-01"]
+
+  - capability: "Design and implement admission control, backpressure, and load shedding strategies to protect system goodput under burst overload."
+    mapped_mechanisms: ["MECH-06", "FAIL-03", "PROD-02"]
+
+  - capability: "Use aligned client, queue, scheduler, host, GPU, network, and KV-allocation telemetry to rank interacting constraints and detect bottleneck transitions."
+    mapped_mechanisms: ["MECH-07", "MATH-01", "MATH-04"]
