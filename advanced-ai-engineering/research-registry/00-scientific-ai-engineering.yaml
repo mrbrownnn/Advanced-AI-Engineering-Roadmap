@@ -1,0 +1,315 @@
+module: "00-scientific-ai-engineering"
+registry_version: "1.0.0"
+research_cutoff: "2026-09-25"
+change_reason: "Initial evidence registry for the scientific engineering foundation, with statistical assumptions, benchmark failure modes, and pinned production source traces made explicit."
+
+out_of_scope_candidates:
+  - "Domain-specific model quality evaluation and judge calibration (Module 15)"
+  - "GPU architecture and profiler interpretation (Module 02)"
+  - "Serving queueing and capacity models (Module 04)"
+
+claims:
+  - id: "M00-CLM-001"
+    claim: "A defensible measurement result requires a declared measurand, observation boundary, unit, procedure, and uncertainty; an instrument reading or dashboard number without those definitions is not a complete engineering claim."
+    provenance: "VERIFIED_FACT"
+    domain: "measurement"
+    concepts: ["measurand", "measurement_boundary", "uncertainty", "traceability"]
+    confidence: "high"
+    evidence:
+      - source_type: "specification"
+        tier: 1
+        title: "Metrological Traceability: Frequently Asked Questions and NIST Policy"
+        authors: "National Institute of Standards and Technology"
+        url: "https://www.nist.gov/metrology/metrological-traceability"
+        section: "Sections 5.1.1 and 5.1.2"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "Software performance measurements are often relative rather than SI-traceable; the same discipline still applies to clocks, units, boundaries, and uncertainty."
+    applicability: "All benchmark, evaluation, profiling, and incident measurements in the curriculum."
+    curriculum_usage:
+      lessons: ["0.1", "0.2"]
+      labs: ["LAB-A", "LAB-D"]
+      assessments: ["Mastery-00"]
+
+  - id: "M00-CLM-002"
+    claim: "Seemingly irrelevant setup choices can change program layout and measured performance enough to reverse an experimental conclusion; setup randomization and causal follow-up are therefore controls against measurement bias, not cosmetic reporting choices."
+    provenance: "VERIFIED_FACT"
+    domain: "experimental_design"
+    concepts: ["measurement_bias", "setup_randomization", "confounding"]
+    confidence: "high"
+    evidence:
+      - source_type: "paper"
+        tier: 1
+        title: "Producing Wrong Data Without Doing Anything Obviously Wrong"
+        authors: "Todd Mytkowicz, Amer Diwan, Matthias Hauswirth, Peter F. Sweeney"
+        year: "2009"
+        url: "https://research.ibm.com/publications/producing-wrong-data-without-doing-anything-obviously-wrong"
+        section: "Abstract and Sections 2-5"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "The demonstrated mechanisms and effect sizes are platform-specific; the general lesson is to test setup sensitivity rather than assume the same bias on every system."
+    applicability: "System benchmarks sensitive to binary layout, allocation, scheduling, caching, or environment state."
+    curriculum_usage:
+      lessons: ["0.2", "0.3"]
+      labs: ["LAB-B"]
+      assessments: ["Incident-00.1", "Mastery-00"]
+
+  - id: "M00-CLM-003"
+    claim: "Randomized block designs compare treatments within levels of important nuisance factors, while randomization reduces systematic contamination from nuisance factors that are not controlled."
+    provenance: "VERIFIED_FACT"
+    domain: "experimental_design"
+    concepts: ["randomization", "blocking", "nuisance_factor", "paired_design"]
+    confidence: "high"
+    evidence:
+      - source_type: "official_docs"
+        tier: 2
+        title: "NIST/SEMATECH Engineering Statistics Handbook: Randomized Block Designs"
+        authors: "NIST/SEMATECH"
+        url: "https://www.itl.nist.gov/div898/handbook/pri/section3/pri332.htm"
+        section: "Blocking and randomization; model for a randomized block design"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "Blocking only handles declared factors and does not repair carryover, interference between trials, or a changing treatment implementation."
+    applicability: "A/B performance comparisons across machines, time windows, seeds, datasets, or workload strata."
+    curriculum_usage:
+      lessons: ["0.3"]
+      labs: ["LAB-B"]
+      assessments: ["Mastery-00"]
+
+  - id: "M00-CLM-004"
+    claim: "Performance experiments can contain multiple variance levels, such as iterations within process executions and executions across fresh processes; repetitions must target the level that supports the intended inference."
+    provenance: "VERIFIED_FACT"
+    domain: "benchmark_methodology"
+    concepts: ["hierarchical_variance", "repetition", "experimental_unit", "steady_state"]
+    confidence: "high"
+    evidence:
+      - source_type: "paper"
+        tier: 1
+        title: "Rigorous Benchmarking in Reasonable Time"
+        authors: "Tomas Kalibera, Richard E. Jones"
+        year: "2013"
+        url: "https://kar.kent.ac.uk/33611/"
+        section: "Sections 2-7"
+        accessed_at: "2026-09-25"
+      - source_type: "paper"
+        tier: 1
+        title: "Statistically Rigorous Java Performance Evaluation"
+        authors: "Andy Georges, Dries Buytaert, Lieven Eeckhout"
+        year: "2007"
+        url: "https://doi.org/10.1145/1297027.1297033"
+        section: "Sections 3 and 4"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "The cited systems emphasize managed-runtime benchmarks; AI experiments add model, data, accelerator, distributed, and adaptive-runtime variance sources."
+    applicability: "Choosing whether to repeat requests, process starts, container starts, model loads, seeds, or hardware allocations."
+    curriculum_usage:
+      lessons: ["0.2", "0.5"]
+      labs: ["LAB-A", "LAB-C"]
+      assessments: ["Mastery-00"]
+
+  - id: "M00-CLM-005"
+    claim: "For independent observations from a normal population with unknown variance, the classical two-sided confidence interval for the population mean is xbar +/- t_(1-alpha/2,n-1)*s/sqrt(n); its confidence level describes long-run coverage of the procedure, not the posterior probability that this realized interval contains the parameter."
+    provenance: "VERIFIED_FACT"
+    domain: "statistical_inference"
+    concepts: ["confidence_interval", "coverage", "standard_error", "t_interval"]
+    confidence: "high"
+    evidence:
+      - source_type: "official_docs"
+        tier: 2
+        title: "NIST/SEMATECH Engineering Statistics Handbook: Confidence Limits for the Mean"
+        authors: "NIST/SEMATECH"
+        url: "https://www.itl.nist.gov/div898/handbook/eda/section3/eda352.htm"
+        section: "Definition and interpretation"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "Autocorrelation, hierarchy, heavy tails, censoring, adaptive stopping, and selection can invalidate the simple interval."
+      - "The formula is for a mean, not a percentile or a speedup ratio."
+    applicability: "Mean latency, throughput, quality, or cost estimates when the sampling assumptions are defensible."
+    curriculum_usage:
+      lessons: ["0.5"]
+      labs: ["LAB-C"]
+      assessments: ["Mastery-00"]
+
+  - id: "M00-CLM-006"
+    claim: "If independent normal observations have known standard deviation sigma, a normal-approximation mean interval with absolute half-width E requires n >= (z_(1-alpha/2)*sigma/E)^2; replacing sigma with a pilot estimate makes this a planning approximation rather than a guarantee."
+    provenance: "DERIVED"
+    domain: "statistical_inference"
+    concepts: ["sample_size", "margin_of_error", "pilot_variance"]
+    confidence: "high"
+    assumptions:
+      - "Independent observations with finite variance and a target population mean."
+      - "Known sigma for the exact algebraic planning equation, or a representative pilot estimate for an approximation."
+      - "Fixed sampling plan and absolute, not silently relative, margin E."
+    derivation: "Set the normal-interval half-width z_(1-alpha/2)*sigma/sqrt(n) <= E, square both sides, and round n upward."
+    limitations:
+      - "Does not size experiments for P99, ratios, clustered samples, multiple comparisons, or a desired probability of detecting an effect."
+    applicability: "Initial sizing of mean-estimation experiments followed by sequential uncertainty checks that were declared before measurement."
+    curriculum_usage:
+      lessons: ["0.5"]
+      labs: ["LAB-C"]
+      assessments: ["Mastery-00"]
+
+  - id: "M00-CLM-007"
+    claim: "For n independent trials where an event has probability q, the probability of observing at least one event is 1-(1-q)^n; observing a rare tail event is not the same as estimating a tail quantile precisely."
+    provenance: "DERIVED"
+    domain: "tail_measurement"
+    concepts: ["rare_event", "tail_latency", "percentile", "binomial_model"]
+    confidence: "high"
+    assumptions:
+      - "Independent Bernoulli event indicators with constant probability q."
+      - "No censoring, coordinated omission, or adaptive selection."
+    derivation: "The probability of zero events in n independent trials is (1-q)^n, so the complement is 1-(1-q)^n. For q=0.01 and 95% observation probability, n >= ln(0.05)/ln(0.99), hence n=299 after rounding upward."
+    limitations:
+      - "This calculation only concerns seeing at least one event from a defined tail set; it is not a confidence interval for P99 and does not justify a quantile convention."
+    applicability: "Sanity-checking whether a latency run is even long enough to expose rare events under a simplified independent model."
+    curriculum_usage:
+      lessons: ["0.4", "0.5"]
+      labs: ["LAB-A", "LAB-C"]
+      assessments: ["Mastery-00"]
+
+  - id: "M00-CLM-008"
+    claim: "An extreme observation is not automatically erroneous: formal outlier procedures depend on distributional and multiplicity assumptions, and unexplained points should be investigated or handled with a predeclared robust analysis rather than deleted because they change the conclusion."
+    provenance: "VERIFIED_FACT"
+    domain: "data_analysis"
+    concepts: ["outlier", "robust_statistics", "failure_signal", "analysis_policy"]
+    confidence: "high"
+    evidence:
+      - source_type: "official_docs"
+        tier: 2
+        title: "NIST/SEMATECH Engineering Statistics Handbook: Detection of Outliers"
+        authors: "NIST/SEMATECH"
+        url: "https://www.itl.nist.gov/div898/handbook/eda/section3/eda35h.htm"
+        section: "Outlier labeling, accommodation, identification, and normality assumption"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "Known harness corruption can justify exclusion when the rule and evidence are recorded; retain the raw data and report sensitivity with and without excluded observations."
+    applicability: "Latency spikes, failed requests, profiler anomalies, and evaluation-score extremes."
+    curriculum_usage:
+      lessons: ["0.4", "0.7"]
+      labs: ["LAB-A", "LAB-D"]
+      assessments: ["Incident-00.1"]
+
+  - id: "M00-CLM-009"
+    claim: "A load generator that waits for one response before scheduling the next intended arrival can omit latency samples during stalls and understate the delay an independently arriving request would experience; the HdrHistogram project documents correction methods when the expected sampling interval is known."
+    provenance: "VERIFIED_FACT"
+    domain: "load_generation"
+    concepts: ["coordinated_omission", "open_loop", "closed_loop", "latency_histogram"]
+    confidence: "high"
+    evidence:
+      - source_type: "source_code"
+        tier: 1
+        title: "HdrHistogram coordinated-omission recording"
+        repository: "https://github.com/HdrHistogram/HdrHistogram"
+        commit: "de84b0a7de2378abfc405da503bf4898e84ea98e"
+        verification_date: "2026-09-25"
+        file: "src/main/java/org/HdrHistogram/AbstractHistogram.java"
+        symbol: "recordValueWithExpectedInterval"
+        url: "https://github.com/HdrHistogram/HdrHistogram/blob/de84b0a7de2378abfc405da503bf4898e84ea98e/src/main/java/org/HdrHistogram/AbstractHistogram.java"
+        accessed_at: "2026-09-25"
+      - source_type: "official_docs"
+        tier: 2
+        title: "HdrHistogram README: Corrected vs. Raw Value Recording Calls"
+        authors: "HdrHistogram maintainers"
+        url: "https://github.com/HdrHistogram/HdrHistogram/tree/de84b0a7de2378abfc405da503bf4898e84ea98e#corrected-vs-raw-value-recording-calls"
+        section: "Corrected vs. Raw value recording calls"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "Synthetic correction depends on a valid expected interval and cannot reconstruct arbitrary real arrival processes, cancellations, or queue state."
+    applicability: "Latency benchmarks where offered arrivals should be independent of response completion."
+    curriculum_usage:
+      lessons: ["0.2", "0.4"]
+      labs: ["LAB-A"]
+      assessments: ["Incident-00.1", "Mastery-00"]
+
+  - id: "M00-CLM-010"
+    claim: "ACM's current artifact policy distinguishes repeatability (same team and setup), reproducibility (different team using the same setup/artifacts), and replicability (different team and independently developed setup), while noting that terminology has differed across communities."
+    provenance: "VERIFIED_FACT"
+    domain: "reproducibility"
+    concepts: ["repeatability", "reproducibility", "replicability", "artifact"]
+    confidence: "high"
+    evidence:
+      - source_type: "specification"
+        tier: 1
+        title: "ACM Artifact Review and Badging - Current"
+        authors: "Association for Computing Machinery"
+        year: "2020"
+        url: "https://www.acm.org/publications/policies/artifact-review-and-badging-current"
+        version: "1.1"
+        section: "Terminology and Badging"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "Always state the adopted definitions because other fields and older documents may swap reproducibility and replicability."
+    applicability: "Engineering reports, benchmark artifacts, external reproduction, and curriculum handoff."
+    curriculum_usage:
+      lessons: ["0.6"]
+      labs: ["LAB-D"]
+      assessments: ["Mastery-00"]
+
+  - id: "M00-CLM-011"
+    claim: "At MLCommons Inference commit 3fbc329939999c13d0a7b5e67fb2092287e06047, StartTest sanitizes settings and selects scenario/mode run functions; IssueQueryController::StartIssueQueries records the start time and dispatches scenario-specific queries; QuerySamplesComplete timestamps completions; PerformanceSummary::ProcessLatencies sorts recorded sample latencies and computes summary fields."
+    provenance: "VERIFIED_FACT"
+    domain: "runtime_implementation"
+    concepts: ["load_generator", "source_trace", "timestamp_boundary", "result_processing"]
+    confidence: "high"
+    evidence:
+      - source_type: "source_code"
+        tier: 1
+        title: "MLCommons Inference LoadGen"
+        repository: "https://github.com/mlcommons/inference"
+        commit: "3fbc329939999c13d0a7b5e67fb2092287e06047"
+        verification_date: "2026-09-25"
+        file: "loadgen/loadgen.cc; loadgen/issue_query_controller.cc; loadgen/results.cc"
+        symbol: "StartTest; IssueQueryController::StartIssueQueries; QuerySamplesComplete; PerformanceSummary::ProcessLatencies"
+        entry_point: "mlperf::StartTest"
+        execution_path: "StartTest -> sanitized TestSettingsInternal -> scenario/mode RunFunctions -> IssueQueries -> IssueQueryController::StartIssueQueries; SUT callback -> QuerySamplesComplete; PerformanceSummary::ProcessLatencies"
+        url: "https://github.com/mlcommons/inference/tree/3fbc329939999c13d0a7b5e67fb2092287e06047/loadgen"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "This is static inspection of an upstream snapshot, not execution of a compliant MLPerf submission."
+      - "MLPerf scenario rules are benchmark-specific and do not define every valid AI engineering benchmark."
+    applicability: "Production-style load generation and the required source-reading exercise."
+    curriculum_usage:
+      lessons: ["0.2", "0.6"]
+      labs: ["LAB-D"]
+      assessments: ["Production-Source-Trace", "Mastery-00"]
+
+  - id: "M00-CLM-012"
+    claim: "A p-value does not measure effect size, practical importance, or the probability that a hypothesis is true; engineering decisions require the estimate, uncertainty, assumptions, costs, and a predeclared practical threshold."
+    provenance: "VERIFIED_FACT"
+    domain: "statistical_inference"
+    concepts: ["p_value", "effect_size", "practical_significance", "decision_threshold"]
+    confidence: "high"
+    evidence:
+      - source_type: "paper"
+        tier: 1
+        title: "The ASA's Statement on p-Values: Context, Process, and Purpose"
+        authors: "Ronald L. Wasserstein, Nicole A. Lazar"
+        year: "2016"
+        url: "https://doi.org/10.1080/00031305.2016.1154108"
+        section: "Six principles"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "Confidence intervals and effect sizes also depend on design and model assumptions; replacing one threshold with another does not repair a biased experiment."
+    applicability: "Performance, quality, cost, and reliability comparisons used for engineering decisions."
+    curriculum_usage:
+      lessons: ["0.1", "0.5"]
+      labs: ["LAB-B", "LAB-C"]
+      assessments: ["Mastery-00"]
+
+  - id: "M00-CLM-013"
+    claim: "Source observations, mathematical derivations, and engineering hypotheses carry different evidence burdens: an observed result is scoped to its setup, a derivation is conditional on assumptions, and a hypothesis requires a prediction plus a discriminating or falsifying measurement."
+    provenance: "DERIVED"
+    domain: "scientific_reasoning"
+    concepts: ["source_observation", "derivation", "hypothesis", "falsification"]
+    confidence: "high"
+    assumptions:
+      - "Claims are written atomically enough that their evidence and scope can be inspected."
+      - "The experiment exposes measurements capable of distinguishing at least some competing explanations."
+    derivation: "The three claim types answer different questions: what was reported, what follows logically from premises, and what causal explanation predicts new observations. Therefore one type cannot inherit the evidentiary status of another without an explicit bridge."
+    limitations:
+      - "Complex investigations may combine all three types; labels improve auditability but do not make weak evidence strong."
+    applicability: "Every research registry, module claim, experiment report, and incident diagnosis."
+    curriculum_usage:
+      lessons: ["0.1", "0.7"]
+      labs: ["LAB-A", "LAB-B", "LAB-C", "LAB-D"]
+      assessments: ["Incident-00.1", "Mastery-00"]

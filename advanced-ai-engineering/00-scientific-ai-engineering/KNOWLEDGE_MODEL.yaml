@@ -1,0 +1,181 @@
+module: "00-scientific-ai-engineering"
+registry_version: "1.0.0"
+
+required_concepts:
+  - "claim_types"
+  - "measurand_and_boundaries"
+  - "experimental_unit"
+  - "randomization_and_blocking"
+  - "warmup_and_state_control"
+  - "distribution_and_tail_metrics"
+  - "confidence_interval_semantics"
+  - "sample_size_assumptions"
+  - "effect_size_and_practical_significance"
+  - "coordinated_omission"
+  - "artifact_provenance"
+  - "falsification_and_diagnosis"
+
+prerequisite_concepts:
+  - "basic_algebra"
+  - "basic_probability"
+  - "command_line_and_python"
+
+first_occurrence_concepts:
+  - "source_observation_derivation_hypothesis"
+  - "benchmark_contract"
+  - "experimental_unit"
+  - "paired_blocked_design"
+  - "confidence_interval_coverage"
+  - "coordinated_omission"
+  - "repeatability_reproducibility_replicability"
+
+concept_dependencies:
+  - concept: "confidence_interval_semantics"
+    depends_on: ["experimental_unit", "distribution_and_tail_metrics"]
+  - concept: "sample_size_assumptions"
+    depends_on: ["confidence_interval_semantics", "effect_size_and_practical_significance"]
+  - concept: "falsification_and_diagnosis"
+    depends_on: ["claim_types", "measurand_and_boundaries", "randomization_and_blocking"]
+  - concept: "artifact_provenance"
+    depends_on: ["benchmark_contract", "measurand_and_boundaries"]
+
+mechanisms:
+  - id: "M00-MECH-01"
+    description: "Claim typing: keep source observations, conditional derivations, and testable engineering hypotheses distinct. Each claim records scope, assumptions, evidence, prediction, and falsifier appropriate to its type."
+    evidence_ids: ["M00-CLM-013"]
+    derived_from: []
+
+  - id: "M00-MECH-02"
+    description: "Benchmark contract: declare the system and workload, experimental unit, arrival/observation boundaries, units, success criteria, environment, warmup, sampling plan, aggregation, exclusions, and uncertainty before interpreting results."
+    evidence_ids: ["M00-CLM-001", "M00-CLM-004"]
+    derived_from: []
+
+  - id: "M00-MECH-03"
+    description: "Randomized blocked comparison: place treatments in comparable nuisance-factor blocks, randomize treatment order within blocks, retain paired differences, and test for carryover or drift."
+    evidence_ids: ["M00-CLM-002", "M00-CLM-003"]
+    derived_from: []
+
+  - id: "M00-MECH-04"
+    description: "Hierarchical repetition: identify variance introduced at request, process, container, model-load, seed, machine, and time-window levels; repeat and analyze at the levels supporting the intended generalization."
+    evidence_ids: ["M00-CLM-004"]
+    derived_from: []
+
+  - id: "M00-MECH-05"
+    description: "Tail-aware load generation: distinguish offered arrivals from completions, record failures and censoring, and check whether response-coupled request generation omits samples during stalls."
+    evidence_ids: ["M00-CLM-007", "M00-CLM-009"]
+    derived_from: []
+
+  - id: "M00-MECH-06"
+    description: "Evidence-preserving anomaly handling: retain raw observations, investigate extreme values as possible failures or contamination, apply only predeclared exclusion rules, and report sensitivity to exclusions or robust estimators."
+    evidence_ids: ["M00-CLM-008"]
+    derived_from: []
+
+  - id: "M00-MECH-07"
+    description: "Falsification loop: symptom -> competing hypotheses -> missing evidence -> discriminating intervention -> ranked explanation -> change -> same-boundary remeasurement. A flat or contradictory predicted signal weakens the corresponding explanation."
+    evidence_ids: ["M00-CLM-002", "M00-CLM-013"]
+    derived_from: []
+
+mathematical_models:
+  - id: "M00-MATH-01"
+    description: "Classical mean interval: xbar +/- t_(1-alpha/2,n-1)*s/sqrt(n), conditional on independent observations from a population for which the t procedure is appropriate. It estimates a mean and gives procedure coverage, not a posterior probability or a percentile guarantee."
+    evidence_ids: ["M00-CLM-005"]
+    derived_from: []
+
+  - id: "M00-MATH-02"
+    description: "Mean sample-size planning: n >= (z*sigma/E)^2 for known sigma and absolute half-width E under the normal independent model. With pilot sigma, autocorrelation, hierarchy, ratios, tails, or adaptive stopping it is only a scoped approximation."
+    evidence_ids: ["M00-CLM-006"]
+    derived_from: []
+
+  - id: "M00-MATH-03"
+    description: "Paired comparison: for block-level differences d_i, estimate the mean effect with dbar and standard error s_d/sqrt(n). Pairing helps only when blocks make treatment observations meaningfully comparable and carryover is controlled."
+    evidence_ids: ["M00-CLM-003", "M00-CLM-005"]
+    derived_from: ["M00-MECH-03"]
+
+  - id: "M00-MATH-04"
+    description: "Rare-event exposure check: P(at least one event)=1-(1-q)^n under independent constant-q trials. This can show that a run is too short to expose a tail event, but it does not estimate P99 accurately."
+    evidence_ids: ["M00-CLM-007"]
+    derived_from: []
+
+implementation_mechanisms:
+  - id: "M00-IMPL-01"
+    description: "Harness lifecycle: pin configuration, initialize, warm to a declared state, synchronize asynchronous work at the correct boundary, run randomized treatments, record raw event-level data and failures, then analyze from immutable artifacts."
+    evidence_ids: ["M00-CLM-001", "M00-CLM-002", "M00-CLM-004"]
+    derived_from: ["M00-MECH-02", "M00-MECH-03", "M00-MECH-04"]
+
+  - id: "M00-IMPL-02"
+    description: "Pinned MLPerf LoadGen trace: at commit 3fbc329939999c13d0a7b5e67fb2092287e06047, trace StartTest through sanitized settings and scenario dispatch, IssueQueryController scheduling, QuerySamplesComplete timestamps, and PerformanceSummary::ProcessLatencies."
+    evidence_ids: ["M00-CLM-011"]
+    derived_from: []
+
+  - id: "M00-IMPL-03"
+    description: "Coordinated-omission check: compare a response-coupled generator with a generator driven by an independent intended-arrival schedule, recording both intended and actual issue times. Use histogram correction only when its expected-interval assumptions match the experiment."
+    evidence_ids: ["M00-CLM-009"]
+    derived_from: ["M00-MECH-05"]
+
+failure_modes:
+  - id: "M00-FAIL-01"
+    description: "Undefined estimand: a result reports 'latency' or 'accuracy' without a population, boundary, unit, aggregation, failure policy, or workload definition, so two correct implementations measure different quantities."
+    evidence_ids: ["M00-CLM-001"]
+    derived_from: []
+
+  - id: "M00-FAIL-02"
+    description: "Pseudoreplication: thousands of requests from one process or seed are treated as thousands of independent experimental units even though the decision generalizes across process starts, machines, data slices, or seeds."
+    evidence_ids: ["M00-CLM-004", "M00-CLM-005"]
+    derived_from: []
+
+  - id: "M00-FAIL-03"
+    description: "Order and state bias: always running baseline before treatment confounds the treatment with warmup, caching, thermal state, frequency scaling, fragmentation, or background drift."
+    evidence_ids: ["M00-CLM-002", "M00-CLM-003"]
+    derived_from: []
+
+  - id: "M00-FAIL-04"
+    description: "Tail erasure: reporting only a mean, deleting slow observations, omitting timeouts, or using a response-coupled generator hides user-visible stalls while the benchmark appears stable."
+    evidence_ids: ["M00-CLM-007", "M00-CLM-008", "M00-CLM-009"]
+    derived_from: []
+
+  - id: "M00-FAIL-05"
+    description: "Precision theater: a narrow but invalid interval, a small p-value, or excessive decimal places is used to imply practical importance despite biased sampling, dependence, multiple looks, or a negligible effect."
+    evidence_ids: ["M00-CLM-005", "M00-CLM-006", "M00-CLM-012"]
+    derived_from: []
+
+production_connections:
+  - id: "M00-PROD-01"
+    description: "Every production decision record should preserve workload identity, configuration, code/data versions, environment, raw observations, failure counts, analysis code, and a rollback/remeasurement criterion."
+    evidence_ids: ["M00-CLM-001", "M00-CLM-010"]
+    derived_from: ["M00-MECH-02"]
+
+  - id: "M00-PROD-02"
+    description: "Statistical significance is not an architecture decision: compare effect size and uncertainty with a predeclared operational threshold and include cost, reliability, quality, and regression risk."
+    evidence_ids: ["M00-CLM-012"]
+    derived_from: []
+
+research_connections:
+  - id: "M00-RES-01"
+    description: "Systems benchmarking literature remains a reference foundation, but modern AI systems add adaptive batching, accelerators, model/data versions, stochastic decoding, distributed placement, and quality metrics that require additional blocking and provenance."
+    evidence_ids: ["M00-CLM-002", "M00-CLM-004", "M00-CLM-011"]
+    derived_from: []
+
+  - id: "M00-RES-02"
+    description: "Artifact terminology is policy-dependent; adopt and cite one vocabulary rather than silently assuming that reproducibility and replicability mean the same thing to every reader."
+    evidence_ids: ["M00-CLM-010"]
+    derived_from: []
+
+todo_verify:
+  - id: "M00-TODO-01"
+    description: "Execute the pinned MLPerf LoadGen source trace and record actual issue/completion timestamps for at least two scenarios; static source inspection alone does not validate a local build or benchmark configuration."
+    evidence_ids: ["M00-CLM-011"]
+    derived_from: []
+
+candidate_capabilities:
+  - capability: "Write an atomic engineering claim and label it as source observation, conditional derivation, or testable hypothesis with explicit scope and falsifier."
+    mapped_mechanisms: ["M00-MECH-01", "M00-MECH-07"]
+  - capability: "Implement a benchmark harness with explicit boundaries, warmup, synchronization, randomized blocked order, raw-event capture, and provenance."
+    mapped_mechanisms: ["M00-MECH-02", "M00-MECH-03", "M00-MECH-04", "M00-IMPL-01"]
+  - capability: "Choose mean, quantile, failure, throughput, and goodput summaries without silently treating them as interchangeable."
+    mapped_mechanisms: ["M00-MECH-05", "M00-MATH-01", "M00-MATH-04", "M00-FAIL-04"]
+  - capability: "Calculate and interpret a conditional mean confidence interval and sample-size approximation, then state why the result may not transfer to tails or hierarchical data."
+    mapped_mechanisms: ["M00-MATH-01", "M00-MATH-02", "M00-MATH-03"]
+  - capability: "Diagnose a misleading benchmark by ranking order bias, state drift, pseudoreplication, coordinated omission, exclusions, and instrumentation errors using discriminating measurements."
+    mapped_mechanisms: ["M00-MECH-06", "M00-MECH-07", "M00-FAIL-02", "M00-FAIL-03", "M00-FAIL-04"]
+  - capability: "Package a repeatable artifact and explain the adopted repeatability, reproducibility, and replicability definitions."
+    mapped_mechanisms: ["M00-PROD-01", "M00-RES-02", "M00-IMPL-02"]
