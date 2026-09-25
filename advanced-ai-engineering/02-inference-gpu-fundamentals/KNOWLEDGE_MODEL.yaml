@@ -1,0 +1,177 @@
+module: "02-inference-gpu-fundamentals"
+registry_version: "1.0.0"
+
+required_concepts:
+  - "gpu_execution_hierarchy"
+  - "simt_and_warps"
+  - "memory_hierarchy"
+  - "coalescing_and_transactions"
+  - "streams_events_and_synchronization"
+  - "measurement_boundaries"
+  - "arithmetic_intensity"
+  - "roofline_bound"
+  - "occupancy_and_resource_limits"
+  - "shape_dependent_regimes"
+  - "systems_vs_kernel_profiling"
+  - "profiler_perturbation"
+  - "numerical_parity"
+
+prerequisite_concepts:
+  - "scientific_claim_discipline"
+  - "experimental_units_and_boundaries"
+  - "tensor_shapes"
+  - "matrix_multiplication"
+  - "flop_conventions"
+
+first_occurrence_concepts:
+  - "gpu_execution_hierarchy"
+  - "warp_divergence"
+  - "memory_coalescing"
+  - "device_event_timing"
+  - "roofline_model"
+  - "occupancy"
+  - "profiler_scope"
+  - "measurement_intrusion"
+
+concept_dependencies:
+  - concept: "coalescing_and_transactions"
+    depends_on: ["simt_and_warps", "memory_hierarchy"]
+  - concept: "measurement_boundaries"
+    depends_on: ["streams_events_and_synchronization", "scientific_claim_discipline"]
+  - concept: "roofline_bound"
+    depends_on: ["arithmetic_intensity", "flop_conventions", "measurement_boundaries"]
+  - concept: "occupancy_and_resource_limits"
+    depends_on: ["gpu_execution_hierarchy", "memory_hierarchy"]
+  - concept: "profiler_scope"
+    depends_on: ["measurement_boundaries", "gpu_execution_hierarchy"]
+
+mechanisms:
+  - id: "M02-MECH-01"
+    description: "CUDA execution maps threads into blocks and grids while SMs issue work for warps. Correctness cannot depend on block execution order; performance depends on exposed parallelism, resource residency, instruction dependencies, and divergence."
+    evidence_ids: ["M02-CLM-001", "M02-CLM-007"]
+    derived_from: []
+
+  - id: "M02-MECH-02"
+    description: "Memory requests flow through registers and on-chip storage toward cache and device memory. Warp access addresses determine transaction efficiency; useful/requested bytes can be much smaller than bytes moved at a selected hierarchy level."
+    evidence_ids: ["M02-CLM-002", "M02-CLM-010"]
+    derived_from: []
+
+  - id: "M02-MECH-03"
+    description: "Host submission is asynchronous: streams order operations, events mark stream progress, and synchronization defines when a host observation is valid. Timing semantics must name the device/host clocks and exact start/end boundary."
+    evidence_ids: ["M02-CLM-003"]
+    derived_from: []
+
+  - id: "M02-MECH-04"
+    description: "Resource residency is limited jointly by blocks, threads, registers, and shared memory. Occupancy can support latency hiding, but raising it can reduce per-thread resources or introduce spilling and is not an optimization objective by itself."
+    evidence_ids: ["M02-CLM-007"]
+    derived_from: []
+
+  - id: "M02-MECH-05"
+    description: "Workload shape changes reuse, parallelism, tiling, kernel selection, and therefore the active performance regime. A compute/memory/latency label is a measured property of a specific operator path on a specific system, not a permanent label for a model phase."
+    evidence_ids: ["M02-CLM-006", "M02-CLM-012"]
+    derived_from: []
+
+mathematical_models:
+  - id: "M02-MATH-01"
+    description: "Basic Roofline: for work W operations, traffic Q bytes at a named hierarchy boundary, intensity I=W/Q operations/byte, attainable compute ceiling P_peak operations/s, and attainable bandwidth beta bytes/s, P <= min(P_peak, beta*I). Ridge intensity is I_star=P_peak/beta."
+    evidence_ids: ["M02-CLM-004", "M02-CLM-005"]
+    derived_from: []
+
+  - id: "M02-MATH-02"
+    description: "Time lower bounds corresponding to the basic Roofline are T_compute >= W/P_peak and T_memory >= Q/beta; under the overlap abstraction T >= max(W/P_peak, Q/beta). Launch and dependency latency need additional terms or measurement."
+    evidence_ids: ["M02-CLM-005", "M02-CLM-006"]
+    derived_from: ["M02-MATH-01"]
+
+  - id: "M02-MATH-03"
+    description: "Useful effective bandwidth is (B_read+B_write)/t with bytes and seconds. Decimal GB/s divides by 10^9; GiB/s divides by 2^30. Profiler traffic counters at DRAM/L2/L1 boundaries are different quantities."
+    evidence_ids: ["M02-CLM-002", "M02-CLM-010"]
+    derived_from: []
+
+  - id: "M02-MATH-04"
+    description: "For GEMM C[M,N]=A[M,K]B[K,N], the nominal work under FMA=2 is approximately 2MNK operations. A one-read/one-write algorithmic byte model is only a screening estimate because tiled implementations reuse values and can move data repeatedly at different hierarchy levels."
+    evidence_ids: ["M02-CLM-005", "M02-CLM-006"]
+    derived_from: []
+
+implementation_mechanisms:
+  - id: "M02-IMPL-01"
+    description: "Reference microkernels: implement vector copy/add and a simple tiled matrix multiply with explicit indexing, correctness checks, contiguous and strided layouts, event timing, and profiler capture. These expose execution and memory mechanisms without claiming production competitiveness."
+    evidence_ids: ["M02-CLM-001", "M02-CLM-002", "M02-CLM-003", "M02-CLM-013"]
+    derived_from: ["M02-MECH-01", "M02-MECH-02", "M02-MECH-03"]
+
+  - id: "M02-IMPL-02"
+    description: "Profiler ladder: establish synchronized wall/device baselines, use Nsight Systems for application timeline and launch gaps, then use Nsight Compute on selected representative kernels for resource, traffic, throughput, stall, and Roofline evidence."
+    evidence_ids: ["M02-CLM-003", "M02-CLM-008", "M02-CLM-009"]
+    derived_from: []
+
+  - id: "M02-IMPL-03"
+    description: "Pinned PyTorch benchmark trace: Timer.blocked_autorange estimates a block size with warmup, calls the timed path repeatedly, and the default timer synchronizes an available accelerator before reading the host timer at commit 7ee5406f6686d190efc6571475f074ba1bc9a8c0."
+    evidence_ids: ["M02-CLM-011"]
+    derived_from: []
+
+failure_modes:
+  - id: "M02-FAIL-01"
+    description: "Asynchronous timing illusion: a host timer measures launch submission rather than completed device work, producing implausibly short times or attributing work to a later operation."
+    evidence_ids: ["M02-CLM-003", "M02-CLM-011"]
+    derived_from: ["M02-MECH-03"]
+
+  - id: "M02-FAIL-02"
+    description: "Roofline category error: peak rates of the wrong precision or tensor path are combined with algorithmic bytes at a different memory level, yielding a dimensionally neat but causally invalid bound."
+    evidence_ids: ["M02-CLM-004", "M02-CLM-005", "M02-CLM-006"]
+    derived_from: ["M02-MATH-01"]
+
+  - id: "M02-FAIL-03"
+    description: "Occupancy cargo cult: launch parameters are changed to maximize theoretical occupancy while register spilling, extra instructions, poor tile reuse, or reduced ILP makes the kernel slower."
+    evidence_ids: ["M02-CLM-007"]
+    derived_from: ["M02-MECH-04"]
+
+  - id: "M02-FAIL-04"
+    description: "Profiler-induced misdiagnosis: broad counter collection replays or serializes work and changes cache state, so the profile no longer represents the concurrent application behavior being explained."
+    evidence_ids: ["M02-CLM-008", "M02-CLM-009"]
+    derived_from: ["M02-IMPL-02"]
+
+  - id: "M02-FAIL-05"
+    description: "Universal bottleneck label: prefill, decode, GEMM, or an entire model is called compute- or memory-bound without preserving batch, shape, sequence, precision, backend, cache state, and hardware."
+    evidence_ids: ["M02-CLM-006", "M02-CLM-012"]
+    derived_from: ["M02-MECH-05"]
+
+  - id: "M02-FAIL-06"
+    description: "Performance-only success: a faster precision, reduction order, or fused path is accepted without numerical parity or task-level quality checks."
+    evidence_ids: ["M02-CLM-013"]
+    derived_from: []
+
+production_connections:
+  - id: "M02-PROD-01"
+    description: "Module 02 supplies kernel/device evidence to serving diagnosis. Request TTFT, TPOT, throughput, queueing, and goodput remain Module 04 metrics and cannot be inferred from an isolated kernel profile."
+    evidence_ids: ["M02-CLM-003", "M02-CLM-008", "M02-CLM-012"]
+    derived_from: []
+
+  - id: "M02-PROD-02"
+    description: "A performance manifest records GPU model and compute capability, driver/toolkit/framework versions, clocks/power state, precision/backend, shapes/layouts, warmup, synchronization, profiler settings, and concurrent activity."
+    evidence_ids: ["M02-CLM-003", "M02-CLM-009", "M02-CLM-011"]
+    derived_from: []
+
+research_connections:
+  - id: "M02-RES-01"
+    description: "Reference/baseline mechanisms are SIMT, explicit memory movement, synchronized timing, and basic Roofline. Current practice adds generation-specific memory engines, tensor instructions, graph execution, and hierarchical profiling, all of which remain hardware- and workload-dependent."
+    evidence_ids: ["M02-CLM-001", "M02-CLM-004", "M02-CLM-008", "M02-CLM-009"]
+    derived_from: []
+
+todo_verify:
+  - id: "M02-TODO-01"
+    description: "Run the lab matrix on available NVIDIA architectures and tool versions; official semantics establish mechanisms but do not establish local ceilings, selected kernels, profiler permissions, or numerical tolerances."
+    evidence_ids: ["M02-CLM-005", "M02-CLM-006", "M02-CLM-009", "M02-CLM-013"]
+    derived_from: []
+
+candidate_capabilities:
+  - capability: "Explain how grids, blocks, warps, divergence, registers, and shared memory constrain a GPU kernel without assuming a block schedule."
+    mapped_mechanisms: ["M02-MECH-01", "M02-MECH-04", "M02-FAIL-03"]
+  - capability: "Measure useful and hardware traffic and diagnose coalescing or reuse across a named memory-hierarchy boundary."
+    mapped_mechanisms: ["M02-MECH-02", "M02-MATH-03", "M02-IMPL-01"]
+  - capability: "Design synchronized, warmed, replicated timing experiments whose boundary matches the question."
+    mapped_mechanisms: ["M02-MECH-03", "M02-IMPL-03", "M02-FAIL-01"]
+  - capability: "Build a unit-consistent Roofline bound, state its assumptions, and reject conclusions unsupported by timeline and counter evidence."
+    mapped_mechanisms: ["M02-MATH-01", "M02-MATH-02", "M02-FAIL-02"]
+  - capability: "Use systems and kernel profilers in sequence while accounting for replay, cache control, and measurement intrusion."
+    mapped_mechanisms: ["M02-IMPL-02", "M02-FAIL-04", "M02-PROD-02"]
+  - capability: "Diagnose interacting launch, latency, compute, memory, occupancy, thermal, and numerical hypotheses through controlled interventions and remeasurement."
+    mapped_mechanisms: ["M02-MECH-05", "M02-FAIL-05", "M02-FAIL-06", "M02-PROD-01"]

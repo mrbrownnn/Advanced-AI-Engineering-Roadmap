@@ -1,0 +1,354 @@
+module: "02-inference-gpu-fundamentals"
+registry_version: "1.0.0"
+research_cutoff: "2026-09-25"
+change_reason: "Evidence registry for GPU execution, memory behavior, measurement, Roofline reasoning, and profiler-driven diagnosis."
+
+out_of_scope_candidates:
+  - "KV-cache allocation, paging, reuse, and eviction (Module 03)"
+  - "Request scheduling, queueing, TTFT/TPOT semantics, and capacity planning (Module 04)"
+  - "FlashAttention, quantization, speculative decoding, and production kernel optimization (Module 05)"
+  - "Multi-GPU communication and distributed placement (Module 20)"
+
+claims:
+  - id: "M02-CLM-001"
+    claim: "CUDA launches a grid of thread blocks; SMs execute threads in groups of 32 called warps, and an application cannot rely on a particular ordering of thread blocks. Divergent paths within a warp can reduce execution efficiency even though threads retain individual state."
+    provenance: "VERIFIED_FACT"
+    domain: "execution_model"
+    concepts: ["grid", "thread_block", "warp", "simt", "divergence"]
+    confidence: "high"
+    evidence:
+      - source_type: "official_docs"
+        tier: 2
+        title: "CUDA Programming Guide"
+        authors: "NVIDIA"
+        version: "Live documentation verified 2026-09-25"
+        url: "https://docs.nvidia.com/cuda/cuda-programming-guide/02-basics/writing-cuda-kernels.html"
+        section: "Writing SIMT Kernels; Thread Hierarchy"
+        accessed_at: "2026-09-25"
+      - source_type: "official_docs"
+        tier: 2
+        title: "CUDA Programming Guide"
+        authors: "NVIDIA"
+        version: "Live documentation verified 2026-09-25"
+        url: "https://docs.nvidia.com/cuda/cuda-programming-guide/03-advanced/advanced-kernel-programming.html"
+        section: "SIMT Execution Model"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "Detailed scheduling, resource limits, and supported instructions vary by compute capability."
+      - "Independent thread scheduling on compute capability 7.0 and later does not make divergence free or justify implicit warp-synchronous code."
+    applicability: "Reasoning about launch geometry, divergence, synchronization, and correctness boundaries."
+    curriculum_usage:
+      lessons: ["2.1"]
+      labs: ["LAB-A"]
+      assessments: ["Mastery-02"]
+
+  - id: "M02-CLM-002"
+    claim: "Global-memory requests by threads of a warp are served through memory transactions; adjacent, aligned accesses can be coalesced into fewer transactions, while strided or scattered access can transfer substantially more bytes than the program requests."
+    provenance: "VERIFIED_FACT"
+    domain: "memory_system"
+    concepts: ["coalescing", "global_memory", "memory_transactions", "requested_bytes", "transferred_bytes"]
+    confidence: "high"
+    evidence:
+      - source_type: "official_docs"
+        tier: 2
+        title: "CUDA C++ Best Practices Guide"
+        authors: "NVIDIA"
+        version: "13.4 live documentation"
+        url: "https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/"
+        section: "10.2.1 Coalesced Access to Global Memory"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "Transaction granularity, cache policy, alignment effects, and sector behavior are architecture-specific."
+      - "A high cache hit rate can hide some DRAM traffic without proving that the access pattern is efficient at every hierarchy level."
+    applicability: "Memory-access experiments and profiler interpretation."
+    curriculum_usage:
+      lessons: ["2.2"]
+      labs: ["LAB-A"]
+      assessments: ["Mastery-02"]
+
+  - id: "M02-CLM-003"
+    claim: "CUDA kernel launches and many transfers are asynchronous with respect to the host; accurate timing therefore needs an explicit synchronization boundary or device events placed in the relevant stream, and possible overlap depends on hardware and execution conditions."
+    provenance: "VERIFIED_FACT"
+    domain: "measurement"
+    concepts: ["asynchrony", "streams", "events", "synchronization", "timing"]
+    confidence: "high"
+    evidence:
+      - source_type: "official_docs"
+        tier: 2
+        title: "CUDA Programming Guide"
+        authors: "NVIDIA"
+        version: "Live documentation verified 2026-09-25"
+        url: "https://docs.nvidia.com/cuda/cuda-programming-guide/02-basics/asynchronous-execution.html"
+        section: "Asynchronous Execution; CUDA Events"
+        accessed_at: "2026-09-25"
+      - source_type: "official_docs"
+        tier: 2
+        title: "CUDA semantics"
+        authors: "PyTorch contributors"
+        version: "main documentation verified 2026-09-25"
+        url: "https://docs.pytorch.org/docs/main/notes/cuda.html"
+        section: "Asynchronous execution"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "Device-event time, synchronized host wall time, and end-to-end request latency have different boundaries and must not be interchanged."
+      - "Synchronization inserted for measurement can remove overlap present in the real application."
+    applicability: "Microbenchmark timing, stream dependencies, and CPU/GPU timeline diagnosis."
+    curriculum_usage:
+      lessons: ["2.3"]
+      labs: ["LAB-B"]
+      assessments: ["Mastery-02"]
+
+  - id: "M02-CLM-004"
+    claim: "The basic Roofline model bounds attainable performance by the smaller of a compute ceiling and bandwidth multiplied by operational intensity."
+    provenance: "VERIFIED_FACT"
+    domain: "performance_model"
+    concepts: ["roofline", "operational_intensity", "compute_ceiling", "bandwidth_ceiling"]
+    confidence: "high"
+    evidence:
+      - source_type: "paper"
+        tier: 1
+        title: "Roofline: An Insightful Visual Performance Model for Multicore Architectures"
+        authors: "Samuel Williams, Andrew Waterman, David Patterson"
+        year: "2009"
+        url: "https://escholarship.org/uc/item/78h8v7mr"
+        section: "Roofline model definition"
+        accessed_at: "2026-09-25"
+      - source_type: "official_docs"
+        tier: 2
+        title: "Nsight Compute Profiling Guide"
+        authors: "NVIDIA"
+        version: "Live documentation verified 2026-09-25"
+        url: "https://docs.nvidia.com/nsight-compute/ProfilingGuide/"
+        section: "Roofline Charts"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "A basic Roofline omits launch latency, insufficient parallelism, dependency stalls, instruction mix, occupancy limits, and separate cache-level ceilings."
+      - "The result changes with precision, operation-count convention, byte-count boundary, and chosen attainable rather than nameplate ceilings."
+    applicability: "First-order kernel bounds and optimization hypothesis generation."
+    curriculum_usage:
+      lessons: ["2.4"]
+      labs: ["LAB-C"]
+      assessments: ["Mastery-02"]
+
+  - id: "M02-CLM-005"
+    claim: "Under an explicitly chosen work count W, transferred-byte count Q, attainable compute rate P_peak, and attainable bandwidth beta, the basic Roofline bound is P <= min(P_peak, beta*W/Q), with ridge intensity I_star=P_peak/beta."
+    provenance: "DERIVED"
+    domain: "performance_model"
+    concepts: ["roofline_equation", "ridge_point", "units"]
+    confidence: "high"
+    assumptions:
+      - "W and P_peak use the same operation convention and precision path."
+      - "Q and beta refer to the same memory-hierarchy boundary."
+      - "The workload is large and parallel enough for throughput ceilings to be meaningful."
+      - "Compute and data movement can overlap as represented by the basic Roofline abstraction."
+    derivation: "I=W/Q has units operations/byte. The compute ceiling gives P<=P_peak and the selected memory boundary gives P<=beta*I. Taking both constraints yields the minimum; equality of the two ceilings gives I_star=P_peak/beta."
+    limitations:
+      - "This is an analytical upper bound, not a latency prediction or proof of the observed bottleneck."
+    applicability: "Unit-checked Roofline calculations and falsifiable profiler predictions."
+    related_claims: ["M02-CLM-004"]
+    curriculum_usage:
+      lessons: ["2.4"]
+      labs: ["LAB-C"]
+      assessments: ["Mastery-02"]
+
+  - id: "M02-CLM-006"
+    claim: "Arithmetic intensity and the likely limiter of a matrix multiply depend on matrix dimensions, precision, reuse, and implementation; small or insufficiently parallel workloads can be latency-limited even when a simple operations-per-byte calculation lies above the Roofline ridge."
+    provenance: "VERIFIED_FACT"
+    domain: "workload_dependence"
+    concepts: ["gemm", "gemv", "arithmetic_intensity", "latency_limited", "shape_dependence"]
+    confidence: "high"
+    evidence:
+      - source_type: "official_docs"
+        tier: 2
+        title: "GPU Performance Background User's Guide"
+        authors: "NVIDIA"
+        url: "https://docs.nvidia.com/deeplearning/performance/dl-performance-gpu-background/index.html"
+        section: "Understanding Performance; Dot-Product Operations"
+        accessed_at: "2026-09-25"
+      - source_type: "official_docs"
+        tier: 2
+        title: "Matrix Multiplication Background User's Guide"
+        authors: "NVIDIA"
+        url: "https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html"
+        section: "Math and Memory Bounds"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "Worked hardware numbers in these guides are examples, not current universal thresholds."
+      - "Algorithmic bytes assuming one read per input can differ from measured cache and DRAM traffic."
+    applicability: "Rejecting universal prefill/decode or GEMM/GEMV bottleneck labels; selecting representative shapes."
+    curriculum_usage:
+      lessons: ["2.4", "2.5"]
+      labs: ["LAB-C", "LAB-D"]
+      assessments: ["Mastery-02"]
+
+  - id: "M02-CLM-007"
+    claim: "Occupancy is constrained by per-block threads, registers, shared memory, and architectural limits; increasing occupancy can improve latency hiding but does not by itself guarantee higher performance and can trade against per-thread resources."
+    provenance: "VERIFIED_FACT"
+    domain: "resource_residency"
+    concepts: ["occupancy", "registers", "shared_memory", "latency_hiding", "spilling"]
+    confidence: "high"
+    evidence:
+      - source_type: "official_docs"
+        tier: 2
+        title: "CUDA Programming Guide"
+        authors: "NVIDIA"
+        version: "Live documentation verified 2026-09-25"
+        url: "https://docs.nvidia.com/cuda/cuda-programming-guide/02-basics/writing-cuda-kernels.html"
+        section: "Occupancy"
+        accessed_at: "2026-09-25"
+      - source_type: "official_docs"
+        tier: 2
+        title: "CUDA C++ Best Practices Guide"
+        authors: "NVIDIA"
+        version: "13.4 live documentation"
+        url: "https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/"
+        section: "Execution Configuration Optimizations"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "Static/theoretical occupancy and achieved active warps are different measurements."
+      - "The occupancy needed to hide latency depends on instruction-level parallelism and the workload's stall mix."
+    applicability: "Launch configuration and register/shared-memory trade-off analysis."
+    curriculum_usage:
+      lessons: ["2.1", "2.5"]
+      labs: ["LAB-D"]
+      assessments: ["Mastery-02"]
+
+  - id: "M02-CLM-008"
+    claim: "Nsight Systems exposes application timelines such as CUDA API calls, memory operations, kernels, streams, and CPU activity, whereas Nsight Compute collects detailed metrics for selected GPU kernels; these tools answer different scopes of a diagnosis."
+    provenance: "VERIFIED_FACT"
+    domain: "profiling"
+    concepts: ["nsight_systems", "nsight_compute", "timeline", "kernel_metrics", "scope"]
+    confidence: "high"
+    evidence:
+      - source_type: "official_docs"
+        tier: 2
+        title: "Nsight Systems User Guide"
+        authors: "NVIDIA"
+        url: "https://docs.nvidia.com/nsight-systems/UserGuide/"
+        section: "CUDA Trace"
+        accessed_at: "2026-09-25"
+      - source_type: "official_docs"
+        tier: 2
+        title: "Nsight Compute Profiling Guide"
+        authors: "NVIDIA"
+        url: "https://docs.nvidia.com/nsight-compute/ProfilingGuide/"
+        section: "Profiling Applications; Metrics; Roofline Charts"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "A timeline can localize gaps without explaining a kernel's internal stalls; kernel counters can miss application-level waiting or queueing."
+    applicability: "Choosing a profiler from the diagnostic question rather than collecting every metric."
+    curriculum_usage:
+      lessons: ["2.3", "2.6"]
+      labs: ["LAB-B", "LAB-D"]
+      assessments: ["Production-Source-Trace", "Mastery-02"]
+
+  - id: "M02-CLM-009"
+    claim: "Nsight Compute metric collection can require replay, save/restore state, cache control, serialization, or software instrumentation; requested sections and workload nondeterminism can therefore add overhead or change the observed execution context."
+    provenance: "VERIFIED_FACT"
+    domain: "measurement_intrusion"
+    concepts: ["profiler_overhead", "replay", "cache_control", "nondeterminism"]
+    confidence: "high"
+    evidence:
+      - source_type: "official_docs"
+        tier: 2
+        title: "Nsight Compute Profiling Guide"
+        authors: "NVIDIA"
+        url: "https://docs.nvidia.com/nsight-compute/ProfilingGuide/"
+        section: "Sets and Sections; Replay; Overhead; Reproducibility"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "The magnitude and direction of perturbation depend on metric set, replay mode, cache control, workload, and hardware."
+    applicability: "Profiler experiment design and reconciliation of conflicting traces."
+    curriculum_usage:
+      lessons: ["2.3", "2.6"]
+      labs: ["LAB-B", "LAB-D"]
+      assessments: ["Mastery-02"]
+
+  - id: "M02-CLM-010"
+    claim: "For a timed kernel interval t seconds with B_r useful bytes read and B_w useful bytes written, effective bandwidth is (B_r+B_w)/t; comparing requested/effective bytes with measured transferred bytes can reveal inefficient transactions, but neither value alone identifies the cause."
+    provenance: "DERIVED"
+    domain: "memory_measurement"
+    concepts: ["effective_bandwidth", "requested_bandwidth", "actual_bandwidth", "units"]
+    confidence: "high"
+    assumptions:
+      - "The byte count covers the same operation and timing interval."
+      - "Read/write multiplicity and units (GB versus GiB) are stated."
+      - "The calculation concerns useful/requested bytes; profiler counters are required for actual hierarchy traffic."
+    derivation: "Bandwidth is transferred quantity divided by elapsed time. Summing useful bytes read and written and dividing by seconds yields bytes/second; divide by 10^9 for decimal GB/s or 2^30 for GiB/s."
+    limitations:
+      - "Cache reuse, write allocation, compression, ECC, retries, and transaction granularity can make hardware traffic differ from useful bytes."
+    applicability: "Coalescing experiments and memory-traffic reconciliation."
+    related_claims: ["M02-CLM-002"]
+    curriculum_usage:
+      lessons: ["2.2"]
+      labs: ["LAB-A"]
+      assessments: ["Mastery-02"]
+
+  - id: "M02-CLM-011"
+    claim: "At PyTorch commit 7ee5406f6686d190efc6571475f074ba1bc9a8c0, torch.utils.benchmark's default timer synchronizes an available accelerator before reading the host timer, and blocked_autorange warms up and chooses a block size intended to amortize timer overhead before collecting replicates."
+    provenance: "VERIFIED_FACT"
+    domain: "runtime_implementation"
+    concepts: ["pytorch_benchmark", "synchronization", "warmup", "replicates", "timer_overhead"]
+    confidence: "high"
+    evidence:
+      - source_type: "source_code"
+        tier: 1
+        title: "PyTorch benchmark timer implementation"
+        repository: "https://github.com/pytorch/pytorch"
+        commit: "7ee5406f6686d190efc6571475f074ba1bc9a8c0"
+        verification_date: "2026-09-25"
+        file: "torch/utils/benchmark/utils/timer.py"
+        symbol: "timer; Timer._estimate_block_size; Timer.blocked_autorange"
+        entry_point: "Timer.blocked_autorange"
+        execution_path: "Timer.blocked_autorange -> Timer._estimate_block_size -> Timer._timeit -> timer -> torch.accelerator.synchronize -> timeit.default_timer"
+        url: "https://github.com/pytorch/pytorch/blob/7ee5406f6686d190efc6571475f074ba1bc9a8c0/torch/utils/benchmark/utils/timer.py"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "This behavior is pinned to one upstream revision and measures the timed statement boundary, not an end-to-end serving request."
+      - "Synchronizing the accelerator changes overlap and is unsuitable for inferring an unsynchronized production timeline by itself."
+    applicability: "Production source reading and construction of repeatable operator microbenchmarks."
+    curriculum_usage:
+      lessons: ["2.3", "2.7"]
+      labs: ["LAB-B", "LAB-E"]
+      assessments: ["Production-Source-Trace", "Mastery-02"]
+
+  - id: "M02-CLM-012"
+    claim: "A single high-level utilization value, occupancy value, bandwidth percentage, or Roofline point is necessary evidence for some hypotheses but is insufficient to establish a unique bottleneck without aligned scope, timeline, stall, traffic, launch, and shape evidence."
+    provenance: "HYPOTHESIS"
+    domain: "diagnostic_methodology"
+    concepts: ["bottleneck_diagnosis", "competing_hypotheses", "discriminating_measurement"]
+    confidence: "high"
+    hypothesis:
+      prediction: "Workloads with a similar aggregate utilization metric can have materially different causes, including host launch gaps, insufficient grid size, dependency stalls, poor coalescing, throttling, or an efficient kernel completing quickly."
+      measurement_target: "Align CPU/GPU timelines, kernel shapes, device clocks, achieved throughput, memory traffic by hierarchy, occupancy/resource limits, warp-stall samples, and controlled interventions."
+      falsifying_observation: "Across representative controlled workloads, the selected aggregate metric uniquely predicts the causal limiter and the correct intervention without any additional measurements."
+    limitations:
+      - "The claim does not make every counter equally valuable; it requires selecting measurements that discriminate the live hypotheses."
+    applicability: "Incident diagnosis and avoidance of exactly-one bottleneck classifiers."
+    curriculum_usage:
+      lessons: ["2.6"]
+      labs: ["LAB-D"]
+      assessments: ["Incident-02.1", "Mastery-02"]
+
+  - id: "M02-CLM-013"
+    claim: "Numerical parity and performance must be evaluated together: floating-point reordering is not generally associative, so alternative reductions, precision modes, or fused paths can change results even when they implement the same high-level operation."
+    provenance: "VERIFIED_FACT"
+    domain: "numerical_behavior"
+    concepts: ["floating_point", "non_associativity", "precision", "correctness"]
+    confidence: "high"
+    evidence:
+      - source_type: "official_docs"
+        tier: 2
+        title: "CUDA C++ Best Practices Guide"
+        authors: "NVIDIA"
+        version: "13.4 live documentation"
+        url: "https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/"
+        section: "Getting the Right Answer; Numerical Accuracy and Precision; Floating Point Math Is Not Associative"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "A difference is not automatically unacceptable; tolerance and quality impact depend on the operation, dtype, model, and deployment requirement."
+    applicability: "Guarding optimization experiments against silent correctness regressions."
+    curriculum_usage:
+      lessons: ["2.5", "2.6"]
+      labs: ["LAB-C", "LAB-D"]
+      assessments: ["Mastery-02"]
