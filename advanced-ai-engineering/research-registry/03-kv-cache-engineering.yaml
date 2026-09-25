@@ -1,0 +1,313 @@
+module: "03-kv-cache-engineering"
+registry_version: "1.0.0"
+research_cutoff: "2026-09-25"
+change_reason: "Evidence registry for KV state sizing, block allocation, sharing, prefix reuse, eviction, compression, tiering, and a pinned current vLLM V1 trace."
+
+out_of_scope_candidates:
+  - "GPU execution and Roofline profiling (Module 02)"
+  - "Request scheduling objectives, queueing, admission, and capacity planning (Module 04)"
+  - "General quantization and attention-kernel optimization (Module 05)"
+  - "Distributed prefill/decode placement and transport specialization (Module 20)"
+
+claims:
+  - id: "M03-CLM-001"
+    claim: "During autoregressive self-attention, caching previously computed keys and values avoids recomputing those K/V projections for the retained prefix, while the new query still attends to retained state and cache storage grows with retained positions."
+    provenance: "VERIFIED_FACT"
+    domain: "kv_semantics"
+    concepts: ["autoregressive_decode", "kv_reuse", "retained_prefix"]
+    confidence: "high"
+    evidence:
+      - source_type: "official_docs"
+        tier: 2
+        title: "Multi-Head, Multi-Query, and Group-Query Attention"
+        authors: "NVIDIA TensorRT-LLM"
+        url: "https://nvidia.github.io/TensorRT-LLM/advanced/gpt-attention.html"
+        section: "KV Cache"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "Sliding-window, sparse, recurrent/state-space, latent-attention, cross-attention, and hybrid models have different retained state and byte formulas."
+      - "Caching reduces recomputation but does not make attention over a growing retained context free."
+    applicability: "Decoder KV lifecycle and memory accounting."
+    curriculum_usage:
+      lessons: ["3.1"]
+      labs: ["LAB-A"]
+      assessments: ["Mastery-03"]
+
+  - id: "M03-CLM-002"
+    claim: "For uncompressed decoder self-attention with L cached layers, H_kv key/value heads, head width d_h, and b bytes per stored scalar, the logical KV payload per retained token is 2*L*H_kv*d_h*b bytes before sharding, alignment, metadata, and architecture-specific state."
+    provenance: "DERIVED"
+    domain: "memory_accounting"
+    concepts: ["bytes_per_token", "mha", "mqa", "gqa"]
+    confidence: "high"
+    assumptions:
+      - "Each cached layer stores one K and one V vector for every retained token and KV head."
+      - "K and V use the same head count, head width, and storage dtype."
+      - "No quantization metadata, padding, allocator rounding, replication, sharding, latent compression, sliding-window eviction, or non-attention state is included."
+    derivation: "Each token stores L*H_kv*d_h scalars for K and the same for V. Multiply their sum by b bytes per scalar."
+    limitations:
+      - "It is a logical payload component, not process VRAM or an exact capacity limit."
+    applicability: "MHA/MQA/GQA payload estimates and workload sizing."
+    curriculum_usage:
+      lessons: ["3.1"]
+      labs: ["LAB-A"]
+      assessments: ["Mastery-03"]
+
+  - id: "M03-CLM-003"
+    claim: "PagedAttention introduced block-granular logical-to-physical KV mapping so a sequence can grow using non-contiguous physical blocks; the paper also describes block sharing and copy-on-write for compatible sampling workloads."
+    provenance: "VERIFIED_FACT"
+    domain: "paged_allocation"
+    concepts: ["paged_attention", "block_table", "non_contiguous_storage", "copy_on_write"]
+    confidence: "high"
+    evidence:
+      - source_type: "paper"
+        tier: 1
+        title: "Efficient Memory Management for Large Language Model Serving with PagedAttention"
+        authors: "Woosuk Kwon, Zhuohan Li, Siyuan Zhuang, Ying Sheng, Lianmin Zheng, Cody Hao Yu, Joseph E. Gonzalez, Hao Zhang, Ion Stoica"
+        year: "2023"
+        url: "https://doi.org/10.1145/3600006.3613165"
+        section: "Sections 3 and 4"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "The paper's throughput numbers and original runtime organization are not current universal behavior."
+      - "Paged KV does not eliminate tail slack, metadata, physical-pool sizing, or lower-level allocator fragmentation."
+    applicability: "Reference mechanism for block tables, growth, sharing, and allocation waste."
+    curriculum_usage:
+      lessons: ["3.2", "3.3", "3.4"]
+      labs: ["LAB-A", "LAB-B"]
+      assessments: ["Mastery-03"]
+
+  - id: "M03-CLM-004"
+    claim: "In a simple fixed-size per-sequence block allocation with block size B tokens and sequence length S>0, allocated capacity is B*ceil(S/B) and tail slack is B*ceil(S/B)-S, which is between 0 and B-1 tokens."
+    provenance: "DERIVED"
+    domain: "fragmentation"
+    concepts: ["internal_fragmentation", "tail_slack", "block_size"]
+    confidence: "high"
+    assumptions:
+      - "Every logical block has capacity B tokens and only the final block can be partially filled."
+      - "No cross-request packing within a physical block, hybrid cache groups, alignment expansion, or speculative lookahead is counted."
+    derivation: "ceil(S/B) blocks are necessary; subtract useful S tokens from their B*ceil(S/B) slots. Euclidean division bounds the remainder waste by B-1."
+    limitations:
+      - "This does not quantify external fragmentation or total runtime memory waste."
+    applicability: "Block-size trade-offs and simulator invariants."
+    curriculum_usage:
+      lessons: ["3.2", "3.3"]
+      labs: ["LAB-A", "LAB-B"]
+      assessments: ["Mastery-03"]
+
+  - id: "M03-CLM-005"
+    claim: "At vLLM commit 25b0add7b8a1c944d5c4e364f2de6aa82497a2ad, Scheduler.schedule requests KV slots through KVCacheManager.allocate_slots; allocation returns None when required blocks plus configured headroom exceed available blocks, otherwise coordinators allocate blocks from BlockPool."
+    provenance: "VERIFIED_FACT"
+    domain: "runtime_implementation"
+    concepts: ["vllm_v1", "scheduler_allocator_interface", "watermark", "block_pool"]
+    confidence: "high"
+    evidence:
+      - source_type: "source_code"
+        tier: 1
+        title: "vLLM V1 scheduler and KV cache manager"
+        repository: "https://github.com/vllm-project/vllm"
+        commit: "25b0add7b8a1c944d5c4e364f2de6aa82497a2ad"
+        verification_date: "2026-09-25"
+        file: "vllm/v1/core/sched/scheduler.py; vllm/v1/core/kv_cache_manager.py; vllm/v1/core/block_pool.py"
+        symbol: "Scheduler.schedule; KVCacheManager.allocate_slots; BlockPool.get_new_blocks"
+        entry_point: "Scheduler.schedule"
+        execution_path: "Scheduler.schedule -> KVCacheManager.allocate_slots -> KVCacheCoordinator.get_num_blocks_to_allocate / allocate_new_blocks -> BlockPool.get_new_blocks"
+        url: "https://github.com/vllm-project/vllm/tree/25b0add7b8a1c944d5c4e364f2de6aa82497a2ad/vllm/v1/core"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "Coordinator subclasses and KV-cache groups vary with attention/state type; this trace is not the definition of all runtimes."
+      - "Scheduling policy and preemption semantics belong to Module 04."
+    applicability: "Current production source trace for allocator/scheduler boundary."
+    curriculum_usage:
+      lessons: ["3.3", "3.5", "3.10"]
+      labs: ["LAB-B", "LAB-E"]
+      assessments: ["Production-Source-Trace", "Mastery-03"]
+
+  - id: "M03-CLM-006"
+    claim: "In the same vLLM revision, prefix caching hashes full token blocks with the parent-block hash and request-dependent extra keys; current extra keys include LoRA identity, multimodal identifiers/positions, cache salt, and prompt-embedding hashes."
+    provenance: "VERIFIED_FACT"
+    domain: "prefix_cache_identity"
+    concepts: ["block_hash", "prefix_cache", "identity", "full_blocks"]
+    confidence: "high"
+    evidence:
+      - source_type: "source_code"
+        tier: 1
+        title: "vLLM V1 KV cache hashing"
+        repository: "https://github.com/vllm-project/vllm"
+        commit: "25b0add7b8a1c944d5c4e364f2de6aa82497a2ad"
+        verification_date: "2026-09-25"
+        file: "vllm/v1/core/kv_cache_utils.py"
+        symbol: "generate_block_hash_extra_keys; hash_block_tokens; generate_block_hashes"
+        entry_point: "generate_block_hashes"
+        execution_path: "generate_block_hashes -> generate_block_hash_extra_keys -> hash_block_tokens(parent hash, token ids, extra keys)"
+        url: "https://github.com/vllm-project/vllm/blob/25b0add7b8a1c944d5c4e364f2de6aa82497a2ad/vllm/v1/core/kv_cache_utils.py"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "A hash-key implementation is not a universal semantic proof of KV equivalence; deployment isolation and model/runtime identity remain system responsibilities."
+      - "Only full blocks are hashed for reuse in this path."
+    applicability: "Prefix-cache correctness, isolation, and hit-boundary diagnosis."
+    curriculum_usage:
+      lessons: ["3.6"]
+      labs: ["LAB-C", "LAB-E"]
+      assessments: ["Mastery-03"]
+
+  - id: "M03-CLM-007"
+    claim: "In the pinned vLLM BlockPool, cached blocks whose reference count reaches zero enter the free queue as eviction candidates; a later cache hit removes such a block from that queue and increments its reference count, while allocation can evict cached metadata before reuse."
+    provenance: "VERIFIED_FACT"
+    domain: "runtime_implementation"
+    concepts: ["reference_count", "eviction_candidate", "free_queue", "prefix_cache_lifecycle"]
+    confidence: "high"
+    evidence:
+      - source_type: "source_code"
+        tier: 1
+        title: "vLLM V1 BlockPool"
+        repository: "https://github.com/vllm-project/vllm"
+        commit: "25b0add7b8a1c944d5c4e364f2de6aa82497a2ad"
+        verification_date: "2026-09-25"
+        file: "vllm/v1/core/block_pool.py"
+        symbol: "BlockPool.get_new_blocks; BlockPool.touch; BlockPool.free_blocks; BlockPool._maybe_evict_cached_block"
+        url: "https://github.com/vllm-project/vllm/blob/25b0add7b8a1c944d5c4e364f2de6aa82497a2ad/vllm/v1/core/block_pool.py"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "Here 'free' can include cached eviction candidates; it does not necessarily mean zeroed, unallocated device memory."
+      - "The policy is runtime/revision-specific and should not define cache lifecycle universally."
+    applicability: "Precise lifecycle and telemetry interpretation for a current runtime."
+    curriculum_usage:
+      lessons: ["3.4", "3.6", "3.10"]
+      labs: ["LAB-B", "LAB-C", "LAB-E"]
+      assessments: ["Production-Source-Trace"]
+
+  - id: "M03-CLM-008"
+    claim: "SGLang's RadixAttention organizes reusable KV state in a radix-tree-oriented cache for sharing across structured generation calls; its reported performance results are tied to the paper's workloads and baselines."
+    provenance: "VERIFIED_FACT"
+    domain: "prefix_reuse"
+    concepts: ["radix_attention", "structured_generation", "prefix_reuse"]
+    confidence: "high"
+    evidence:
+      - source_type: "paper"
+        tier: 1
+        title: "SGLang: Efficient Execution of Structured Language Model Programs"
+        authors: "Lianmin Zheng, Liangsheng Yin, Zhiqiang Xie, Chuyue Sun, Jeff Huang, Cody Hao Yu, Shiyi Cao, Christos Kozyrakis, Ion Stoica, Joseph E. Gonzalez, Clark Barrett, Ying Sheng"
+        year: "2024"
+        url: "https://proceedings.neurips.cc/paper_files/paper/2024/file/724be4472168f31ba1c9ac630f15dec8-Paper-Conference.pdf"
+        section: "RadixAttention design and evaluation"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "Radix organization is one implementation family, not the semantic definition of safe reuse."
+    applicability: "Alternative prefix-reuse indexing and workload-locality reasoning."
+    curriculum_usage:
+      lessons: ["3.6", "3.7"]
+      labs: ["LAB-C"]
+      assessments: ["Mastery-03"]
+
+  - id: "M03-CLM-009"
+    claim: "KV quantization reduces nominal stored bits per value, but realized memory, bandwidth, latency, and quality depend on scales/metadata, residual full-precision state, packing, dequantization kernels, model, task, and workload."
+    provenance: "VERIFIED_FACT"
+    domain: "kv_quantization"
+    concepts: ["kv_quantization", "metadata", "dequantization", "quality"]
+    confidence: "high"
+    evidence:
+      - source_type: "paper"
+        tier: 1
+        title: "KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache"
+        authors: "Zirui Liu, Jiayi Yuan, Hongye Jin, Shaochen Zhong, Zhaozhuo Xu, Vladimir Braverman, Beidi Chen, Xia Hu"
+        year: "2024"
+        url: "https://openreview.net/pdf?id=L057s2Rq8O"
+        section: "Method, system support, and evaluation"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "KIVI's empirical numbers apply to its evaluated models, kernels, tasks, and configurations and are not general capacity or throughput multipliers."
+    applicability: "KV representation trade-offs and validation plans."
+    curriculum_usage:
+      lessons: ["3.8"]
+      labs: ["LAB-D"]
+      assessments: ["Mastery-03"]
+
+  - id: "M03-CLM-010"
+    claim: "Token-selective KV eviction changes the retained attention state and therefore is not equivalent to lossless memory management; H2O is one policy that retains recent and attention-heavy tokens and evaluates quality/performance under specific models and tasks."
+    provenance: "VERIFIED_FACT"
+    domain: "lossy_eviction"
+    concepts: ["token_eviction", "h2o", "attention_semantics", "quality"]
+    confidence: "high"
+    evidence:
+      - source_type: "paper"
+        tier: 1
+        title: "H2O: Heavy-Hitter Oracle for Efficient Generative Inference of Large Language Models"
+        authors: "Zhenyu Zhang, Ying Sheng, Tianyi Zhou, Tianlong Chen, Lianmin Zheng, Ruisi Cai, Zhao Song, Yuandong Tian, Christopher Ré, Clark Barrett, Zhangyang Wang, Beidi Chen"
+        year: "2023"
+        url: "https://openreview.net/pdf?id=ctPizehA9D"
+        section: "Problem formulation, policy, and evaluation"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "Quality preservation is workload/model dependent; reported speedups cannot be generalized to unrelated runtimes."
+    applicability: "Distinguishing lossy compression/eviction from exact paging and reuse."
+    curriculum_usage:
+      lessons: ["3.8"]
+      labs: ["LAB-D"]
+      assessments: ["Mastery-03"]
+
+  - id: "M03-CLM-011"
+    claim: "For a payload of Q bytes crossing a link with measured effective bandwidth beta bytes/s, Q/beta is an ideal serialization-time lower bound; real offload or KV-transfer latency also includes setup, contention, synchronization, layout conversion, and any non-overlapped critical-path work."
+    provenance: "DERIVED"
+    domain: "tiering"
+    concepts: ["offload", "kv_transfer", "bandwidth_bound", "latency_bound"]
+    confidence: "high"
+    assumptions:
+      - "Payload Q and bandwidth beta use compatible byte units and the same transfer path."
+      - "The payload is sent once with no compression, retransmission, or duplex contention."
+      - "beta is a measured effective rate for a representative transfer size."
+    derivation: "Serialization time equals transferred bytes divided by effective bytes per second. Additional terms can only increase non-overlapped completion time unless hidden by overlap."
+    limitations:
+      - "It is not an end-to-end TTFT or TPOT model and does not prove whether transfer is on the critical path."
+    applicability: "Screening host offload and disaggregated-transfer feasibility."
+    curriculum_usage:
+      lessons: ["3.9"]
+      labs: ["LAB-D"]
+      assessments: ["Mastery-03"]
+
+  - id: "M03-CLM-012"
+    claim: "Current TensorRT-LLM documentation describes both contiguous and paged KV caches, block reuse, host offload, prioritized eviction, cache events, and multiple manager paths for hybrid attention/state models; this demonstrates that modern KV management is not one universal block layout or policy."
+    provenance: "VERIFIED_FACT"
+    domain: "production_landscape"
+    concepts: ["tensorrt_llm", "paged_kv", "hybrid_cache", "offload", "events"]
+    confidence: "high"
+    evidence:
+      - source_type: "official_docs"
+        tier: 2
+        title: "KV Cache System"
+        authors: "NVIDIA TensorRT-LLM"
+        url: "https://nvidia.github.io/TensorRT-LLM/features/kvcache.html"
+        section: "The Basics; Reuse Across Requests; KV Cache Events; Selecting the KV Cache Manager"
+        accessed_at: "2026-09-25"
+      - source_type: "official_docs"
+        tier: 2
+        title: "KV cache reuse"
+        authors: "NVIDIA TensorRT-LLM"
+        url: "https://nvidia.github.io/TensorRT-LLM/0.18.2/advanced/kv-cache-reuse.html"
+        section: "Reuse, block size, eviction, and host offloading"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "Feature support and defaults vary by TensorRT-LLM version, backend, model, and hardware."
+      - "Documentation of availability is not evidence of benefit for a particular workload."
+    applicability: "Currentness classification and implementation-diversity reasoning."
+    curriculum_usage:
+      lessons: ["3.6", "3.9", "3.10"]
+      labs: ["LAB-C", "LAB-D"]
+      assessments: ["Mastery-03"]
+
+  - id: "M03-CLM-013"
+    claim: "Under memory pressure, rising block churn, evictions, preemptions, or recomputation can form a feedback loop that lowers useful progress, but these signals do not uniquely prove KV-capacity thrashing without aligned allocation, scheduler, cache-hit, transfer, and timeline evidence."
+    provenance: "HYPOTHESIS"
+    domain: "diagnostic_methodology"
+    concepts: ["memory_pressure", "thrashing", "preemption", "competing_hypotheses"]
+    confidence: "high"
+    hypothesis:
+      prediction: "As free-block headroom shrinks under a fixed workload, allocation failures or evictions will rise, requests will lose/reload/recompute state, and useful tokens per unit time will fall; increasing only KV headroom should reverse those linked signals."
+      measurement_target: "Align free/used/evictable blocks, per-request logical demand, prefix hits, allocations/frees, preemptions, recomputed tokens, transfer bytes, scheduler decisions, GPU timeline, and useful token progress."
+      falsifying_observation: "Changing KV headroom while holding workload and scheduling policy fixed does not change churn, recomputation/transfer, or useful progress, and another controlled intervention fully explains the symptom."
+    limitations:
+      - "High memory use alone is not thrashing; low cache hit rate may simply reflect low prefix locality."
+    applicability: "KV incidents at the allocator/scheduler boundary."
+    curriculum_usage:
+      lessons: ["3.5", "3.10"]
+      labs: ["LAB-E"]
+      assessments: ["Incident-03.1", "Mastery-03"]
