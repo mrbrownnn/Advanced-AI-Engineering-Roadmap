@@ -1,0 +1,340 @@
+module: "01-foundation-model-internals"
+registry_version: "1.0.0"
+research_cutoff: "2026-09-25"
+change_reason: "Initial evidence registry for decoder-only foundation-model internals, with tensor shapes, accounting conventions, architectural variants, and a pinned current Transformers source trace."
+
+out_of_scope_candidates:
+  - "KV-cache allocation, paging, reuse, and eviction (Module 03)"
+  - "Kernel fusion, FlashAttention implementation, quantization, and speculative decoding (Module 05)"
+  - "Tensor, pipeline, expert, and context parallel execution (Module 20)"
+
+claims:
+  - id: "M01-CLM-001"
+    claim: "Scaled dot-product attention maps queries, keys, and values to softmax(QK^T/sqrt(d_k)+mask)V; multi-head attention applies this mechanism in parallel learned subspaces and combines the head outputs."
+    provenance: "VERIFIED_FACT"
+    domain: "attention"
+    concepts: ["scaled_dot_product_attention", "multi_head_attention", "causal_mask"]
+    confidence: "high"
+    evidence:
+      - source_type: "paper"
+        tier: 1
+        title: "Attention Is All You Need"
+        authors: "Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, Illia Polosukhin"
+        year: "2017"
+        url: "https://proceedings.neurips.cc/paper/2017/hash/3f5ee243547dee91fbd053c1c4a845aa-Abstract.html"
+        section: "Sections 3.2.1 and 3.2.2"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "The original paper is an encoder-decoder architecture; modern decoder-only models change normalization, position encoding, activation, attention head sharing, and implementation details."
+      - "The equation defines semantics, not a required kernel materialization strategy."
+    applicability: "Reference attention semantics and tensor-shape derivation."
+    curriculum_usage:
+      lessons: ["1.1", "1.2"]
+      labs: ["LAB-A"]
+      assessments: ["Mastery-01"]
+
+  - id: "M01-CLM-002"
+    claim: "RMSNorm normalizes by the root mean square without subtracting the feature mean; implementations also choose epsilon placement and accumulation dtype, so the mathematical form and numerical implementation must both be recorded."
+    provenance: "VERIFIED_FACT"
+    domain: "normalization"
+    concepts: ["rmsnorm", "numerical_precision", "pre_norm"]
+    confidence: "high"
+    evidence:
+      - source_type: "paper"
+        tier: 1
+        title: "Root Mean Square Layer Normalization"
+        authors: "Biao Zhang, Rico Sennrich"
+        year: "2019"
+        url: "https://proceedings.neurips.cc/paper/2019/hash/1e8a19426224ca89e83cef47f1e7f53b-Abstract.html"
+        section: "Section 4"
+        accessed_at: "2026-09-25"
+      - source_type: "source_code"
+        tier: 1
+        title: "Transformers LlamaRMSNorm"
+        repository: "https://github.com/huggingface/transformers"
+        commit: "11c16613d93911300c38ec8c9c2460567be53281"
+        verification_date: "2026-09-25"
+        file: "src/transformers/models/llama/modeling_llama.py"
+        symbol: "LlamaRMSNorm.forward"
+        url: "https://github.com/huggingface/transformers/blob/11c16613d93911300c38ec8c9c2460567be53281/src/transformers/models/llama/modeling_llama.py"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "The original paper's empirical speedups do not transfer automatically to fused modern GPU kernels or every model."
+    applicability: "Normalization equations, precision tests, and current Llama-family source tracing."
+    curriculum_usage:
+      lessons: ["1.1", "1.4"]
+      labs: ["LAB-A", "LAB-C"]
+      assessments: ["Mastery-01"]
+
+  - id: "M01-CLM-003"
+    claim: "RoPE applies position-dependent rotations to query and key coordinates so their inner product can encode relative position; extrapolation beyond training context is not guaranteed by the base construction and depends on model training and scaling method."
+    provenance: "VERIFIED_FACT"
+    domain: "position_encoding"
+    concepts: ["rope", "relative_position", "context_extrapolation"]
+    confidence: "high"
+    evidence:
+      - source_type: "paper"
+        tier: 1
+        title: "RoFormer: Enhanced Transformer with Rotary Position Embedding"
+        authors: "Jianlin Su, Yu Lu, Shengfeng Pan, Ahmed Murtadha, Bo Wen, Yunfeng Liu"
+        year: "2021"
+        url: "https://arxiv.org/abs/2104.09864"
+        section: "Sections 3.2 and 3.3"
+        accessed_at: "2026-09-25"
+      - source_type: "source_code"
+        tier: 1
+        title: "Transformers Llama rotary embedding"
+        repository: "https://github.com/huggingface/transformers"
+        commit: "11c16613d93911300c38ec8c9c2460567be53281"
+        verification_date: "2026-09-25"
+        file: "src/transformers/models/llama/modeling_llama.py"
+        symbol: "LlamaRotaryEmbedding; apply_rotary_pos_emb"
+        url: "https://github.com/huggingface/transformers/blob/11c16613d93911300c38ec8c9c2460567be53281/src/transformers/models/llama/modeling_llama.py"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "Pairing convention, rotated fraction, base frequencies, scaling, and precision vary across architectures."
+    applicability: "Position-dependent attention mechanics and long-context failure analysis."
+    curriculum_usage:
+      lessons: ["1.3"]
+      labs: ["LAB-B"]
+      assessments: ["Mastery-01"]
+
+  - id: "M01-CLM-004"
+    claim: "A SwiGLU feed-forward block uses two input projections, applies SiLU/Swish to one branch, multiplies the branches elementwise, and projects back to model width."
+    provenance: "VERIFIED_FACT"
+    domain: "feed_forward"
+    concepts: ["swiglu", "gated_mlp", "parameter_count"]
+    confidence: "high"
+    evidence:
+      - source_type: "paper"
+        tier: 1
+        title: "GLU Variants Improve Transformer"
+        authors: "Noam Shazeer"
+        year: "2020"
+        url: "https://arxiv.org/abs/2002.05202"
+        section: "Section 2"
+        accessed_at: "2026-09-25"
+      - source_type: "source_code"
+        tier: 1
+        title: "Transformers LlamaMLP"
+        repository: "https://github.com/huggingface/transformers"
+        commit: "11c16613d93911300c38ec8c9c2460567be53281"
+        verification_date: "2026-09-25"
+        file: "src/transformers/models/llama/modeling_llama.py"
+        symbol: "LlamaMLP.forward"
+        url: "https://github.com/huggingface/transformers/blob/11c16613d93911300c38ec8c9c2460567be53281/src/transformers/models/llama/modeling_llama.py"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "The current source reads the activation and bias choices from configuration; not every Llama-compatible config is necessarily bias-free SwiGLU."
+    applicability: "Dense decoder MLP implementation and accounting."
+    curriculum_usage:
+      lessons: ["1.4", "1.5"]
+      labs: ["LAB-A"]
+      assessments: ["Mastery-01"]
+
+  - id: "M01-CLM-004b"
+    claim: "For a bias-free SwiGLU block with model width d and intermediate width m, the gate, up, and down weight matrices contain 3*d*m scalar parameters."
+    provenance: "DERIVED"
+    domain: "parameter_accounting"
+    concepts: ["swiglu", "gated_mlp", "parameter_count"]
+    confidence: "high"
+    assumptions:
+      - "Gate and up projections each map d to m; the down projection maps m to d."
+      - "Biases, quantization metadata, tensor-parallel padding, and adapters are excluded."
+    derivation: "The matrices contain d*m, d*m, and m*d entries; summing yields 3*d*m."
+    limitations:
+      - "A non-gated two-matrix FFN, shared expert, MoE, or architecture-specific MLP requires a different count."
+    applicability: "Dense SwiGLU layer accounting."
+    related_claims: ["M01-CLM-004"]
+    curriculum_usage:
+      lessons: ["1.4", "1.5"]
+      labs: ["LAB-A", "LAB-C"]
+      assessments: ["Mastery-01"]
+
+  - id: "M01-CLM-005"
+    claim: "MQA shares one key/value head across query heads, while GQA uses an intermediate number of key/value heads; these designs reduce K/V projection and cache dimensions but do not remove per-query-head attention outputs or guarantee an end-to-end speedup."
+    provenance: "VERIFIED_FACT"
+    domain: "attention_variants"
+    concepts: ["mha", "mqa", "gqa", "kv_heads"]
+    confidence: "high"
+    evidence:
+      - source_type: "paper"
+        tier: 1
+        title: "Fast Transformer Decoding: One Write-Head is All You Need"
+        authors: "Noam Shazeer"
+        year: "2019"
+        url: "https://arxiv.org/abs/1911.02150"
+        section: "Sections 2 and 3"
+        accessed_at: "2026-09-25"
+      - source_type: "paper"
+        tier: 1
+        title: "GQA: Training Generalized Multi-Query Transformer Models from Multi-Head Checkpoints"
+        authors: "Joshua Ainslie, James Lee-Thorp, Michiel de Jong, Yury Zemlyanskiy, Federico Lebron, Sumit Sanghai"
+        year: "2023"
+        url: "https://aclanthology.org/2023.emnlp-main.298/"
+        section: "Sections 2 and 3"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "Quality, latency, and throughput effects depend on training, batch, sequence length, kernels, cache implementation, and hardware."
+    applicability: "Architectural comparison and downstream KV/cache reasoning."
+    curriculum_usage:
+      lessons: ["1.2", "1.5"]
+      labs: ["LAB-B"]
+      assessments: ["Mastery-01"]
+
+  - id: "M01-CLM-006"
+    claim: "For a bias-free attention block with model width d=H_q*d_h and H_kv key/value heads, Q and output projections contribute 2*d^2 parameters and K/V contribute 2*d*H_kv*d_h, totaling 2*d^2*(1+H_kv/H_q)."
+    provenance: "DERIVED"
+    domain: "parameter_accounting"
+    concepts: ["attention_parameters", "gqa", "shape_algebra"]
+    confidence: "high"
+    assumptions:
+      - "Q has H_q heads, K and V each have H_kv heads, and every head has width d_h."
+      - "d=H_q*d_h; projections are dense and bias-free; output projection maps H_q*d_h back to d."
+      - "No low-rank adapters, tensor-parallel padding, fused extra projections, or architecture-specific latent compression."
+    derivation: "W_q has d*(H_q*d_h)=d^2 entries; W_o has d^2; W_k and W_v each have d*(H_kv*d_h). Substitute d=H_q*d_h."
+    limitations:
+      - "Storage can include biases, padding, scales, optimizer state, quantization metadata, or tied/shared tensors not counted here."
+    applicability: "MHA/MQA/GQA projection accounting before implementation-specific adjustments."
+    curriculum_usage:
+      lessons: ["1.2", "1.5"]
+      labs: ["LAB-B", "LAB-C"]
+      assessments: ["Mastery-01"]
+
+  - id: "M01-CLM-007"
+    claim: "With one multiply and one add counted as two FLOPs, dense bias-free projections cost approximately two FLOPs per weight use per token; full-sequence QK^T and AV each scale with B*H_q*S^2*d_h, while a causal or fused implementation may avoid materializing or computing parts of the nominal dense matrix."
+    provenance: "DERIVED"
+    domain: "compute_accounting"
+    concepts: ["flop_convention", "attention_complexity", "prefill", "decode"]
+    confidence: "high"
+    assumptions:
+      - "FMA is counted as two FLOPs."
+      - "Dense matmuls with batch B, sequence S, and no sparsity or reuse beyond the stated algorithm."
+      - "Softmax, normalization, elementwise operations, and data movement are excluded from the leading matmul count."
+    derivation: "A matrix multiply of shapes m by k and k by n performs approximately 2*m*n*k FLOPs. Apply this to projections, QK^T, AV, and the three SwiGLU linear maps."
+    limitations:
+      - "Algorithmic FLOPs are not measured latency; kernel fusion, padding, sparsity, causal tiling, precision, utilization, and memory traffic change realized cost."
+      - "Different tools count FMA as one operation, so the convention must accompany every number."
+    applicability: "Analytical screening and profiler cross-checks."
+    curriculum_usage:
+      lessons: ["1.5"]
+      labs: ["LAB-C"]
+      assessments: ["Mastery-01"]
+
+  - id: "M01-CLM-008"
+    claim: "Sparse Mixture-of-Experts layers route each token to a subset of experts, so total parameter count and parameters activated per token differ; routing imbalance, expert capacity, dropped or rerouted tokens, communication, and batching prevent active-parameter count from being a wall-clock cost model."
+    provenance: "VERIFIED_FACT"
+    domain: "mixture_of_experts"
+    concepts: ["moe", "routing", "active_parameters", "load_balance"]
+    confidence: "high"
+    evidence:
+      - source_type: "paper"
+        tier: 1
+        title: "Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity"
+        authors: "William Fedus, Barret Zoph, Noam Shazeer"
+        year: "2022"
+        url: "https://www.jmlr.org/papers/v23/21-0998.html"
+        section: "Sections 2-3 and 5"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "Switch uses top-1 routing; other MoE families use different top-k, shared experts, losses, capacity policies, and placement."
+    applicability: "MoE mental models and parameter/compute accounting."
+    curriculum_usage:
+      lessons: ["1.6"]
+      labs: ["LAB-C"]
+      assessments: ["Mastery-01"]
+
+  - id: "M01-CLM-009"
+    claim: "DeepSeek-V2 reports Multi-head Latent Attention, which compresses attention state into latent representations, and a sparse DeepSeekMoE architecture; its reported cache and throughput gains are specific to the evaluated model, training, kernels, hardware, and baselines."
+    provenance: "VERIFIED_FACT"
+    domain: "frontier_architecture"
+    concepts: ["mla", "latent_attention", "moe", "kv_compression"]
+    confidence: "high"
+    evidence:
+      - source_type: "paper"
+        tier: 1
+        title: "DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model"
+        authors: "DeepSeek-AI"
+        year: "2024"
+        url: "https://arxiv.org/abs/2405.04434"
+        section: "Sections 2.1 and 2.2"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "MLA is not equivalent to MQA/GQA parameter sharing and should not be reduced to a generic KV-head count."
+      - "Detailed cache layout belongs to Module 03 and distributed placement to Module 20."
+    applicability: "Frontier comparison showing that modern decoder internals are not exhausted by the MHA-to-GQA continuum."
+    curriculum_usage:
+      lessons: ["1.6"]
+      labs: ["LAB-B"]
+      assessments: ["Mastery-01"]
+
+  - id: "M01-CLM-010"
+    claim: "At Transformers commit 11c16613d93911300c38ec8c9c2460567be53281, LlamaForCausalLM.forward delegates to LlamaModel.forward; LlamaModel embeds inputs, builds a causal mask and rotary embeddings, iterates LlamaDecoderLayer, and applies a final RMSNorm; each decoder layer performs pre-normalized self-attention and MLP residual updates."
+    provenance: "VERIFIED_FACT"
+    domain: "runtime_implementation"
+    concepts: ["llama_source_trace", "decoder_layer", "residual", "pre_norm"]
+    confidence: "high"
+    evidence:
+      - source_type: "source_code"
+        tier: 1
+        title: "Transformers Llama modeling implementation"
+        repository: "https://github.com/huggingface/transformers"
+        commit: "11c16613d93911300c38ec8c9c2460567be53281"
+        verification_date: "2026-09-25"
+        file: "src/transformers/models/llama/modeling_llama.py"
+        symbol: "LlamaForCausalLM.forward; LlamaModel.forward; LlamaDecoderLayer.forward; LlamaAttention.forward; LlamaMLP.forward; LlamaRMSNorm.forward"
+        entry_point: "LlamaForCausalLM.forward"
+        execution_path: "LlamaForCausalLM.forward -> LlamaModel.forward -> create_causal_mask and LlamaRotaryEmbedding -> LlamaDecoderLayer.forward -> LlamaAttention.forward / LlamaMLP.forward -> final LlamaRMSNorm -> lm_head"
+        url: "https://github.com/huggingface/transformers/blob/11c16613d93911300c38ec8c9c2460567be53281/src/transformers/models/llama/modeling_llama.py"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "The attention computation dispatches through ALL_ATTENTION_FUNCTIONS and can select different backends; this file does not by itself define every kernel path."
+      - "This is a current upstream snapshot, not every released Transformers version or every Llama-family model."
+    applicability: "Required production source trace and comparison against a minimal implementation."
+    curriculum_usage:
+      lessons: ["1.1", "1.7"]
+      labs: ["LAB-D"]
+      assessments: ["Production-Source-Trace", "Mastery-01"]
+
+  - id: "M01-CLM-011"
+    claim: "The current pinned Transformers LlamaRMSNorm casts hidden states to float32 to compute the mean square and reciprocal square root, then casts normalized activations back to the input dtype before multiplying by the learned weight."
+    provenance: "VERIFIED_FACT"
+    domain: "numerical_implementation"
+    concepts: ["rmsnorm", "accumulation_dtype", "mixed_precision"]
+    confidence: "high"
+    evidence:
+      - source_type: "source_code"
+        tier: 1
+        title: "Transformers LlamaRMSNorm"
+        repository: "https://github.com/huggingface/transformers"
+        commit: "11c16613d93911300c38ec8c9c2460567be53281"
+        verification_date: "2026-09-25"
+        file: "src/transformers/models/llama/modeling_llama.py"
+        symbol: "LlamaRMSNorm.forward"
+        url: "https://github.com/huggingface/transformers/blob/11c16613d93911300c38ec8c9c2460567be53281/src/transformers/models/llama/modeling_llama.py"
+        accessed_at: "2026-09-25"
+    limitations:
+      - "Kernel substitutions enabled by decorators may use numerically equivalent but implementation-specific paths."
+    applicability: "Mixed-precision reproduction and source-versus-equation comparisons."
+    curriculum_usage:
+      lessons: ["1.4", "1.7"]
+      labs: ["LAB-A", "LAB-D"]
+      assessments: ["Production-Source-Trace"]
+
+  - id: "M01-CLM-012"
+    claim: "A tensor-shape or parameter-count model can predict logical dimensions, but exact peak memory and OOM boundaries require empirical measurement because allocators, workspaces, backend selection, padding, cache state, graph capture, and concurrent activity contribute additional state."
+    provenance: "HYPOTHESIS"
+    domain: "diagnostic_methodology"
+    concepts: ["oom", "peak_memory", "logical_memory", "allocator_state"]
+    confidence: "high"
+    hypothesis:
+      prediction: "Logical tensor accounting will form a lower-bound or component estimate, while measured reserved/allocated peaks and the OOM boundary will shift when backend, allocator history, workspace, or concurrency changes without changing model dimensions."
+      measurement_target: "Record per-operation tensor shapes, allocator allocated/reserved peaks, backend and workspace choices, cache state, and the first failing configuration across fresh-process repetitions."
+      falsifying_observation: "Across controlled backend, workspace, allocator-history, and concurrency changes, the measured peak and OOM boundary equal the logical estimate within measurement resolution."
+    limitations:
+      - "The hypothesis does not imply that analytical accounting is useless; it identifies the additional evidence required for an exact deployment limit."
+    applicability: "OOM prediction, model loading, and activation-memory diagnosis."
+    curriculum_usage:
+      lessons: ["1.5", "1.7"]
+      labs: ["LAB-C"]
+      assessments: ["Incident-01.1", "Mastery-01"]

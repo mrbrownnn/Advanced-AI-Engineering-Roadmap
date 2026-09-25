@@ -1,0 +1,184 @@
+module: "01-foundation-model-internals"
+registry_version: "1.0.0"
+
+required_concepts:
+  - "decoder_only_forward_path"
+  - "tensor_shape_invariants"
+  - "causal_self_attention"
+  - "mha_mqa_gqa"
+  - "rmsnorm_and_residuals"
+  - "rope"
+  - "swiglu"
+  - "parameter_accounting"
+  - "flop_accounting"
+  - "moe_routing"
+  - "mla"
+  - "implementation_vs_equation"
+
+prerequisite_concepts:
+  - "linear_algebra"
+  - "matrix_multiplication"
+  - "softmax"
+  - "scientific_claim_discipline"
+
+first_occurrence_concepts:
+  - "decoder_only_forward_path"
+  - "attention_head_geometry"
+  - "grouped_query_attention"
+  - "rotary_position_embedding"
+  - "rmsnorm"
+  - "swiglu"
+  - "total_vs_active_parameters"
+
+concept_dependencies:
+  - concept: "causal_self_attention"
+    depends_on: ["tensor_shape_invariants", "matrix_multiplication", "softmax"]
+  - concept: "mha_mqa_gqa"
+    depends_on: ["causal_self_attention", "attention_head_geometry"]
+  - concept: "parameter_accounting"
+    depends_on: ["tensor_shape_invariants", "mha_mqa_gqa", "swiglu"]
+  - concept: "flop_accounting"
+    depends_on: ["parameter_accounting", "decoder_only_forward_path"]
+  - concept: "moe_routing"
+    depends_on: ["swiglu", "total_vs_active_parameters"]
+
+mechanisms:
+  - id: "M01-MECH-01"
+    description: "Pre-normalized decoder block: normalize the residual stream, apply causal self-attention, add the residual, normalize again, apply the MLP, and add the second residual. Exact ordering is architecture-specific and must be read from configuration/source."
+    evidence_ids: ["M01-CLM-010"]
+    derived_from: []
+
+  - id: "M01-MECH-02"
+    description: "Scaled causal attention: project hidden states into Q/K/V, apply position transformation where configured, restrict attention to allowed key positions, compute normalized weights, combine values, concatenate query-head outputs, and apply the output projection."
+    evidence_ids: ["M01-CLM-001", "M01-CLM-003", "M01-CLM-010"]
+    derived_from: []
+
+  - id: "M01-MECH-03"
+    description: "MHA/MQA/GQA head sharing: query heads remain H_q while K/V use H_kv heads. MHA has H_kv=H_q, MQA has H_kv=1, and GQA lies between when H_q is divisible by H_kv; implementations may broadcast logically without materializing repeated K/V tensors."
+    evidence_ids: ["M01-CLM-005", "M01-CLM-006"]
+    derived_from: []
+
+  - id: "M01-MECH-04"
+    description: "RoPE rotates paired query/key coordinates as a function of position before attention. Relative-position behavior follows from the rotation algebra, while long-context extrapolation remains dependent on training and the configured scaling variant."
+    evidence_ids: ["M01-CLM-003"]
+    derived_from: []
+
+  - id: "M01-MECH-05"
+    description: "RMSNorm scales a residual vector by the reciprocal root mean square and a learned feature weight without mean centering. Epsilon, accumulation dtype, kernel substitution, and multiplication order are numerical implementation details."
+    evidence_ids: ["M01-CLM-002", "M01-CLM-011"]
+    derived_from: []
+
+  - id: "M01-MECH-06"
+    description: "SwiGLU computes down_proj(SiLU(gate_proj(x)) elementwise-multiplied by up_proj(x)). Activation, biases, intermediate width, and tensor-parallel partitioning remain configuration-specific."
+    evidence_ids: ["M01-CLM-004", "M01-CLM-004b"]
+    derived_from: []
+
+  - id: "M01-MECH-07"
+    description: "Sparse MoE routing selects a subset of expert MLPs per token. Router decisions create load balance, capacity, batching, locality, and communication constraints, so active parameter count is not a latency prediction."
+    evidence_ids: ["M01-CLM-008"]
+    derived_from: []
+
+  - id: "M01-MECH-08"
+    description: "MLA is a distinct latent attention family that compresses attention state through architecture-specific projections; it should be studied as an extension rather than mislabeled as merely fewer KV heads."
+    evidence_ids: ["M01-CLM-009"]
+    derived_from: []
+
+mathematical_models:
+  - id: "M01-MATH-01"
+    description: "Shape model: X is [B,S,d]; Q is [B,H_q,S,d_h]; K/V are [B,H_kv,S,d_h]; attention scores are logically [B,H_q,S,S_k] after mapping each query head to a K/V group. Every reshape requires element-count and divisibility checks."
+    evidence_ids: ["M01-CLM-001", "M01-CLM-005", "M01-CLM-010"]
+    derived_from: []
+
+  - id: "M01-MATH-02"
+    description: "Bias-free attention projection parameters: 2*d^2+2*d*H_kv*d_h = 2*d^2*(1+H_kv/H_q) when d=H_q*d_h. This excludes embeddings, norms, biases, adapters, latent attention, padding, and storage metadata."
+    evidence_ids: ["M01-CLM-006"]
+    derived_from: []
+
+  - id: "M01-MATH-03"
+    description: "Bias-free dense SwiGLU parameters: 3*d*m for gate, up, and down matrices. The count changes for a two-matrix FFN, MoE, shared experts, biases, adapters, or padded shards."
+    evidence_ids: ["M01-CLM-004b"]
+    derived_from: []
+
+  - id: "M01-MATH-04"
+    description: "FLOP convention: count FMA as two FLOPs and derive each matmul from 2*m*n*k. Dense full-sequence attention score/value work is nominally quadratic in S, but causal/fused kernels may skip or avoid materializing part of that work; measured latency needs profiler evidence."
+    evidence_ids: ["M01-CLM-007"]
+    derived_from: []
+
+  - id: "M01-MATH-05"
+    description: "Sparse-expert accounting separates total weights, resident weights, router weights, experts selected per token, and actually executed padded expert batches. None of these quantities alone equals wall-clock cost."
+    evidence_ids: ["M01-CLM-008"]
+    derived_from: []
+
+implementation_mechanisms:
+  - id: "M01-IMPL-01"
+    description: "Minimal reference decoder: implement explicit shape assertions, causal mask semantics, RoPE, RMSNorm, grouped K/V mapping, SwiGLU, residual ordering, and logits projection before introducing optimized kernels."
+    evidence_ids: ["M01-CLM-001", "M01-CLM-002", "M01-CLM-003", "M01-CLM-004", "M01-CLM-005"]
+    derived_from: ["M01-MECH-01", "M01-MECH-02"]
+
+  - id: "M01-IMPL-02"
+    description: "Pinned Transformers trace: LlamaForCausalLM.forward -> LlamaModel.forward -> mask/rotary construction -> LlamaDecoderLayer.forward -> LlamaAttention and LlamaMLP -> final norm -> lm_head at commit 11c16613d93911300c38ec8c9c2460567be53281."
+    evidence_ids: ["M01-CLM-010", "M01-CLM-011"]
+    derived_from: []
+
+failure_modes:
+  - id: "M01-FAIL-01"
+    description: "Silent shape correctness: a reshape has the same element count but maps tokens, heads, or feature coordinates incorrectly, producing plausible outputs without preserving attention semantics."
+    evidence_ids: ["M01-CLM-001", "M01-CLM-005"]
+    derived_from: ["M01-MATH-01"]
+
+  - id: "M01-FAIL-02"
+    description: "Mask leakage: an incorrect causal-mask orientation or broadcast lets a position depend on future tokens. Loss may still decrease, so a prefix-invariance test is required."
+    evidence_ids: ["M01-CLM-001", "M01-CLM-010"]
+    derived_from: ["M01-MECH-02"]
+
+  - id: "M01-FAIL-03"
+    description: "Architecture-name substitution: treating every decoder as Llama-like causes wrong formulas for biases, norm order, position method, MLP ratio, tied embeddings, attention sharing, MoE, or latent attention."
+    evidence_ids: ["M01-CLM-009", "M01-CLM-010"]
+    derived_from: []
+
+  - id: "M01-FAIL-04"
+    description: "FLOP-to-latency fallacy: fewer logical parameters or FLOPs are declared faster without measuring kernel shapes, memory traffic, utilization, padding, routing, or backend selection."
+    evidence_ids: ["M01-CLM-005", "M01-CLM-007", "M01-CLM-008"]
+    derived_from: []
+
+  - id: "M01-FAIL-05"
+    description: "False exact OOM prediction: logical tensor bytes are treated as total peak memory despite allocator reservations, temporary workspaces, cache state, backend choice, graph capture, and concurrent work."
+    evidence_ids: ["M01-CLM-012"]
+    derived_from: []
+
+production_connections:
+  - id: "M01-PROD-01"
+    description: "Architecture inspection supplies inputs to later serving work: query/KV head geometry and head width affect KV payload; layer and MLP geometry affect compute; MoE and MLA introduce placement and cache assumptions. Their runtime realization is deferred to the owning modules."
+    evidence_ids: ["M01-CLM-005", "M01-CLM-008", "M01-CLM-009"]
+    derived_from: []
+
+  - id: "M01-PROD-02"
+    description: "A model manifest should record configuration fields and derived invariants, then compare analytical counts with actual named parameters and runtime tensor shapes before capacity decisions."
+    evidence_ids: ["M01-CLM-006", "M01-CLM-007", "M01-CLM-010", "M01-CLM-012"]
+    derived_from: []
+
+research_connections:
+  - id: "M01-RES-01"
+    description: "Reference architecture progression: scaled MHA is the baseline; RMSNorm, RoPE, SwiGLU, MQA/GQA, sparse MoE, and MLA are separately motivated mechanisms whose value and cost remain architecture- and workload-dependent."
+    evidence_ids: ["M01-CLM-001", "M01-CLM-002", "M01-CLM-003", "M01-CLM-004", "M01-CLM-005", "M01-CLM-008", "M01-CLM-009"]
+    derived_from: []
+
+todo_verify:
+  - id: "M01-TODO-01"
+    description: "Execute the pinned Transformers Llama path with hooks for shapes, dtypes, backend selection, and peak memory; the static source trace does not prove the locally selected attention kernel or memory behavior."
+    evidence_ids: ["M01-CLM-010", "M01-CLM-011", "M01-CLM-012"]
+    derived_from: []
+
+candidate_capabilities:
+  - capability: "Trace a decoder-only forward pass from token IDs through embeddings, repeated pre-normalized residual blocks, final normalization, and logits."
+    mapped_mechanisms: ["M01-MECH-01", "M01-IMPL-02"]
+  - capability: "Derive and assert Q/K/V, attention-score, residual, and MLP tensor shapes for MHA, MQA, and GQA without materializing unnecessary repeats."
+    mapped_mechanisms: ["M01-MECH-02", "M01-MECH-03", "M01-MATH-01", "M01-FAIL-01"]
+  - capability: "Implement and numerically test RMSNorm, RoPE, causal masking, grouped attention, and SwiGLU against a pinned reference."
+    mapped_mechanisms: ["M01-MECH-04", "M01-MECH-05", "M01-MECH-06", "M01-IMPL-01", "M01-FAIL-02"]
+  - capability: "Calculate scoped parameter and FLOP estimates with an explicit convention, then reconcile them with actual parameters and profiler measurements."
+    mapped_mechanisms: ["M01-MATH-02", "M01-MATH-03", "M01-MATH-04", "M01-FAIL-04"]
+  - capability: "Explain total versus active MoE parameters and distinguish MHA/MQA/GQA from MLA without generalizing one architecture."
+    mapped_mechanisms: ["M01-MECH-07", "M01-MECH-08", "M01-MATH-05", "M01-FAIL-03"]
+  - capability: "Diagnose shape, mask, dtype, count, and OOM discrepancies using competing hypotheses and discriminating measurements."
+    mapped_mechanisms: ["M01-FAIL-01", "M01-FAIL-02", "M01-FAIL-04", "M01-FAIL-05", "M01-PROD-02"]
