@@ -1,0 +1,162 @@
+module: "08-ai-data-engineering"
+registry_version: "1.0.0"
+
+required_concepts:
+  - "data_contract"
+  - "dataset_lineage"
+  - "content_identity"
+  - "schema_and_semantic_validation"
+  - "training_serving_skew"
+  - "covariate_label_concept_shift"
+  - "drift_metrics"
+  - "leakage_and_contamination"
+  - "exact_and_near_deduplication"
+  - "label_quality"
+  - "synthetic_data_lineage"
+  - "recursive_model_collapse"
+  - "active_learning_loop"
+  - "data_release_and_rollback"
+
+prerequisite_concepts:
+  - "evidence_provenance"
+  - "experimental_units"
+  - "distribution_shift"
+  - "calibration"
+  - "model_behavior_regression"
+
+first_occurrence_concepts:
+  - "data_contract"
+  - "dataset_lineage"
+  - "content_identity"
+  - "training_serving_skew"
+  - "covariate_label_concept_shift"
+  - "leakage_and_contamination"
+  - "synthetic_data_lineage"
+  - "recursive_model_collapse"
+  - "active_learning_loop"
+
+concept_dependencies:
+  - { concept: "dataset_lineage", depends_on: ["data_contract", "evidence_provenance"] }
+  - { concept: "drift_metrics", depends_on: ["covariate_label_concept_shift", "experimental_units"] }
+  - { concept: "leakage_and_contamination", depends_on: ["experimental_units", "dataset_lineage"] }
+  - { concept: "synthetic_data_lineage", depends_on: ["dataset_lineage", "model_behavior_regression"] }
+  - { concept: "active_learning_loop", depends_on: ["calibration", "experimental_units", "label_quality"] }
+
+mechanisms:
+  - id: MECH-01
+    description: "A data contract binds source ownership/provenance, allowed use, schema, semantic invariants, unit and temporal boundaries, transformations, quality targets, retention, and consumers to a versioned release. Documentation and executable evidence complement rather than replace one another."
+    evidence_ids: ["CLM-001", "CLM-002"]
+    derived_from: []
+  - id: MECH-02
+    description: "Validation layers progress from bytes and schema through statistical, relational, semantic, label, privacy/policy, leakage, and task-level checks. Each layer can pass while a deeper layer fails."
+    evidence_ids: ["CLM-003", "CLM-013"]
+    derived_from: ["MECH-01"]
+  - id: MECH-03
+    description: "Drift monitoring compares pinned populations and windows using declared features, slices, metrics, thresholds, and multiple-test policy. It detects distribution differences; downstream labels or causal experiments are needed to attribute quality impact."
+    evidence_ids: ["CLM-004", "CLM-005", "CLM-014"]
+    derived_from: ["MECH-02"]
+  - id: MECH-04
+    description: "Leakage and contamination control establishes entity/time/source boundaries before fitting transformations, deduplicates within and across splits, audits benchmark matches with multiple detectors, and records removals and residual uncertainty."
+    evidence_ids: ["CLM-006", "CLM-007", "CLM-008"]
+    derived_from: ["MECH-01", "MECH-02"]
+  - id: MECH-05
+    description: "Synthetic generation is a data-producing pipeline with parents, generator/prompt/decoding revisions, filters, judges, mixtures, and release gates. Real-data anchors and tail/slice evaluation distinguish useful augmentation from recursive degradation."
+    evidence_ids: ["CLM-009", "CLM-010"]
+    derived_from: ["MECH-01", "MECH-02", "MECH-04"]
+  - id: MECH-06
+    description: "Active learning alternates scoring a target unlabeled pool, selecting a cost/diversity-aware batch, obtaining and auditing labels, updating the dataset/model, and evaluating on a fixed representative holdout until a declared stop rule."
+    evidence_ids: ["CLM-011", "CLM-012"]
+    derived_from: ["MECH-01", "MECH-02"]
+
+mathematical_models:
+  - id: MATH-01
+    description: "Joint shift factorization P(X,Y)=P(Y|X)P(X)=P(X|Y)P(Y) distinguishes input, label, and concept components. Observed P(X) alone cannot generally identify changes involving Y."
+    evidence_ids: ["CLM-004"]
+    derived_from: ["MECH-03"]
+  - id: MATH-02
+    description: "PSI=sum_i(p_i-q_i)ln(p_i/q_i) for identical bins and positive proportions. It is a descriptive binned divergence whose magnitude changes with bins/smoothing and does not predict model loss without empirical linkage."
+    evidence_ids: ["CLM-005"]
+    derived_from: ["MECH-03"]
+  - id: MATH-03
+    description: "Duplicate rate depends on a declared equivalence relation R: d_R = number of records belonging to non-canonical matched records divided by total records. Exact hash, normalized text, n-gram, MinHash, embedding, and semantic rules define different R and error surfaces."
+    evidence_ids: ["CLM-007", "CLM-008"]
+    derived_from: ["MECH-04"]
+  - id: MATH-04
+    description: "Label-efficiency curve plots representative holdout utility against cumulative annotation cost, not only labeled-item count. Area or budget operating points require identical initialization, annotator policy, model update schedule, and test set across query strategies."
+    evidence_ids: ["CLM-011", "CLM-012"]
+    derived_from: ["MECH-06"]
+
+implementation_mechanisms:
+  - id: IMPL-01
+    description: "A dataset manifest stores immutable source snapshots/hashes, record IDs, parent-child lineage, transform code/config/environment, schema, split assignment, filters/removals, label provenance, generator metadata, counts, quality results, and consumer compatibility."
+    evidence_ids: ["CLM-001", "CLM-002", "CLM-010"]
+    derived_from: ["MECH-01"]
+  - id: IMPL-02
+    description: "A validation pipeline quarantines failed batches, emits reason-coded anomalies and slice statistics, supports approval/override with expiry, and promotes an immutable release only after contract checks and task canaries."
+    evidence_ids: ["CLM-003", "CLM-013", "CLM-014"]
+    derived_from: ["MECH-02", "MECH-03"]
+  - id: IMPL-03
+    description: "A contamination ledger versions benchmark items before corpus processing, detector/normalization revisions, matched spans and groups, removals, inaccessible sources, post-training inputs, and residual-risk statements."
+    evidence_ids: ["CLM-006", "CLM-007", "CLM-008"]
+    derived_from: ["MECH-04"]
+  - id: IMPL-04
+    description: "Pinned TFDV trace: validate_statistics consumes statistics/schema plus optional prior and environment inputs; StatsOptions controls statistics generation; get_drift_skew_dataframe extracts recorded measurement values and thresholds from anomalies."
+    evidence_ids: ["CLM-013"]
+    derived_from: ["MECH-02", "MECH-03"]
+
+failure_modes:
+  - id: FAIL-01
+    description: "Unreproducible dataset: a mutable URI or display version points to changed bytes, transformation defaults, or external results, making training and incident replay diverge."
+    evidence_ids: ["CLM-001", "CLM-002"]
+    derived_from: ["MECH-01", "IMPL-01"]
+  - id: FAIL-02
+    description: "Schema-green semantic failure: types/ranges pass while units, joins, label meaning, timestamps, encodings, or source authority are wrong."
+    evidence_ids: ["CLM-003", "CLM-013"]
+    derived_from: ["MECH-02"]
+  - id: FAIL-03
+    description: "Drift-alert failure: arbitrary bins/thresholds and multiple uncorrected slice tests create noise, or stable marginals hide concept shift, so alert state does not discriminate downstream risk."
+    evidence_ids: ["CLM-004", "CLM-005", "CLM-014"]
+    derived_from: ["MECH-03", "MATH-01", "MATH-02"]
+  - id: FAIL-04
+    description: "Evaluation inflation: entity/time relatives, fitted preprocessing, exact/near duplicates, translations, or benchmark derivatives cross the evaluation boundary."
+    evidence_ids: ["CLM-006", "CLM-007", "CLM-008"]
+    derived_from: ["MECH-04"]
+  - id: FAIL-05
+    description: "Over-deduplication removes legitimate recurring templates or minority-language/domain examples, altering weights and coverage while a duplicate-rate dashboard improves."
+    evidence_ids: ["CLM-007", "CLM-008"]
+    derived_from: ["MECH-04", "MATH-03"]
+  - id: FAIL-06
+    description: "Synthetic feedback failure: generated data with correlated errors or weak tails gains mixture weight over iterations, while evaluator/judge reuse masks degradation."
+    evidence_ids: ["CLM-009", "CLM-010"]
+    derived_from: ["MECH-05"]
+  - id: FAIL-07
+    description: "Active-learning selection failure: an early miscalibrated model repeatedly queries redundant outliers, annotator cost rises, pool coverage narrows, and queried-set evaluation reports biased progress."
+    evidence_ids: ["CLM-011", "CLM-012"]
+    derived_from: ["MECH-06", "MATH-04"]
+
+production_connections:
+  - id: PROD-01
+    description: "Data releases use staged intake, quarantine, validation, canary training/evaluation, approval, promotion, monitoring, and rollback. Consumers resolve immutable versions rather than a mutable latest alias."
+    evidence_ids: ["CLM-001", "CLM-002", "CLM-003", "CLM-014"]
+    derived_from: ["MECH-01", "MECH-02", "MECH-03", "IMPL-01", "IMPL-02"]
+  - id: PROD-02
+    description: "Feedback data remain separately identifiable by source and policy so production behavior, human correction, active queries, and synthetic generations can be reweighted, removed, or replayed without corrupting evaluation anchors."
+    evidence_ids: ["CLM-006", "CLM-010", "CLM-011", "CLM-012"]
+    derived_from: ["MECH-04", "MECH-05", "MECH-06"]
+
+research_connections:
+  - id: RESEARCH-01
+    description: "Deduplication and recursive synthetic-data studies show that data weighting and ancestry change memorization and tail behavior; headline corpus size is not an adequate data-quality measure."
+    evidence_ids: ["CLM-007", "CLM-009"]
+    derived_from: ["MECH-04", "MECH-05"]
+  - id: RESEARCH-02
+    description: "2026 contamination work motivates post-training audits, but individual preprints remain frontier evidence and do not replace direct provenance across every stage."
+    evidence_ids: ["CLM-008"]
+    derived_from: ["MECH-04"]
+
+candidate_capabilities:
+  - { capability: "Produce a replayable dataset release with complete lineage and contracts.", mapped_mechanisms: ["MECH-01", "IMPL-01", "PROD-01"] }
+  - { capability: "Build layered validation and diagnose schema-green semantic failures.", mapped_mechanisms: ["MECH-02", "IMPL-02", "IMPL-04", "FAIL-02"] }
+  - { capability: "Distinguish drift types and validate alerts against downstream risk.", mapped_mechanisms: ["MECH-03", "MATH-01", "MATH-02", "FAIL-03"] }
+  - { capability: "Audit leakage, duplicates, and contamination without claiming detector completeness.", mapped_mechanisms: ["MECH-04", "MATH-03", "IMPL-03", "FAIL-04", "FAIL-05"] }
+  - { capability: "Operate synthetic-data and active-learning loops with independent anchors and cost-aware evaluation.", mapped_mechanisms: ["MECH-05", "MECH-06", "MATH-04", "FAIL-06", "FAIL-07", "PROD-02"] }

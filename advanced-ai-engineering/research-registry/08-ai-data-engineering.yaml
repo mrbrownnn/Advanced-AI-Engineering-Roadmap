@@ -1,0 +1,200 @@
+module: "08-ai-data-engineering"
+registry_version: "1.0.0"
+research_cutoff: "2026-09-26"
+change_reason: "Replace generated placeholders with traceable data contracts, validation, leakage and drift models, synthetic-data controls, active-learning loops, and pinned production source evidence."
+
+claims:
+  - id: CLM-001
+    claim: "Datasheets for Datasets proposes documenting motivation, composition, collection, preprocessing, uses, distribution, and maintenance so dataset consumers can reason about fitness and accountability; documentation improves traceability but does not itself prove quality or lawful fitness."
+    provenance: VERIFIED_FACT
+    domain: provenance
+    concepts: [datasheets, documentation, intended_use]
+    confidence: high
+    currentness_status: "REFERENCE / CURRENT DEFAULT"
+    evidence:
+      - { source_type: paper, tier: 1, title: "Datasheets for Datasets", authors: "Timnit Gebru, Jamie Morgenstern, Briana Vecchione, Jennifer Wortman Vaughan, Hanna Wallach, Hal Daumé III, Kate Crawford", year: "2021", url: "https://arxiv.org/abs/1803.09010", section: "Dataset documentation questions", accessed_at: "2026-09" }
+    limitations: ["A datasheet can be incomplete, stale, or unsupported by lineage artifacts."]
+    applicability: "Dataset intake, approval, release, and downstream handoff."
+    curriculum_usage: { lessons: ["8.1"], labs: ["LAB-A"], assessments: ["Mastery-08"] }
+
+  - id: CLM-002
+    claim: "A reproducible dataset version requires immutable or content-addressed source identities plus transformation code/configuration, ordering, random seeds, schemas, and environment; a human-readable version label alone cannot reconstruct content."
+    provenance: DERIVED
+    domain: lineage
+    concepts: [dataset_version, content_identity, reproducibility]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Every nondeterministic or external transformation input can be captured or explicitly declared unavailable."]
+    derivation: "Output data is a function of source bytes, transformation logic/configuration, execution semantics, and nondeterministic inputs; changing any argument can change the result."
+    limitations: ["External APIs and mutable sources may prevent exact replay unless snapshotted."]
+    applicability: "Training, evaluation, retrieval, preference, and synthetic datasets."
+    curriculum_usage: { lessons: ["8.1"], labs: ["LAB-A"], assessments: ["Mastery-08"] }
+
+  - id: CLM-003
+    claim: "Schema validation can detect declared type, presence, domain, and distribution anomalies, but passing schema checks does not prove semantic correctness, label quality, absence of leakage, or fitness for a model task."
+    provenance: VERIFIED_FACT
+    domain: validation
+    concepts: [schema, anomalies, semantic_validation]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    evidence:
+      - { source_type: paper, tier: 1, title: "Data Validation for Machine Learning", authors: "Eric Breck, Neoklis Polyzotis, Sudip Roy, Steven Whang, Martin Zinkevich", year: "2019", url: "https://proceedings.mlsys.org/paper_files/paper/2019/file/928f1160e52192e3e0017fb63ab65391-Paper.pdf", section: "Data validation system and production experience", accessed_at: "2026-09" }
+    limitations: ["Thresholds and inferred schemas encode policy and can normalize a bad baseline."]
+    applicability: "Pre-ingest, post-transform, training-serving, and release gates."
+    curriculum_usage: { lessons: ["8.2"], labs: ["LAB-A"], assessments: ["Mastery-08"] }
+
+  - id: CLM-004
+    claim: "Covariate shift changes P(X), label shift changes P(Y), and concept shift changes P(Y|X); unlabeled feature monitoring can observe evidence of input shift but cannot by itself identify label or concept shift."
+    provenance: DERIVED
+    domain: drift
+    concepts: [covariate_shift, label_shift, concept_shift]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions: ["A stable definition of X, Y, population, and time window is available."]
+    derivation: "P(X,Y)=P(Y|X)P(X)=P(X|Y)P(Y); different factors can change while producing similar observed marginals, and Y-dependent changes are not identifiable from X alone without further assumptions or labels."
+    limitations: ["Operational pipelines often change feature definitions simultaneously with population behavior."]
+    applicability: "Drift hypothesis formation and telemetry design."
+    curriculum_usage: { lessons: ["8.3"], labs: ["LAB-B"], assessments: ["Mastery-08"] }
+
+  - id: CLM-005
+    claim: "Population Stability Index is a binned symmetric divergence heuristic, sum_i (p_i-q_i) ln(p_i/q_i); its value depends on bins and smoothing and has no universal alert threshold or direct mapping to model-quality loss."
+    provenance: DERIVED
+    domain: drift_metrics
+    concepts: [psi, binning, drift_threshold]
+    confidence: high
+    currentness_status: "LEGACY / WORKLOAD-DEPENDENT"
+    assumptions: ["Reference and current proportions use identical exhaustive bins and strictly positive smoothed values."]
+    derivation: "The statistic is computed from bin proportions; changing boundaries or pseudocounts changes terms, while model impact also depends on feature use and conditional labels."
+    limitations: ["Do not interpret a conventional PSI cutoff as a statistical or product guarantee."]
+    applicability: "A descriptive drift signal when binning and calibration against outcomes are documented."
+    curriculum_usage: { lessons: ["8.3"], labs: ["LAB-B"], assessments: ["Mastery-08"] }
+
+  - id: CLM-006
+    claim: "Training/evaluation leakage occurs when information unavailable at the intended prediction boundary influences model fitting, preprocessing, selection, or evaluation; split-before-fit and entity/time-aware boundaries are necessary but not sufficient controls."
+    provenance: VERIFIED_FACT
+    domain: leakage
+    concepts: [data_leakage, split_boundary, optimistic_bias]
+    confidence: high
+    currentness_status: "REFERENCE / CURRENT CAUTION"
+    evidence:
+      - { source_type: paper, tier: 1, title: "On Leakage in Machine Learning Pipelines", authors: "Leonard Sasse et al.", year: "2023", url: "https://arxiv.org/abs/2311.04179", section: "Leakage taxonomy and examples", accessed_at: "2026-09" }
+    limitations: ["Exact leakage mechanisms depend on the deployment unit, timestamp, group structure, and feature availability."]
+    applicability: "Train/calibration/test construction and feature engineering."
+    curriculum_usage: { lessons: ["8.4"], labs: ["LAB-C"], assessments: ["Mastery-08"] }
+
+  - id: CLM-007
+    claim: "Lee et al. report that exact and near deduplication reduced memorized emission and train-validation overlap in their studied language-model corpora; deduplication effects depend on matching granularity and can remove legitimate repetition or minority patterns."
+    provenance: VERIFIED_FACT
+    domain: deduplication
+    concepts: [near_duplicate, memorization, overlap]
+    confidence: high
+    currentness_status: "REFERENCE / CURRENT DEFAULT"
+    evidence:
+      - { source_type: paper, tier: 1, title: "Deduplicating Training Data Makes Language Models Better", authors: "Katherine Lee, Daphne Ippolito, Andrew Nystrom, Chiyuan Zhang, Douglas Eck, Chris Callison-Burch, Nicholas Carlini", year: "2022", url: "https://arxiv.org/abs/2107.06499", section: "Deduplication methods and experiments", accessed_at: "2026-09" }
+    limitations: ["A match rule controls false merges and misses; benchmark decontamination requires a separately versioned evaluation boundary."]
+    applicability: "Large text corpora and contamination audits."
+    curriculum_usage: { lessons: ["8.4"], labs: ["LAB-C"], assessments: ["Mastery-08"] }
+
+  - id: CLM-008
+    claim: "Benchmark decontamination is detector-relative: a no-match result under one n-gram, exact, or semantic rule is evidence about that rule and corpus snapshot, not proof that a model has never encountered the item or an equivalent."
+    provenance: DERIVED
+    domain: contamination
+    concepts: [decontamination, detector_recall, benchmark_validity]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["The accessible training/post-training corpora and benchmark versions are pinned."]
+    derivation: "A detector observes only matches in its representational and threshold class; paraphrases, inaccessible corpora, translations, and transformations lie outside its guaranteed recall."
+    limitations: ["Black-box memorization tests also have false positives and negatives."]
+    applicability: "Evaluation claims for pretrained and post-trained models."
+    curriculum_usage: { lessons: ["8.4"], labs: ["LAB-C"], assessments: ["Mastery-08"] }
+
+  - id: CLM-009
+    claim: "Shumailov et al. demonstrate model-collapse behavior under recursive generated-data regimes in their theoretical and empirical settings; this does not establish that every use of synthetic data is harmful."
+    provenance: VERIFIED_FACT
+    domain: synthetic_data
+    concepts: [model_collapse, recursive_training, distribution_tails]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence:
+      - { source_type: paper, tier: 1, title: "The Curse of Recursion: Training on Generated Data Makes Models Forget", authors: "Ilia Shumailov, Zakhar Shumaylov, Yiren Zhao, Yarin Gal, Nicolas Papernot, Ross Anderson", year: "2024", url: "https://arxiv.org/abs/2305.17493", section: "Model-collapse definition, theory, and experiments", accessed_at: "2026-09" }
+    limitations: ["Mixture policy, real-data retention, filtering, task, generator, and evaluation tails change outcomes."]
+    applicability: "Recursive web-scale ingestion and synthetic augmentation governance."
+    curriculum_usage: { lessons: ["8.5"], labs: ["LAB-D"], assessments: ["Mastery-08"] }
+
+  - id: CLM-010
+    claim: "A synthetic-data artifact must retain generator/prompt/decoding/filter/judge revisions and linkage to seed sources; otherwise errors, leakage, and recursive ancestry cannot be isolated during regression."
+    provenance: DERIVED
+    domain: synthetic_data
+    concepts: [synthetic_lineage, generator_revision, ancestry]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Synthetic records have stable identifiers and generation metadata can be retained under the privacy contract."]
+    derivation: "Synthetic output is conditional on generator and generation/filter inputs; causal comparison and rollback require those inputs and parent relationships."
+    limitations: ["Lineage enables diagnosis but does not certify correctness, diversity, privacy, or license status."]
+    applicability: "Distillation, augmentation, preference generation, and evaluator-created labels."
+    curriculum_usage: { lessons: ["8.5"], labs: ["LAB-D"], assessments: ["Mastery-08"] }
+
+  - id: CLM-011
+    claim: "Active learning iteratively chooses unlabeled examples for annotation using a query strategy, updates the labeled set/model, and repeats; uncertainty-only selection can overfocus outliers or redundant regions, so diversity, representativeness, annotation cost, and delayed labels matter."
+    provenance: VERIFIED_FACT
+    domain: active_learning
+    concepts: [query_strategy, uncertainty_sampling, batch_diversity]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence:
+      - { source_type: paper, tier: 1, title: "A Survey of Active Learning for Natural Language Processing", authors: "Zhisong Zhang, Emma Strubell, Eduard Hovy", year: "2022", url: "https://arxiv.org/abs/2210.10109", section: "Query strategies, batch diversity, and annotation", accessed_at: "2026-09" }
+    limitations: ["Survey evidence maps mechanisms; a strategy must be evaluated on the target annotation workflow."]
+    applicability: "Human-label allocation when unlabeled pools exceed annotation budgets."
+    curriculum_usage: { lessons: ["8.6"], labs: ["LAB-D"], assessments: ["Mastery-08"] }
+
+  - id: CLM-012
+    claim: "Active-learning gains must be evaluated against annotation cost and a fixed representative test set; evaluating only the adaptively queried pool estimates performance on a selection-biased distribution."
+    provenance: DERIVED
+    domain: active_learning
+    concepts: [selection_bias, label_efficiency, test_independence]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions: ["The held-out test set represents the declared target population and is not used by the query policy."]
+    derivation: "The query policy changes inclusion probabilities based on model state; an unweighted queried sample therefore does not generally estimate target-population risk."
+    limitations: ["A fixed test set can itself become stale and requires versioned refresh protocols."]
+    applicability: "Active-learning experiments and production label queues."
+    curriculum_usage: { lessons: ["8.6"], labs: ["LAB-D"], assessments: ["Mastery-08"] }
+
+  - id: CLM-013
+    claim: "At tensorflow/data-validation commit aaa0ae1902262cac7b306358588d61e8521f3b25, validate_statistics compares DatasetFeatureStatistics against a schema and optional prior/environment inputs, StatsOptions configures statistics generation, and get_drift_skew_dataframe exposes recorded drift/skew measurements and thresholds."
+    provenance: VERIFIED_FACT
+    domain: runtime_implementation
+    concepts: [tfdv, schema_validation, drift_skew]
+    confidence: high
+    currentness_status: "CURRENT TFDV SNAPSHOT"
+    evidence:
+      - source_type: source_code
+        tier: 1
+        title: "TensorFlow Data Validation APIs"
+        repository: "https://github.com/tensorflow/data-validation"
+        commit: "aaa0ae1902262cac7b306358588d61e8521f3b25"
+        verification_date: "2026-09-26"
+        file: "tensorflow_data_validation/api/validation_api.py; tensorflow_data_validation/statistics/stats_options.py; tensorflow_data_validation/utils/display_util.py"
+        symbol: "validate_statistics; StatsOptions; get_drift_skew_dataframe"
+        entry_point: "tensorflow_data_validation.validate_statistics(...)"
+        execution_path: "statistics and schema -> validation options/environments -> anomaly proto -> drift/skew display extraction"
+        url: "https://github.com/tensorflow/data-validation/blob/aaa0ae1902262cac7b306358588d61e8521f3b25/tensorflow_data_validation/api/validation_api.py"
+        accessed_at: "2026-09"
+    limitations: ["Static inspection only; this repository did not execute TFDV.", "Recorded thresholds are policy, not universal proof of model harm."]
+    applicability: "Source-reading exercise for schema/statistics validation boundaries."
+    curriculum_usage: { lessons: ["8.2", "8.3"], labs: ["LAB-A", "LAB-B"], assessments: ["Production-Source-Trace"] }
+
+  - id: CLM-014
+    claim: "A data-quality alert should gate or page only when it predicts a declared downstream risk better than cheaper alternatives; otherwise alert volume can rise while model incidents remain undetected."
+    provenance: HYPOTHESIS
+    domain: operations
+    concepts: [alert_validation, downstream_risk, alert_fatigue]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    hypothesis:
+      prediction: "Alerts calibrated against downstream failures achieve useful precision/recall and lead time on held-out time windows; uncalibrated threshold proliferation does not."
+      measurement_target: "Alert rule/version, source slice, frequency, precision/recall, lead time, downstream quality incidents, operator action, false-negative audits, and cost."
+      falsifying_observation: "The alert has no incremental association with downstream risk, is dominated by a simpler check, or misses the target incident class."
+    limitations: ["Rare incidents and policy changes make calibration uncertain and nonstationary."]
+    applicability: "Data observability, quarantine, and promotion gates."
+    curriculum_usage: { lessons: ["8.3"], labs: ["LAB-B"], assessments: ["Incident-08.1", "Mastery-08"] }
