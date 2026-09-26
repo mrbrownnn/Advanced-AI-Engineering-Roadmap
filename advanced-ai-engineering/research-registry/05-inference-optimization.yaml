@@ -1,0 +1,421 @@
+module: "05-inference-optimization"
+registry_version: "1.0.0"
+research_cutoff: "2026-09-26"
+change_reason: "Replace generated placeholders with independently verified optimization mechanisms, explicit derivations, and falsifiable engineering hypotheses."
+
+claims:
+  - id: CLM-001
+    claim: "FlashAttention computes exact dense attention while tiling the computation to reduce reads and writes between GPU HBM and on-chip SRAM; it changes the execution algorithm and memory traffic, not the mathematical dense-attention function, subject to floating-point numerical differences."
+    provenance: VERIFIED_FACT
+    domain: attention_kernels
+    concepts: [flash_attention, io_aware_tiling, exact_attention]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness"
+        authors: "Tri Dao, Daniel Y. Fu, Stefano Ermon, Atri Rudra, Christopher Ré"
+        year: "2022"
+        url: "https://arxiv.org/abs/2205.14135"
+        section: "Abstract and IO-aware exact-attention algorithm"
+        accessed_at: "2026-09"
+    limitations:
+      - "Exact refers to the dense attention algorithm, not bitwise identity across kernel implementations or accumulation orders."
+      - "Wall-clock benefit depends on shape, dtype, hardware, software integration, and competing end-to-end costs."
+    applicability: "Dense Transformer attention on supported accelerators and shapes."
+    curriculum_usage:
+      lessons: ["5.1"]
+      labs: ["LAB-A"]
+      assessments: ["Mastery-05"]
+
+  - id: CLM-002
+    claim: "FlashAttention-3 specializes attention pipelines for NVIDIA Hopper using asynchronous Tensor Core/TMA execution, warp specialization, matmul-softmax overlap, and FP8 techniques; FlashAttention-4 redesigns pipelines for Blackwell's asymmetric resource scaling. These are hardware-generation-specific designs, not universal replacements with portable speedups."
+    provenance: VERIFIED_FACT
+    domain: attention_kernels
+    concepts: [flash_attention_3, flash_attention_4, hardware_specialization]
+    confidence: high
+    currentness_status: "FRONTIER"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "FlashAttention-3: Fast and Accurate Attention with Asynchrony and Low-precision"
+        authors: "Jay Shah, Ganesh Bikshandi, Ying Zhang, Vijay Thakkar, Pradeep Ramani, Tri Dao"
+        year: "2024"
+        url: "https://arxiv.org/abs/2407.08608"
+        section: "Abstract"
+        accessed_at: "2026-09"
+      - source_type: paper
+        tier: 1
+        title: "FlashAttention-4: Algorithm and Kernel Pipelining Co-Design for Asymmetric Hardware Scaling"
+        authors: "Ted Zadouri, Markus Hoehnerbach, Jay Shah, Timmy Liu, Vijay Thakkar, Tri Dao"
+        year: "2026"
+        url: "https://arxiv.org/abs/2603.05451"
+        section: "Abstract"
+        accessed_at: "2026-09"
+    limitations:
+      - "Reported speedups and utilization are tied to evaluated GPU generations, shapes, dtypes, and baselines and are not retained as universal curriculum numbers."
+      - "Availability in a paper or repository does not establish deployment support in every framework."
+    applicability: "Hopper- and Blackwell-class attention optimization studies and hardware/software co-design."
+    curriculum_usage:
+      lessons: ["5.1", "5.7"]
+      labs: ["LAB-A"]
+      assessments: ["Mastery-05"]
+
+  - id: CLM-003
+    claim: "Kernel fusion can reduce kernel-launch overhead and avoid materializing intermediate tensors, but the realized outcome is shape- and compiler-dependent; graph breaks, recompilation, register/shared-memory pressure, occupancy loss, or an already dominant operator can erase or reverse the benefit."
+    provenance: DERIVED
+    domain: kernel_optimization
+    concepts: [kernel_fusion, graph_capture, resource_pressure]
+    confidence: high
+    currentness_status: "WORKLOAD-DEPENDENT"
+    evidence:
+      - source_type: official_docs
+        tier: 2
+        title: "PyTorch Compiler Frequently Asked Questions"
+        authors: "PyTorch"
+        url: "https://docs.pytorch.org/docs/main/user_guide/torch_compiler/torch.compiler_faq.html"
+        section: "Kernel fusion and graph-break guidance"
+        accessed_at: "2026-09"
+      - source_type: official_docs
+        tier: 2
+        title: "torch.compile"
+        authors: "PyTorch"
+        url: "https://docs.pytorch.org/docs/stable/generated/torch.compile"
+        section: "Options, specialization, and recompilation behavior"
+        accessed_at: "2026-09"
+    assumptions:
+      - "The unfused baseline materializes an intermediate tensor or pays separate launch overhead that the fused candidate can remove."
+      - "The fused and baseline paths implement equivalent declared semantics and are measured at identical warm or cold boundaries."
+    derivation: "Removing a launch or producer-store/consumer-load can reduce those cost terms, while graph breaks and recompilation can restore or add cost. GPU resource-pressure effects remain candidate explanations to test with generated code and counters rather than consequences guaranteed by fusion."
+    limitations:
+      - "Resource-pressure failure modes remain hypotheses until profiler counters and generated code are inspected for the target kernel."
+      - "Numerical equivalence tolerances must be tested because operation ordering may change."
+    applicability: "Operator sequences with removable launch or intermediate-memory cost on a compiler-supported path."
+    curriculum_usage:
+      lessons: ["5.2", "5.7"]
+      labs: ["LAB-B"]
+      assessments: ["Incident-05.1", "Mastery-05"]
+
+  - id: CLM-004
+    claim: "A quantized inference configuration is not identified by bit width alone: storage encoding, weight/activation coverage, scale and zero-point representation, scaling granularity, calibration data, clipping, accumulation dtype, packing layout, and executable kernel support jointly determine memory, quality, and speed."
+    provenance: DERIVED
+    domain: quantization
+    concepts: [quantization_contract, scaling_granularity, accumulation_dtype, kernel_support]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions:
+      - "The implementation stores quantized values plus metadata and executes dequantization or native low-precision arithmetic through a concrete kernel path."
+      - "Quality is evaluated on an explicitly declared workload rather than inferred from bit width."
+    derivation: "The stored representation determines bytes and representable values; scaling and calibration determine quantization error; accumulation determines numerical range; packing and kernel support determine whether hardware can avoid conversion and execute the intended low-precision path. Therefore equal nominal bit widths do not imply equal artifacts, quality, or performance."
+    limitations:
+      - "This decomposition predicts required measurements, not a speedup or quality delta."
+    applicability: "FP8, INT8, INT4, and mixed-precision inference evaluations."
+    curriculum_usage:
+      lessons: ["5.3", "5.4"]
+      labs: ["LAB-C"]
+      assessments: ["Mastery-05"]
+
+  - id: CLM-005
+    claim: "SmoothQuant is a training-free W8A8 post-training quantization method that uses a mathematically equivalent offline rescaling to migrate activation-outlier difficulty into weights before quantization."
+    provenance: VERIFIED_FACT
+    domain: quantization
+    concepts: [smoothquant, activation_quantization, w8a8]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "SmoothQuant: Accurate and Efficient Post-Training Quantization for Large Language Models"
+        authors: "Guangxuan Xiao, Ji Lin, Mickael Seznec, Hao Wu, Julien Demouth, Song Han"
+        year: "2023"
+        url: "https://proceedings.mlr.press/v202/xiao23c.html"
+        section: "Abstract and method"
+        accessed_at: "2026-09"
+    limitations:
+      - "Measured results do not guarantee accuracy or speed on unevaluated models, calibration distributions, kernels, or hardware."
+    applicability: "Post-training INT8 weight-and-activation quantization where activation outliers impede direct W8A8 quantization."
+    curriculum_usage:
+      lessons: ["5.4"]
+      labs: ["LAB-C"]
+      assessments: ["Mastery-05"]
+
+  - id: CLM-006
+    claim: "GPTQ is a one-shot weight-only post-training quantization method based on approximate second-order information; its compression method is distinct from the packing and matrix kernels needed to realize serving speedups."
+    provenance: VERIFIED_FACT
+    domain: quantization
+    concepts: [gptq, weight_only_quantization, second_order_approximation]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "GPTQ: Accurate Post-Training Quantization for Generative Pre-trained Transformers"
+        authors: "Elias Frantar, Saleh Ashkboos, Torsten Hoefler, Dan Alistarh"
+        year: "2023"
+        url: "https://arxiv.org/abs/2210.17323"
+        section: "Abstract and method"
+        accessed_at: "2026-09"
+    limitations:
+      - "Low reconstruction error or smaller checkpoints do not by themselves prove end-to-end speedup."
+      - "Calibration data, group size, dampening, ordering, packing, and kernel support remain implementation choices."
+    applicability: "One-shot low-bit weight compression of pretrained autoregressive Transformers."
+    curriculum_usage:
+      lessons: ["5.4"]
+      labs: ["LAB-C"]
+      assessments: ["Mastery-05"]
+
+  - id: CLM-007
+    claim: "AWQ is an activation-aware weight-only quantization method that uses observed activations to search per-channel scaling intended to protect salient weights; its reported runtime acceleration includes a tailored inference implementation and is not attributable to the quantization rule alone."
+    provenance: VERIFIED_FACT
+    domain: quantization
+    concepts: [awq, activation_aware_quantization, weight_only_quantization]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "AWQ: Activation-aware Weight Quantization for On-Device LLM Compression and Acceleration"
+        authors: "Ji Lin, Jiaming Tang, Haotian Tang, Shang Yang, Wei-Ming Chen, Wei-Chen Wang, Guangxuan Xiao, Xingyu Dang, Chuang Gan, Song Han"
+        year: "2024"
+        url: "https://proceedings.mlsys.org/paper_files/paper/2024/hash/42a452cbafa9dd64e9ba4aa95cc1ef21-Abstract-Conference.html"
+        section: "Abstract and paper"
+        accessed_at: "2026-09"
+    limitations:
+      - "Salience, calibration transfer, and quality are model- and workload-dependent."
+      - "A different runtime or unsupported matrix shape may not reproduce the paper's system result."
+    applicability: "Low-bit weight-only inference, especially where memory footprint or weight bandwidth is limiting."
+    curriculum_usage:
+      lessons: ["5.4"]
+      labs: ["LAB-C"]
+      assessments: ["Mastery-05"]
+
+  - id: CLM-008
+    claim: "The FP8 proposal defines two 8-bit floating-point encodings, E4M3 and E5M2, with different precision/range trade-offs; naming FP8 alone does not specify scaling, accumulation, tensor coverage, or the executable hardware path."
+    provenance: VERIFIED_FACT
+    domain: quantization
+    concepts: [fp8, e4m3, e5m2, mixed_precision]
+    confidence: high
+    currentness_status: "WORKLOAD-DEPENDENT"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "FP8 Formats for Deep Learning"
+        authors: "Paulius Micikevicius et al."
+        year: "2022"
+        url: "https://arxiv.org/abs/2209.05433"
+        section: "Abstract and format definition"
+        accessed_at: "2026-09"
+    limitations:
+      - "Format support does not imply every operation should run in FP8 or that every model preserves quality."
+      - "Hardware and library support vary by accelerator generation."
+    applicability: "Mixed-precision training or inference paths with compatible hardware and kernels."
+    curriculum_usage:
+      lessons: ["5.3"]
+      labs: ["LAB-C"]
+      assessments: ["Mastery-05"]
+
+  - id: CLM-009
+    claim: "For N quantized scalar weights stored at w bits each, the nominal packed payload is N*w/8 bytes; actual checkpoint and device memory additionally include scales, zero points, padding, alignment, codebooks, duplicated tensors, runtime workspaces, and allocator effects."
+    provenance: DERIVED
+    domain: quantization
+    concepts: [weight_payload, packing_overhead, memory_accounting]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions:
+      - "Each of N logical weights uses exactly w payload bits and those bits are densely packed."
+      - "The formula intentionally excludes all metadata and runtime allocations."
+    derivation: "There are N*w payload bits. Dividing by 8 converts bits to bytes; every excluded representation or runtime object must be added separately."
+    limitations:
+      - "It is neither an exact checkpoint-size formula nor a latency or throughput model."
+    applicability: "First-order lower-bound accounting for quantized weight payloads."
+    curriculum_usage:
+      lessons: ["5.3"]
+      labs: ["LAB-C"]
+      assessments: ["Mastery-05"]
+
+  - id: CLM-010
+    claim: "The reference speculative-decoding algorithm uses a faster approximation model to draft multiple tokens and a target model plus modified rejection/resampling to verify them while preserving the target distribution; distribution preservation applies to that algorithm and numerical assumptions, not to every multi-token proposal method."
+    provenance: VERIFIED_FACT
+    domain: speculative_decoding
+    concepts: [speculative_decoding, draft_model, target_verification, exact_sampling]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "Fast Inference from Transformers via Speculative Decoding"
+        authors: "Yaniv Leviathan, Matan Kalman, Yossi Matias"
+        year: "2023"
+        url: "https://proceedings.mlr.press/v202/leviathan23a.html"
+        section: "Algorithm and distribution-preservation result"
+        accessed_at: "2026-09"
+      - source_type: paper
+        tier: 1
+        title: "Accelerating Large Language Model Decoding with Speculative Sampling"
+        authors: "Charlie Chen, Sebastian Borgeaud, Geoffrey Irving, Jean-Baptiste Lespiau, Laurent Sifre, John Jumper"
+        year: "2023"
+        url: "https://arxiv.org/abs/2302.01318"
+        section: "Abstract and modified rejection-sampling method"
+        accessed_at: "2026-09"
+    limitations:
+      - "Greedy decoding, relaxed acceptance, tree methods, self-speculation, and auxiliary-head methods can have different equivalence guarantees."
+      - "Exactness does not guarantee speedup."
+    applicability: "Autoregressive decoding where draft generation plus verification is cheaper per emitted token than baseline target-only decoding."
+    curriculum_usage:
+      lessons: ["5.5"]
+      labs: ["LAB-D"]
+      assessments: ["Mastery-05"]
+
+  - id: CLM-011
+    claim: "In a renewal-style speculative cycle, a useful first-order model is time per emitted token = E[T_draft(k)+T_verify(k)+T_bookkeeping]/E[A], where A is emitted tokens per cycle; this ratio requires stationary cycles with finite expectations and does not capture batching, queueing, overlap, or correlations unless those are included in the measured cycle variables."
+    provenance: DERIVED
+    domain: speculative_decoding
+    concepts: [speculative_cycle_model, accepted_tokens, verification_cost]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    assumptions:
+      - "Cycles form an ergodic renewal-reward process or a sufficiently stationary approximation."
+      - "A counts all tokens committed by the target-defined acceptance procedure in a cycle."
+      - "Cycle time includes drafting, verification, synchronization, and bookkeeping on the chosen observation boundary."
+    derivation: "By the renewal-reward theorem, long-run emitted-token rate is E[A]/E[T_cycle]; invert it to obtain time per emitted token. Substituting measured cycle components gives the stated expression."
+    limitations:
+      - "E[T/A] is generally not equal to E[T]/E[A]."
+      - "Acceptance rate alone omits proposal length, first-rejection position, verifier shape cost, and draft overhead."
+    applicability: "Controlled analysis of speculative-decoding efficiency at a declared concurrency and scheduler configuration."
+    curriculum_usage:
+      lessons: ["5.5"]
+      labs: ["LAB-D"]
+      assessments: ["Mastery-05"]
+
+  - id: CLM-012
+    claim: "Medusa proposes multiple future tokens with auxiliary decoding heads and verifies a candidate tree, while EAGLE predicts draft continuations using target-model feature information; these are distinct speculative families with different training, memory, compatibility, and acceptance-cost trade-offs."
+    provenance: VERIFIED_FACT
+    domain: speculative_decoding
+    concepts: [medusa, eagle, tree_verification, feature_drafting]
+    confidence: high
+    currentness_status: "WORKLOAD-DEPENDENT"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "Medusa: Simple LLM Inference Acceleration Framework with Multiple Decoding Heads"
+        authors: "Tianle Cai, Yuhong Li, Zhengyang Geng, Hongwu Peng, Jason D. Lee, Deming Chen, Tri Dao"
+        year: "2024"
+        url: "https://proceedings.mlr.press/v235/cai24b.html"
+        section: "Abstract and method"
+        accessed_at: "2026-09"
+      - source_type: paper
+        tier: 1
+        title: "EAGLE: Speculative Sampling Requires Rethinking Feature Uncertainty"
+        authors: "Yuhui Li, Fangyun Wei, Chao Zhang, Hongyang Zhang"
+        year: "2024"
+        url: "https://arxiv.org/abs/2401.15077"
+        section: "Abstract and method"
+        accessed_at: "2026-09"
+    limitations:
+      - "Paper-reported speedups are configuration-specific and are not used as universal claims here."
+      - "Some variants alter or retrain model components and therefore require separate quality validation."
+    applicability: "Deployments able to train or host auxiliary proposal components and integrate tree or feature verification."
+    curriculum_usage:
+      lessons: ["5.6"]
+      labs: ["LAB-D"]
+      assessments: ["Mastery-05"]
+
+  - id: CLM-013
+    claim: "Triton is a Python-oriented language and compiler for authoring parallel GPU kernels; it exposes a productive route to custom tiling and fusion, but using Triton is not evidence that a kernel is correct, portable, or faster than vendor or framework alternatives."
+    provenance: VERIFIED_FACT
+    domain: kernel_programming
+    concepts: [triton, custom_gpu_kernels, autotuning]
+    confidence: high
+    currentness_status: "WORKLOAD-DEPENDENT"
+    evidence:
+      - source_type: official_docs
+        tier: 2
+        title: "Triton Documentation"
+        authors: "Triton project"
+        url: "https://triton-lang.org/main/index.html"
+        version: "main documentation accessed 2026-09"
+        section: "Project overview and tutorials"
+        accessed_at: "2026-09"
+    limitations:
+      - "Benchmarking requires representative shapes, warm-up, synchronization, numerical checks, and strong baselines."
+      - "Backend and hardware coverage evolve."
+    applicability: "Custom DNN GPU kernels and investigation of tile mappings, memory access, and fusion."
+    curriculum_usage:
+      lessons: ["5.2"]
+      labs: ["LAB-B"]
+      assessments: ["Production-Source-Trace", "Mastery-05"]
+
+  - id: CLM-014
+    claim: "At FlashAttention commit e9cf2c1651d2303191eb40a739a3c135fda00999, flash_attn_func dispatches Q/K/V through FlashAttnFunc.apply, flash_attn_varlen_func accepts cumulative sequence lengths and an optional block table, and flash_attn_with_kvcache can update supplied K/V caches in place and execute attention with the updated cache; the last path does not support backward."
+    provenance: VERIFIED_FACT
+    domain: runtime_implementation
+    concepts: [flash_attention_api, variable_length_attention, kv_cache_kernel]
+    confidence: high
+    currentness_status: "CURRENT FLASH-ATTENTION SNAPSHOT"
+    evidence:
+      - source_type: source_code
+        tier: 1
+        title: "FlashAttention Python interface"
+        repository: "https://github.com/Dao-AILab/flash-attention"
+        commit: "e9cf2c1651d2303191eb40a739a3c135fda00999"
+        verification_date: "2026-09-26"
+        file: "flash_attn/flash_attn_interface.py"
+        symbol: "flash_attn_func; flash_attn_varlen_func; flash_attn_with_kvcache"
+        entry_point: "flash_attn_func(q, k, v, ...); flash_attn_varlen_func(...); flash_attn_with_kvcache(...)"
+        execution_path: "public Python function -> FlashAttnFunc/FlashAttnVarlenFunc.apply or flash_attn_gpu.fwd_kvcache -> compiled CUDA or selected ROCm backend"
+        url: "https://github.com/Dao-AILab/flash-attention/blob/e9cf2c1651d2303191eb40a739a3c135fda00999/flash_attn/flash_attn_interface.py"
+        accessed_at: "2026-09"
+    limitations:
+      - "Static source inspection only; kernels were not built or executed in this repository."
+      - "This upstream snapshot is not evidence of every packaged release or serving runtime integration."
+    applicability: "Production source-reading exercise for attention API dispatch and inference-oriented KV-cache integration."
+    curriculum_usage:
+      lessons: ["5.1", "5.7"]
+      labs: ["LAB-A"]
+      assessments: ["Production-Source-Trace"]
+
+  - id: CLM-015
+    claim: "An optimization-stack regression can arise when a change reduces one local cost but shifts the bottleneck or adds conversion, compilation, synchronization, workspace, or quality-recovery costs; the explanation is supported only if time-aligned profiles and controlled ablations show the added cost and the end-to-end regression."
+    provenance: HYPOTHESIS
+    domain: diagnostic_methodology
+    concepts: [bottleneck_shift, optimization_interaction, controlled_ablation]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    hypothesis:
+      prediction: "Enabling the suspect optimization changes kernel mix, conversion or launch counts, resource counters, memory footprint, or acceptance behavior before end-to-end latency, throughput, goodput, or quality regresses."
+      measurement_target: "Pinned binary and configuration; numerical outputs; warm and cold latency; per-shape GPU timeline; generated kernels; HBM traffic; occupancy and registers; workspace and peak memory; accepted tokens per verification; quality and SLO-goodput."
+      falsifying_observation: "A controlled one-factor toggle reproduces neither the alleged added cost nor the end-to-end regression across the affected workload, while another measured component fully explains the change."
+    limitations:
+      - "Multiple interacting changes may require factorial experiments rather than a single toggle."
+      - "Profiler perturbation and nondeterminism require repeated measurements and declared uncertainty."
+    applicability: "Post-deployment regressions involving fused kernels, quantization, compiler paths, or speculative decoding."
+    curriculum_usage:
+      lessons: ["5.7"]
+      labs: ["LAB-B", "LAB-C", "LAB-D"]
+      assessments: ["Incident-05.1", "Mastery-05"]
+
+  - id: CLM-016
+    claim: "EAGLE-3 replaces EAGLE's feature-prediction objective with direct token prediction using multi-layer feature fusion; its 2025 paper reports both single-request latency and batched serving measurements, demonstrating that speculative-method conclusions must distinguish latency from throughput and record batch conditions."
+    provenance: VERIFIED_FACT
+    domain: speculative_decoding
+    concepts: [eagle_3, direct_token_prediction, batched_speculation]
+    confidence: high
+    currentness_status: "FRONTIER"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "EAGLE-3: Scaling up Inference Acceleration of Large Language Models via Training-Time Test"
+        authors: "Yuhui Li, Fangyun Wei, Chao Zhang, Hongyang Zhang"
+        year: "2025"
+        url: "https://arxiv.org/abs/2503.01840"
+        section: "Abstract and evaluation"
+        accessed_at: "2026-09"
+    limitations:
+      - "Numerical speedups are tied to the paper's models, tasks, framework, and batch configurations and are not generalized here."
+      - "An arXiv result and public code do not establish a cross-runtime production default."
+    applicability: "Frontier study of learned speculative drafting and batched serving interaction."
+    curriculum_usage:
+      lessons: ["5.6"]
+      labs: ["LAB-D"]
+      assessments: ["Mastery-05"]

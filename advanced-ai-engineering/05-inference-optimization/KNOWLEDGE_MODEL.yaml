@@ -1,0 +1,190 @@
+module: "05-inference-optimization"
+registry_version: "1.0.0"
+
+required_concepts:
+  - "bottleneck_driven_optimization"
+  - "io_aware_exact_attention"
+  - "kernel_fusion"
+  - "triton_kernel_model"
+  - "quantization_contract"
+  - "fp8_int8_int4_tradeoffs"
+  - "smoothquant"
+  - "gptq"
+  - "awq"
+  - "speculative_decoding"
+  - "acceptance_cost_model"
+  - "medusa_and_eagle"
+  - "numerical_and_quality_validation"
+  - "optimization_interaction_diagnosis"
+
+prerequisite_concepts:
+  - "transformer_attention_semantics"
+  - "autoregressive_decode"
+  - "gpu_memory_hierarchy"
+  - "roofline_model"
+  - "arithmetic_intensity"
+  - "profiler_synchronization"
+  - "kv_cache_footprint"
+  - "serving_latency_and_goodput"
+
+first_occurrence_concepts:
+  - "io_aware_exact_attention"
+  - "kernel_fusion"
+  - "triton_kernel_model"
+  - "quantization_contract"
+  - "smoothquant"
+  - "gptq"
+  - "awq"
+  - "speculative_decoding"
+  - "acceptance_cost_model"
+  - "medusa_and_eagle"
+
+concept_dependencies:
+  - concept: "io_aware_exact_attention"
+    depends_on: ["transformer_attention_semantics", "gpu_memory_hierarchy", "roofline_model"]
+  - concept: "kernel_fusion"
+    depends_on: ["gpu_memory_hierarchy", "profiler_synchronization"]
+  - concept: "quantization_contract"
+    depends_on: ["arithmetic_intensity", "gpu_memory_hierarchy", "numerical_and_quality_validation"]
+  - concept: "speculative_decoding"
+    depends_on: ["autoregressive_decode", "serving_latency_and_goodput"]
+  - concept: "optimization_interaction_diagnosis"
+    depends_on: ["bottleneck_driven_optimization", "numerical_and_quality_validation", "serving_latency_and_goodput"]
+
+mechanisms:
+  - id: "MECH-01"
+    description: "IO-aware attention tiles dense attention so intermediate score and probability matrices need not be fully materialized in HBM. The algorithm preserves dense-attention semantics within numerical tolerance, while its performance remains shape, dtype, hardware, and integration dependent."
+    evidence_ids: ["CLM-001", "CLM-002"]
+    derived_from: []
+
+  - id: "MECH-02"
+    description: "Kernel fusion combines compatible operations so launches and intermediate memory traffic can be removed. The fused region is constrained by graph capture, data dependencies, shapes, compiler legality, and GPU resources; generated code and profiles determine whether the trade is favorable."
+    evidence_ids: ["CLM-003", "CLM-013"]
+    derived_from: []
+
+  - id: "MECH-03"
+    description: "Quantization maps tensors to reduced-precision representations using explicit scale, zero-point or floating format, granularity, clipping, and accumulation choices. Compression, executable arithmetic, accuracy, and speed are separate outcomes that require separate evidence."
+    evidence_ids: ["CLM-004", "CLM-008", "CLM-009"]
+    derived_from: []
+
+  - id: "MECH-04"
+    description: "SmoothQuant, GPTQ, and AWQ address different quantization problems: activation smoothing for W8A8, approximate-second-order weight quantization, and activation-aware protection of salient weights. They are alternatives or components, not interchangeable labels for low-bit inference."
+    evidence_ids: ["CLM-005", "CLM-006", "CLM-007"]
+    derived_from: []
+
+  - id: "MECH-05"
+    description: "Exact speculative decoding drafts a token block with a cheaper model and verifies it with the target using a distribution-preserving acceptance/resampling rule. It wins only when accepted-token reward repays drafting, verification-shape, synchronization, memory, and scheduling costs."
+    evidence_ids: ["CLM-010", "CLM-011"]
+    derived_from: []
+
+  - id: "MECH-06"
+    description: "Auxiliary-head and learned-draft families such as Medusa and EAGLE change how candidate continuations are produced and verified. Training requirements, model compatibility, memory overhead, batch behavior, and quality guarantees must be evaluated per variant."
+    evidence_ids: ["CLM-012", "CLM-016"]
+    derived_from: []
+
+mathematical_models:
+  - id: "MATH-01"
+    description: "Nominal packed weight payload: M_payload = N*w/8 bytes for N logical weights at w payload bits each. This is a lower-bound accounting identity under dense packing and excludes scales, zero points, padding, workspaces, and allocator overhead."
+    evidence_ids: ["CLM-009"]
+    derived_from: []
+
+  - id: "MATH-02"
+    description: "Uniform affine quantization model: q = clamp(round(x/s)+z, q_min, q_max), x_hat = s*(q-z). Error depends on scale s, zero point z, clipping range, rounding, granularity, and input distribution; the equation does not predict task quality."
+    evidence_ids: ["CLM-004"]
+    derived_from: ["MECH-03"]
+
+  - id: "MATH-03"
+    description: "Speculative renewal-reward model: token rate = E[A]/E[T_cycle], where T_cycle includes draft, verification, synchronization, and bookkeeping and A is committed tokens. It requires a stationary cycle boundary and does not substitute acceptance percentage for accepted tokens per cycle."
+    evidence_ids: ["CLM-011"]
+    derived_from: ["MECH-05"]
+
+  - id: "MATH-04"
+    description: "End-to-end speedup is S = T_baseline/T_optimized at an identical measurement boundary. Amdahl-style reasoning bounds benefit when the optimized fraction is small, but the bound requires unchanged non-target work and therefore must be checked after bottleneck shifts."
+    evidence_ids: ["CLM-015"]
+    derived_from: ["MECH-01", "MECH-02", "MECH-03", "MECH-05"]
+
+implementation_mechanisms:
+  - id: "IMPL-01"
+    description: "Pinned FlashAttention API trace: flash_attn_func and flash_attn_varlen_func dispatch through autograd function wrappers, while flash_attn_with_kvcache exposes an inference-only in-place cache-update and attention path."
+    evidence_ids: ["CLM-014"]
+    derived_from: ["MECH-01"]
+
+  - id: "IMPL-02"
+    description: "A Triton kernel maps program instances and tiles to tensor regions, loads/stores with masks, and uses compile-time meta-parameters or autotuning. Correctness, resource use, and speed must be validated for representative shapes."
+    evidence_ids: ["CLM-013"]
+    derived_from: ["MECH-02"]
+
+  - id: "IMPL-03"
+    description: "A deployable quantized artifact includes tensor encodings and metadata plus a runtime path that recognizes the format and executes supported low-precision kernels or explicit dequantization."
+    evidence_ids: ["CLM-004", "CLM-009"]
+    derived_from: ["MECH-03"]
+
+  - id: "IMPL-04"
+    description: "A speculative runtime records proposal length, accepted-token count, first rejection, draft time, target verification time, committed output, and fallback path on the same request and scheduler timeline."
+    evidence_ids: ["CLM-010", "CLM-011", "CLM-016"]
+    derived_from: ["MECH-05", "MECH-06"]
+
+failure_modes:
+  - id: "FAIL-01"
+    description: "Attention-kernel regression: unsupported or unfavorable shapes, conversion/layout work, dispatch overhead, or an end-to-end bottleneck outside attention makes a locally faster attention kernel neutral or slower."
+    evidence_ids: ["CLM-001", "CLM-002", "CLM-015"]
+    derived_from: ["MECH-01"]
+
+  - id: "FAIL-02"
+    description: "Fusion regression: graph breaks or specialization cause repeated compilation, or the fused kernel's resource pressure reduces occupancy and throughput. Separate cold-start, warm steady-state, generated-code, and GPU-counter evidence."
+    evidence_ids: ["CLM-003", "CLM-015"]
+    derived_from: ["MECH-02"]
+
+  - id: "FAIL-03"
+    description: "Quantization quality failure: calibration or scaling misses deployment distributions, producing layer-local error that becomes task-level degradation despite acceptable checkpoint size."
+    evidence_ids: ["CLM-004", "CLM-005", "CLM-006", "CLM-007", "CLM-008"]
+    derived_from: ["MECH-03", "MECH-04"]
+
+  - id: "FAIL-04"
+    description: "Quantization performance failure: metadata, unpacking, dequantization, conversions, unsupported shapes, or compute-bound execution prevent nominal bit-width reduction from improving latency or throughput."
+    evidence_ids: ["CLM-004", "CLM-006", "CLM-007", "CLM-009", "CLM-015"]
+    derived_from: ["MECH-03", "MECH-04"]
+
+  - id: "FAIL-05"
+    description: "Speculation regression: low accepted tokens per verification, an over-expensive draft, large verification trees, extra KV/workspace pressure, or poor batching interaction makes target-only decoding faster."
+    evidence_ids: ["CLM-010", "CLM-011", "CLM-012", "CLM-016"]
+    derived_from: ["MECH-05", "MECH-06"]
+
+  - id: "FAIL-06"
+    description: "Optimization composition failure: individually favorable changes interact through layouts, dtypes, memory pools, compiler graphs, or scheduler batch shapes and shift the dominant bottleneck."
+    evidence_ids: ["CLM-015"]
+    derived_from: ["MECH-01", "MECH-02", "MECH-03", "MECH-05"]
+
+production_connections:
+  - id: "PROD-01"
+    description: "Optimization selection starts from a pinned workload matrix and an end-to-end profile, then uses one-factor and interaction ablations. Local kernel speed is accepted only when numerical/quality checks and serving SLO-goodput improve."
+    evidence_ids: ["CLM-003", "CLM-004", "CLM-011", "CLM-015"]
+    derived_from: ["FAIL-01", "FAIL-02", "FAIL-03", "FAIL-04", "FAIL-05", "FAIL-06"]
+
+  - id: "PROD-02"
+    description: "Artifact manifests pin model revision, runtime/compiler revision, GPU architecture, dtype and quantization scheme, packing, kernel/backend selection, calibration provenance, speculative draft revision, and benchmark boundaries."
+    evidence_ids: ["CLM-004", "CLM-013", "CLM-014", "CLM-015"]
+    derived_from: ["IMPL-01", "IMPL-02", "IMPL-03", "IMPL-04"]
+
+research_connections:
+  - id: "RESEARCH-01"
+    description: "FlashAttention generations illustrate algorithm-kernel co-design as hardware ratios change: an optimization must be re-derived when tensor throughput, shared-memory bandwidth, special functions, and asynchronous pipelines scale differently."
+    evidence_ids: ["CLM-001", "CLM-002"]
+    derived_from: ["MECH-01"]
+
+  - id: "RESEARCH-02"
+    description: "EAGLE-3 extends learned drafting and explicitly reports batched serving behavior, keeping batch/concurrency effects central rather than extrapolating single-request latency to production throughput."
+    evidence_ids: ["CLM-016"]
+    derived_from: ["MECH-06"]
+
+candidate_capabilities:
+  - capability: "Select an inference optimization from measured bottlenecks rather than popularity."
+    mapped_mechanisms: ["MECH-01", "MECH-02", "MECH-03", "MECH-05", "PROD-01"]
+  - capability: "Implement and validate an IO-aware or fused GPU kernel against a reference."
+    mapped_mechanisms: ["MECH-01", "MECH-02", "IMPL-01", "IMPL-02"]
+  - capability: "Build a reproducible low-precision artifact and defend its quality/performance contract."
+    mapped_mechanisms: ["MECH-03", "MECH-04", "MATH-01", "MATH-02", "IMPL-03"]
+  - capability: "Model and measure speculative decoding using accepted-token reward and full cycle cost."
+    mapped_mechanisms: ["MECH-05", "MECH-06", "MATH-03", "IMPL-04"]
+  - capability: "Diagnose and falsify regressions caused by interacting inference optimizations."
+    mapped_mechanisms: ["MATH-04", "FAIL-01", "FAIL-02", "FAIL-03", "FAIL-04", "FAIL-05", "FAIL-06", "PROD-01"]
