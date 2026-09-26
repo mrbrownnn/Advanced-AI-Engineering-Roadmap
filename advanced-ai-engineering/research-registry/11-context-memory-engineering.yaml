@@ -1,0 +1,215 @@
+module: "11-context-memory-engineering"
+registry_version: "1.0.0"
+research_cutoff: "2026-09-26"
+change_reason: "Replace placeholders with verified context budgeting, long-context, memory lifecycle, compression, evaluation, and source-code mechanisms."
+claims:
+  - id: CLM-001
+    claim: "A model context window is a finite per-inference input/output token capacity, not durable memory; instructions, message framing, tool schemas/results, retrieved material, working state, and output reserve all compete for that capacity."
+    provenance: DERIVED
+    domain: context_budget
+    concepts: [context_window, token_budget, output_reserve]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["The serving interface enforces a finite model-specific sequence limit and serializes all relevant prompt elements into model input."]
+    derivation: "For a declared tokenizer/protocol, sum(system, tools, history, retrieved/context, state, current input, framing, reserved output) must not exceed the supported request limit. Persisted data outside the request is unavailable unless selected back into context."
+    limitations: ["Providers may expose separate or combined input/output limits and hidden framing; exact accounting is interface-specific."]
+    applicability: "Every chat, RAG, or agent request with finite context."
+    curriculum_usage: { lessons: ["11.1"], labs: ["LAB-A"], assessments: ["Mastery-11"] }
+
+  - id: CLM-002
+    claim: "Token counts are tokenizer-, model-, role-, tool-schema-, modality-, and message-protocol-dependent; character or word heuristics are approximations and require measured safety margin."
+    provenance: DERIVED
+    domain: context_budget
+    concepts: [tokenization, protocol_overhead, safety_margin]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Different request components may be serialized with hidden or explicit delimiters and multimodal accounting."]
+    derivation: "The model consumes serialized tokens rather than human-visible words. Any estimator omitting tokenizer or framing inputs can under- or over-count, so exact admission uses the target interface when available and approximation error is measured."
+    limitations: ["Exact server-side framing may be unavailable; safety margin must be calibrated per interface version."]
+    applicability: "Admission, truncation, compaction, and output-reserve decisions."
+    curriculum_usage: { lessons: ["11.1"], labs: ["LAB-A"], assessments: ["Incident-11.1"] }
+
+  - id: CLM-003
+    claim: "RULER reports that models successful on simple needle retrieval can degrade on longer, multi-needle, tracing, aggregation, and QA tasks, so advertised maximum length does not establish effective context for a workload."
+    provenance: VERIFIED_FACT
+    domain: long_context
+    concepts: [effective_context, ruler, task_complexity]
+    confidence: high
+    currentness_status: "REFERENCE / CURRENT CAUTION"
+    evidence: [{ source_type: paper, tier: 1, title: "RULER: What's the Real Context Size of Your Long-Context Language Models?", authors: "Cheng-Ping Hsieh, Simeng Sun, Samuel Kriman, Shantanu Acharya, Dima Rekesh, Fei Jia, Yang Zhang, Boris Ginsburg", year: "2024", url: "https://arxiv.org/abs/2404.06654", section: "Benchmark, effective context size, and error analysis", accessed_at: "2026-09" }]
+    limitations: ["RULER is synthetic and evaluated specific model revisions, prompts, tasks, thresholds, and lengths."]
+    applicability: "Length-by-complexity stress testing beyond vanilla needle-in-a-haystack."
+    curriculum_usage: { lessons: ["11.2"], labs: ["LAB-B"], assessments: ["Mastery-11"] }
+
+  - id: CLM-004
+    claim: "Lost in the Middle reports position-sensitive long-context use on evaluated multi-document QA and key-value tasks; relevant information near the middle was often used less reliably than information near the beginning or end."
+    provenance: VERIFIED_FACT
+    domain: long_context
+    concepts: [position_sensitivity, distractors, effective_context]
+    confidence: high
+    currentness_status: "REFERENCE / CURRENT CAUTION"
+    evidence: [{ source_type: paper, tier: 1, title: "Lost in the Middle: How Language Models Use Long Contexts", authors: "Nelson F. Liu, Kevin Lin, John Hewitt, Ashwin Paranjape, Michele Bevilacqua, Fabio Petroni, Percy Liang", year: "2023", url: "https://arxiv.org/abs/2307.03172", section: "Multi-document QA and key-value experiments", accessed_at: "2026-09" }]
+    limitations: ["Position effects vary with model, task, prompt, length, and training; the paper does not prove a universal U-shape."]
+    applicability: "Context ordering and positional robustness tests."
+    curriculum_usage: { lessons: ["11.2"], labs: ["LAB-B"], assessments: ["Mastery-11"] }
+
+  - id: CLM-005
+    claim: "Operational memory should distinguish immutable event history, recent working context, structured canonical state, lossy summaries, retrieved semantic/episodic records, and procedural artifacts because they have different write, read, update, deletion, and trust semantics."
+    provenance: DERIVED
+    domain: memory_architecture
+    concepts: [working_memory, episodic_memory, semantic_memory, procedural_memory]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["A stateful application persists information across requests and must reproduce or correct past behavior."]
+    derivation: "Conflating raw events, current facts, summaries, and reusable procedures makes source-of-truth, overwrite, expiry, and conflict rules ambiguous. Separate stores/records preserve type-specific invariants and lineage."
+    limitations: ["Names borrow from cognitive metaphors; software semantics must be defined explicitly and do not imply human memory equivalence."]
+    applicability: "Multi-session assistants and agents with persistent state."
+    curriculum_usage: { lessons: ["11.3"], labs: ["LAB-C"], assessments: ["Mastery-11"] }
+
+  - id: CLM-006
+    claim: "MemGPT demonstrates an OS-inspired virtual-context mechanism that moves information between a bounded in-context tier and external storage; it is a reference design, not proof of unbounded or lossless model memory."
+    provenance: VERIFIED_FACT
+    domain: memory_architecture
+    concepts: [memgpt, memory_tiers, virtual_context]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "MemGPT: Towards LLMs as Operating Systems", authors: "Charles Packer, Sarah Wooders, Kevin Lin, Vivian Fang, Shishir G. Patil, Ion Stoica, Joseph E. Gonzalez", year: "2024", url: "https://arxiv.org/abs/2310.08560", section: "Virtual context management and evaluations", accessed_at: "2026-09" }]
+    limitations: ["The virtual-memory analogy does not make semantic eviction, summarization, retrieval, or model use lossless."]
+    applicability: "External-memory and context-tier architecture."
+    curriculum_usage: { lessons: ["11.3"], labs: ["LAB-C"], assessments: ["Mastery-11"] }
+
+  - id: CLM-007
+    claim: "Generative Agents stores an experience stream, retrieves memories, and synthesizes higher-level reflections for planning in its sandbox; this supports a memory/read/reflection pattern, not general production reliability."
+    provenance: VERIFIED_FACT
+    domain: memory_architecture
+    concepts: [memory_stream, reflection, retrieval_policy]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "Generative Agents: Interactive Simulacra of Human Behavior", authors: "Joon Sung Park, Joseph C. O'Brien, Carrie J. Cai, Meredith Ringel Morris, Percy Liang, Michael S. Bernstein", year: "2023", url: "https://arxiv.org/abs/2304.03442", section: "Memory stream, retrieval, reflection, and ablation", accessed_at: "2026-09" }]
+    limitations: ["Believability in a small simulated environment is not factual, safety, privacy, or task-success validation."]
+    applicability: "Historical architecture for event memory, scored recall, reflection, and planning."
+    curriculum_usage: { lessons: ["11.3", "11.4"], labs: ["LAB-C"], assessments: ["Mastery-11"] }
+
+  - id: CLM-008
+    claim: "Memory write policy is a selective, versioned decision: storing every interaction increases noise, privacy exposure, contradiction, and future retrieval work, while over-filtering loses information needed later."
+    provenance: DERIVED
+    domain: memory_lifecycle
+    concepts: [write_policy, selective_retention, privacy]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Future queries are uncertain, storage/review budgets are finite, and persisted records can influence later outputs."]
+    derivation: "Each retained item has potential future utility and potential cost/risk. Therefore ingestion needs eligibility, identity, source, time, confidence, consent, TTL, update, and deletion semantics rather than append-only growth."
+    limitations: ["Optimal retention depends on product obligations, user expectations, threat model, and future workload."]
+    applicability: "Persistent user, task, and experience memory."
+    curriculum_usage: { lessons: ["11.4"], labs: ["LAB-C"], assessments: ["Incident-11.1"] }
+
+  - id: CLM-009
+    claim: "Memory read policy must optimize task-relevant, valid, authorized evidence rather than similarity alone; topically similar records can be stale, wrong, private, or causally inappropriate."
+    provenance: DERIVED
+    domain: memory_lifecycle
+    concepts: [read_policy, validity, authorization]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Memory records differ in relevance, authority, validity time, confidence, ownership, and failure history."]
+    derivation: "Similarity estimates topical proximity but does not encode all eligibility constraints. Filter and rank using hard access/validity rules plus measured utility, then preserve selected-record lineage."
+    limitations: ["Scoring factors and conflict rules are workload-specific; retrieval mechanics remain Module 09."]
+    applicability: "Memory selection for multi-turn and multi-session behavior."
+    curriculum_usage: { lessons: ["11.4"], labs: ["LAB-C"], assessments: ["Incident-11.1", "Mastery-11"] }
+
+  - id: CLM-010
+    claim: "A summary or compressed prompt is a lossy derived artifact unless exact equivalence is proven; it must retain provenance and be evaluated for omission, distortion, instruction corruption, and recursive drift."
+    provenance: DERIVED
+    domain: compaction
+    concepts: [summarization, prompt_compression, semantic_loss]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT / WORKLOAD-DEPENDENT"
+    assumptions: ["Compression maps a larger input to a smaller representation and downstream tasks may depend on details not known to the compressor."]
+    derivation: "A smaller representation cannot be assumed to preserve every possible future query-relevant distinction. Keeping source lineage and task-specific preservation tests makes loss observable and recoverable."
+    limitations: ["Some encodings can be lossless for constrained domains; the claim concerns unproven semantic equivalence."]
+    applicability: "Conversation summaries, notes, tool-result pruning, and prompt compression."
+    curriculum_usage: { lessons: ["11.5"], labs: ["LAB-D"], assessments: ["Incident-11.1"] }
+
+  - id: CLM-011
+    claim: "A 2026 prompt-compression study reports that net latency benefit exists only in matched operating regions; outside them preprocessing overhead can cancel generation savings, so compression ratio alone is not a performance result."
+    provenance: VERIFIED_FACT
+    domain: compaction
+    concepts: [compression_overhead, break_even, end_to_end_latency]
+    confidence: high
+    currentness_status: "CURRENT / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "Prompt Compression in the Wild: Measuring Latency, Rate Adherence, and Quality for Faster LLM Inference", authors: "Cornelius Kummer, Lena Jurkschat, Michael Färber, Sahar Vahdati", year: "2026", url: "https://arxiv.org/abs/2604.02985", section: "End-to-end latency and break-even evaluation", accessed_at: "2026-09" }]
+    limitations: ["Results use specific compressors, models, tasks, prompt lengths, GPU classes, and quality tests."]
+    applicability: "Deciding whether compression pays after including preprocessing and quality loss."
+    curriculum_usage: { lessons: ["11.5"], labs: ["LAB-D"], assessments: ["Mastery-11"] }
+
+  - id: CLM-012
+    claim: "MemoryAgentBench frames memory-agent evaluation around accurate retrieval, test-time learning, long-range understanding, and selective forgetting, and reports that evaluated systems do not master all four."
+    provenance: VERIFIED_FACT
+    domain: memory_evaluation
+    concepts: [memoryagentbench, selective_forgetting, incremental_interaction]
+    confidence: high
+    currentness_status: "FRONTIER / CURRENT BENCHMARK"
+    evidence: [{ source_type: paper, tier: 1, title: "Evaluating Memory in LLM Agents via Incremental Multi-Turn Interactions", authors: "Yuanzhe Hu, Yu Wang, Julian McAuley", year: "2026", version: "arXiv v4", url: "https://arxiv.org/abs/2507.05257", section: "Competency taxonomy and benchmark evaluation", accessed_at: "2026-09" }]
+    limitations: ["Benchmark transformations and tasks do not define every production memory objective or safety requirement."]
+    applicability: "Evaluation beyond static recall from a supplied long context."
+    curriculum_usage: { lessons: ["11.6"], labs: ["LAB-C", "LAB-D"], assessments: ["Mastery-11"] }
+
+  - id: CLM-013
+    claim: "A 2025 controlled study reports experience-following, error propagation, and misaligned replay in evaluated memory agents, showing that retrieved prior executions can amplify rather than correct mistakes."
+    provenance: VERIFIED_FACT
+    domain: memory_failure
+    concepts: [experience_following, error_propagation, replay]
+    confidence: high
+    currentness_status: "FRONTIER / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "How Memory Management Impacts LLM Agents: An Empirical Study of Experience-Following Behavior", authors: "Zidi Xiong, Yuping Lin, Wenya Xie, Pengfei He, Zirui Liu, Jiliang Tang, Himabindu Lakkaraju, Zhen Xiang", year: "2025", url: "https://arxiv.org/abs/2505.16067", section: "Addition, deletion, error propagation, and misaligned replay", accessed_at: "2026-09" }]
+    limitations: ["Behavior and mitigation transfer depend on task, memory representation, selector, and agent model."]
+    applicability: "Adversarial testing of stored-success reuse and memory growth."
+    curriculum_usage: { lessons: ["11.4", "11.6"], labs: ["LAB-C"], assessments: ["Incident-11.1"] }
+
+  - id: CLM-014
+    claim: "IFCMemoryBench reports that general-purpose memory systems in its 2026 professional-domain setup often retrieve topically relevant but incomplete or fragmented records, motivating separate ingestion, retrieval, and utilization measurements."
+    provenance: VERIFIED_FACT
+    domain: memory_evaluation
+    concepts: [domain_memory, fragmentation, stage_evaluation]
+    confidence: medium
+    currentness_status: "FRONTIER / DOMAIN-SPECIFIC"
+    evidence: [{ source_type: paper, tier: 1, title: "IFCMemoryBench: Evaluating Long-Term Memory of LLM-Based Agents in BIM Information Retrieval", authors: "Changyu Du, Alexander Vosseler, Filippo Mazza, André Borrmann", year: "2026", url: "https://arxiv.org/abs/2607.26072", section: "Evaluation framework and analysis", accessed_at: "2026-09" }]
+    limitations: ["Workshop preprint in a BIM/IFC domain; its measurements and conclusions are not universal."]
+    applicability: "Evidence that topical relevance alone is insufficient for domain memory."
+    curriculum_usage: { lessons: ["11.6"], labs: ["LAB-C"], assessments: ["Mastery-11"] }
+
+  - id: CLM-015
+    claim: "Memory quality must be attributed across write eligibility/extraction, persistence/update/delete, read retrieval, context placement, and downstream use; a correct final answer or relevant retrieved record alone cannot identify the failing stage."
+    provenance: DERIVED
+    domain: memory_evaluation
+    concepts: [stage_attribution, memory_precision, utilization]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Each memory stage exposes versioned inputs/outputs and the evaluation defines facts/actions required at the probe time."]
+    derivation: "The same failed response can follow from absent memory, corrupted storage, stale selection, omitted context, or model non-use. Intervening at one stage requires discriminating measurements at its boundaries."
+    limitations: ["Counterfactual replay or oracle-stage tests may be required for causal attribution."]
+    applicability: "Memory regression and incident diagnosis."
+    curriculum_usage: { lessons: ["11.6"], labs: ["LAB-C", "LAB-D"], assessments: ["Incident-11.1", "Mastery-11"] }
+
+  - id: CLM-016
+    claim: "At LangChain commit 80b74090515a594cc8421fb2d82e98f4e256c29f, trim_messages supports first/last strategies, exact or approximate counters, partial-message and boundary controls; count_tokens_approximately explicitly remains approximate; InMemoryChatMessageHistory stores messages in a process-local list."
+    provenance: VERIFIED_FACT
+    domain: runtime_implementation
+    concepts: [langchain, message_trimming, approximate_counting, chat_history]
+    confidence: high
+    currentness_status: "CURRENT LANGCHAIN SNAPSHOT / IMPLEMENTATION-SPECIFIC"
+    evidence:
+      - source_type: source_code
+        tier: 1
+        title: "LangChain core message trimming, token approximation, and in-memory history"
+        repository: "https://github.com/langchain-ai/langchain"
+        commit: "80b74090515a594cc8421fb2d82e98f4e256c29f"
+        verification_date: "2026-09-26"
+        file: "libs/core/langchain_core/messages/utils.py; libs/core/langchain_core/chat_history.py"
+        symbol: "trim_messages; count_tokens_approximately; InMemoryChatMessageHistory.add_message; InMemoryChatMessageHistory.clear"
+        entry_point: "trim_messages(messages, ...); count_tokens_approximately(messages, ...); chat history add/clear methods"
+        execution_path: "application messages -> token counter/approximation -> trim strategy and boundary controls -> retained messages; add_message -> process-local messages.append"
+        url: "https://github.com/langchain-ai/langchain/blob/80b74090515a594cc8421fb2d82e98f4e256c29f/libs/core/langchain_core/messages/utils.py"
+        accessed_at: "2026-09"
+    limitations: ["Static inspection only; code was not executed.", "The in-memory class is not durable storage.", "These helpers do not define a universal context or memory policy."]
+    applicability: "Production source-reading example for explicit trimming and history semantics."
+    curriculum_usage: { lessons: ["11.1", "11.5"], labs: ["LAB-A", "LAB-D"], assessments: ["Production-Source-Trace"] }
