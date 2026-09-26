@@ -1,0 +1,164 @@
+module: "10-advanced-rag"
+registry_version: "1.0.0"
+
+required_concepts:
+  - "rag_request_contract"
+  - "query_orchestration"
+  - "incremental_indexing"
+  - "visibility_lag"
+  - "snapshot_consistency"
+  - "context_assembly"
+  - "evidence_ordering"
+  - "contradiction_handling"
+  - "citation_correctness"
+  - "citation_completeness"
+  - "stage_attribution"
+  - "rag_vs_long_context"
+  - "adaptive_routing"
+
+prerequisite_concepts:
+  - "data_lineage"
+  - "document_identity"
+  - "retrieval_contract"
+  - "hybrid_retrieval"
+  - "reranking"
+  - "behavior_uncertainty"
+  - "latency_goodput"
+
+first_occurrence_concepts:
+  - "rag_request_contract"
+  - "visibility_lag"
+  - "snapshot_consistency"
+  - "evidence_ordering"
+  - "contradiction_handling"
+  - "citation_correctness"
+  - "citation_completeness"
+  - "stage_attribution"
+  - "rag_vs_long_context"
+
+concept_dependencies:
+  - { concept: "incremental_indexing", depends_on: ["data_lineage", "document_identity"] }
+  - { concept: "snapshot_consistency", depends_on: ["incremental_indexing", "visibility_lag"] }
+  - { concept: "context_assembly", depends_on: ["retrieval_contract", "reranking"] }
+  - { concept: "contradiction_handling", depends_on: ["context_assembly", "snapshot_consistency"] }
+  - { concept: "citation_correctness", depends_on: ["document_identity", "context_assembly"] }
+  - { concept: "stage_attribution", depends_on: ["citation_correctness", "retrieval_contract"] }
+  - { concept: "rag_vs_long_context", depends_on: ["context_assembly", "latency_goodput"] }
+
+mechanisms:
+  - id: "MECH-01"
+    description: "A RAG request contract pins query intent/time, corpus or index revision, access policy, transformations, retrieval and context budgets, model/prompt, answer requirements, and citation/abstention policy."
+    evidence_ids: ["CLM-001", "CLM-006", "CLM-014"]
+    derived_from: []
+  - id: "MECH-02"
+    description: "Incremental ingestion carries stable document identity and monotonic version semantics through parse, chunk, embed, write, refresh/commit, replicas, routes, and caches."
+    evidence_ids: ["CLM-005", "CLM-006", "CLM-007", "CLM-008"]
+    derived_from: ["MECH-01"]
+  - id: "MECH-03"
+    description: "Query orchestration conditionally preserves, rewrites, expands, decomposes, or routes a query while retaining lineage and measuring intent drift."
+    evidence_ids: ["CLM-009", "CLM-016"]
+    derived_from: ["MECH-01"]
+  - id: "MECH-04"
+    description: "Context assembly selects, deduplicates, orders, and possibly compresses evidence under token, latency, authority, freshness, and contradiction constraints."
+    evidence_ids: ["CLM-002", "CLM-003", "CLM-004", "CLM-010"]
+    derived_from: ["MECH-01", "MECH-03"]
+  - id: "MECH-05"
+    description: "Contradiction resolution normalizes claim/entity/time/version, applies source-authority policy, exposes unresolved conflicts, and abstains or branches when evidence is insufficient."
+    evidence_ids: ["CLM-011", "CLM-012"]
+    derived_from: ["MECH-02", "MECH-04"]
+  - id: "MECH-06"
+    description: "Citation handling binds answer claims to immutable evidence identifiers and separately evaluates support correctness and claim coverage."
+    evidence_ids: ["CLM-013", "CLM-014", "CLM-017"]
+    derived_from: ["MECH-04", "MECH-05"]
+  - id: "MECH-07"
+    description: "Architecture selection compares retrieval, long-context, and hybrid routes on matched evidence, quality, latency, cost, freshness, and failure slices."
+    evidence_ids: ["CLM-003", "CLM-015", "CLM-016"]
+    derived_from: ["MECH-01", "MECH-04", "MECH-06"]
+
+mathematical_models:
+  - id: "MATH-01"
+    description: "Visibility lag L_visible=t_query_visible-t_source_event; stage durations add only along the actual dependency critical path, not automatically as a sum of overlapping work."
+    evidence_ids: ["CLM-005", "CLM-008"]
+    derived_from: ["MECH-02"]
+  - id: "MATH-02"
+    description: "Citation correctness = supported emitted citations / checked emitted citations; citation completeness = support-required answer claims with adequate citation / support-required answer claims. Claim segmentation, adequacy, and zero-denominator policy are explicit."
+    evidence_ids: ["CLM-013", "CLM-014"]
+    derived_from: ["MECH-06"]
+  - id: "MATH-03"
+    description: "Context selection is a constrained optimization heuristic: maximize measured downstream utility over selected evidence subject to token, latency, cost, access, freshness, and consistency constraints; no universal utility function is implied."
+    evidence_ids: ["CLM-002", "CLM-003", "CLM-010"]
+    derived_from: ["MECH-04"]
+  - id: "MATH-04"
+    description: "Route utility can be compared as measured quality minus declared latency and cost penalties under hard safety/freshness constraints; weights and feasibility are product-specific, not universal constants."
+    evidence_ids: ["CLM-015", "CLM-016"]
+    derived_from: ["MECH-07"]
+
+implementation_mechanisms:
+  - id: "IMPL-01"
+    description: "An indexing ledger records source event, stable ID, source version, content hash, parser/chunker/embedder versions, per-representation status, query-visible watermark, delete state, retry, and rollback target."
+    evidence_ids: ["CLM-005", "CLM-006", "CLM-007"]
+    derived_from: ["MECH-02"]
+  - id: "IMPL-02"
+    description: "A request trace stores original/transformed queries, route decisions, candidates, selected context and order, snapshot IDs, prompt/model, generated claims, citation bindings, abstention, stage timing, and cost."
+    evidence_ids: ["CLM-006", "CLM-009", "CLM-014"]
+    derived_from: ["MECH-01", "MECH-03", "MECH-04", "MECH-06"]
+  - id: "IMPL-03"
+    description: "Pinned Haystack trace shows explicit pipeline dispatch, prompt rendering, document-store writes, and answer/reference binding; semantic citation validation remains a separate responsibility."
+    evidence_ids: ["CLM-017"]
+    derived_from: ["MECH-01", "MECH-02", "MECH-06"]
+
+failure_modes:
+  - id: "FAIL-01"
+    description: "Acknowledged-but-invisible update: ingestion succeeds while refresh/commit, replicas, routing, or caches still serve the old revision."
+    evidence_ids: ["CLM-005", "CLM-008"]
+    derived_from: ["MECH-02", "MATH-01"]
+  - id: "FAIL-02"
+    description: "Mixed-version answer: retrieval, context, answer, and citation targets come from incompatible corpus revisions or a deletion propagates to only some representations."
+    evidence_ids: ["CLM-006", "CLM-007"]
+    derived_from: ["MECH-02"]
+  - id: "FAIL-03"
+    description: "Rewrite drift improves nominal retrieval while changing negation, entity, identifier, scope, or temporal intent."
+    evidence_ids: ["CLM-009"]
+    derived_from: ["MECH-03"]
+  - id: "FAIL-04"
+    description: "Context dilution or position sensitivity causes relevant evidence to be omitted, truncated, duplicated, displaced, or ignored despite higher top-k or a larger window."
+    evidence_ids: ["CLM-002", "CLM-003", "CLM-004", "CLM-010"]
+    derived_from: ["MECH-04"]
+  - id: "FAIL-05"
+    description: "Contradiction collapse selects the newest, most frequent, or model-preferred statement without resolving time, authority, entity, or version semantics."
+    evidence_ids: ["CLM-011", "CLM-012"]
+    derived_from: ["MECH-05"]
+  - id: "FAIL-06"
+    description: "Citation theater emits valid-looking references that are out of range, point to stale or irrelevant evidence, support only part of a claim, or leave other claims unsupported."
+    evidence_ids: ["CLM-013", "CLM-014", "CLM-017"]
+    derived_from: ["MECH-06", "MATH-02"]
+  - id: "FAIL-07"
+    description: "Architecture benchmark leakage compares RAG and long context with different source snapshots, evidence opportunity, models, prompts, budgets, or excluded costs."
+    evidence_ids: ["CLM-015"]
+    derived_from: ["MECH-07", "MATH-04"]
+
+production_connections:
+  - id: "PROD-01"
+    description: "Release an index only after canary queries prove source-to-search visibility, update/delete convergence, version monotonicity, access correctness, and rollback."
+    evidence_ids: ["CLM-005", "CLM-006", "CLM-007", "CLM-008"]
+    derived_from: ["IMPL-01", "FAIL-01", "FAIL-02"]
+  - id: "PROD-02"
+    description: "Evaluate RAG using staged opportunity/use/support metrics and matched end-to-end quality, latency, cost, freshness, rejection, and abstention distributions."
+    evidence_ids: ["CLM-013", "CLM-014", "CLM-015"]
+    derived_from: ["IMPL-02", "MATH-02", "MATH-04"]
+
+research_connections:
+  - id: "RESEARCH-01"
+    description: "Adaptive/self-corrective retrieval is a promising mechanism family whose evaluator calibration, correlated failures, and extra work remain deployment-specific."
+    evidence_ids: ["CLM-016"]
+    derived_from: ["MECH-03", "MECH-07"]
+  - id: "RESEARCH-02"
+    description: "RAG-versus-long-context evidence through 2025 rejects a universal winner and motivates matched, slice-aware routing studies through the 2026 cutoff."
+    evidence_ids: ["CLM-003", "CLM-015"]
+    derived_from: ["MECH-07"]
+
+candidate_capabilities:
+  - { capability: "Design and audit an incremental, version-consistent RAG indexing path with measurable query visibility.", mapped_mechanisms: ["MECH-02", "MATH-01", "IMPL-01", "FAIL-01", "FAIL-02", "PROD-01"] }
+  - { capability: "Implement query and context orchestration while testing intent drift, duplication, order, contradiction, and budget effects.", mapped_mechanisms: ["MECH-03", "MECH-04", "MECH-05", "MATH-03", "FAIL-03", "FAIL-04", "FAIL-05"] }
+  - { capability: "Produce and evaluate claim-level citations without confusing reference syntax with semantic support.", mapped_mechanisms: ["MECH-06", "MATH-02", "IMPL-03", "FAIL-06"] }
+  - { capability: "Attribute RAG failures by stage and choose retrieval, long-context, or hybrid routes on a matched production frontier.", mapped_mechanisms: ["MECH-07", "MATH-04", "IMPL-02", "FAIL-07", "PROD-02"] }

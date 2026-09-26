@@ -1,0 +1,229 @@
+module: "10-advanced-rag"
+registry_version: "1.0.0"
+research_cutoff: "2026-09-26"
+change_reason: "Replace placeholders with evidence-backed orchestration, freshness, contradiction, citation, and RAG-versus-long-context mechanisms."
+claims:
+  - id: CLM-001
+    claim: "Retrieval-augmented generation combines parametric generation with retrieved non-parametric evidence; the original RAG work established this architecture on scoped knowledge-intensive tasks, not a universal guarantee of factuality or provenance."
+    provenance: VERIFIED_FACT
+    domain: rag_architecture
+    concepts: [parametric_memory, non_parametric_memory, retrieval_augmented_generation]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks", authors: "Patrick Lewis, Ethan Perez, Aleksandra Piktus, Fabio Petroni, Vladimir Karpukhin, Naman Goyal, Heinrich Küttler, Mike Lewis, Wen-tau Yih, Tim Rocktäschel, Sebastian Riedel, Douwe Kiela", year: "2020", url: "https://arxiv.org/abs/2005.11401", section: "Model and experiments", accessed_at: "2026-09" }]
+    limitations: ["The paper uses particular retrievers, Wikipedia snapshots, generators, tasks, and metrics.", "Retrieved evidence can be irrelevant, stale, contradictory, or ignored."]
+    applicability: "Reference architecture and terminology for retrieval-conditioned generation."
+    curriculum_usage: { lessons: ["10.1"], labs: ["LAB-A"], assessments: ["Mastery-10"] }
+
+  - id: CLM-002
+    claim: "Fusion-in-Decoder encodes retrieved passages separately and fuses them in the decoder; its reported improvement with more passages is evidence for that evaluated setup, not a monotonic law for arbitrary context depth."
+    provenance: VERIFIED_FACT
+    domain: context_assembly
+    concepts: [fusion_in_decoder, passage_aggregation, context_depth]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "Leveraging Passage Retrieval with Generative Models for Open Domain Question Answering", authors: "Gautier Izacard, Edouard Grave", year: "2021", url: "https://arxiv.org/abs/2007.01282", section: "Method and experiments", accessed_at: "2026-09" }]
+    limitations: ["Passage count changes compute and may add distractors, duplication, conflicts, or truncation in other architectures."]
+    applicability: "Evidence that multi-passage aggregation can help, subject to model and workload validation."
+    curriculum_usage: { lessons: ["10.3"], labs: ["LAB-B"], assessments: ["Mastery-10"] }
+
+  - id: CLM-003
+    claim: "Long-context input capacity does not imply position-invariant evidence use: Lost in the Middle reports substantial position sensitivity on its multi-document QA and key-value tasks, often with weaker use of evidence placed in the middle."
+    provenance: VERIFIED_FACT
+    domain: context_assembly
+    concepts: [position_sensitivity, long_context, evidence_order]
+    confidence: high
+    currentness_status: "REFERENCE / CURRENT CAUTION"
+    evidence: [{ source_type: paper, tier: 1, title: "Lost in the Middle: How Language Models Use Long Contexts", authors: "Nelson F. Liu, Kevin Lin, John Hewitt, Ashwin Paranjape, Michele Bevilacqua, Fabio Petroni, Percy Liang", year: "2023", url: "https://arxiv.org/abs/2307.03172", section: "Multi-document QA and key-value retrieval experiments", accessed_at: "2026-09" }]
+    limitations: ["The effect size and shape are model-, task-, prompt-, and context-length-dependent."]
+    applicability: "Testing context order, depth, and evidence placement rather than assuming uniform utilization."
+    curriculum_usage: { lessons: ["10.3", "10.6"], labs: ["LAB-B", "LAB-D"], assessments: ["Mastery-10"] }
+
+  - id: CLM-004
+    claim: "FreshQA/FreshPrompt reports that fast-changing knowledge and false-premise questions remain difficult in its evaluated systems, and that retrieved evidence count and order affect answer correctness; this supports temporal and ordering tests, not a universal search-engine advantage."
+    provenance: VERIFIED_FACT
+    domain: freshness
+    concepts: [temporal_qa, false_premise, evidence_order]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "FreshLLMs: Refreshing Large Language Models with Search Engine Augmentation", authors: "Tu Vu, Mohit Iyyer, Xuezhi Wang, Noah Constant, Jerry Wei, Jason Wei, Chris Tar, Yun-Hsuan Sung, Denny Zhou, Quoc Le, Thang Luong", year: "2023", url: "https://arxiv.org/abs/2310.03214", section: "FreshQA, FreshPrompt, and analysis", accessed_at: "2026-09" }]
+    limitations: ["Search index, answer date, source quality, evaluator, model, and prompt constrain transfer."]
+    applicability: "Freshness, false-premise, evidence-count, and ordering evaluation."
+    curriculum_usage: { lessons: ["10.2", "10.3"], labs: ["LAB-A", "LAB-B"], assessments: ["Incident-10.1"] }
+
+  - id: CLM-005
+    claim: "End-to-end evidence visibility lag is the elapsed time from the declared source-change event to successful retrieval of the intended version through the production query path; an ingestion acknowledgement alone does not establish query visibility."
+    provenance: DERIVED
+    domain: freshness
+    concepts: [visibility_lag, freshness_slo, high_watermark]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["The source-change event, intended document version, production query path, and success condition are defined on comparable clocks."]
+    derivation: "L_visible=t_query_visible-t_source_event. Parse, chunk, embed, write, refresh/commit, replica, routing, and cache delays contribute along the actual dependency critical path; completion of one stage is insufficient."
+    limitations: ["Clock skew, polling cadence, eventual consistency, cache state, and source timestamp semantics can bias the measurement."]
+    applicability: "Incremental RAG indexing and freshness SLOs."
+    curriculum_usage: { lessons: ["10.2"], labs: ["LAB-A"], assessments: ["Incident-10.1", "Mastery-10"] }
+
+  - id: CLM-006
+    claim: "A coherent RAG response requires document identity/version, corpus or index revision, query transformation, retrieved chunks, assembled context, answer, and citations to remain traceable to one declared read contract; otherwise mixed-version answers can be internally inconsistent."
+    provenance: DERIVED
+    domain: consistency
+    concepts: [snapshot_consistency, document_version, answer_lineage]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Documents may update or delete while requests are in flight, and multiple representations or caches can serve different revisions."]
+    derivation: "If answer claims and citations are drawn from unrecorded revisions, reproduction and conflict resolution are underdetermined. Versioned identity plus a read-snapshot/high-watermark contract makes the dependency graph auditable."
+    limitations: ["The required consistency level is product-specific; strong global snapshots may be expensive or unavailable."]
+    applicability: "Mutable corpora, regulated sources, cache layers, and reproducible incidents."
+    curriculum_usage: { lessons: ["10.1", "10.2"], labs: ["LAB-A"], assessments: ["Incident-10.1"] }
+
+  - id: CLM-007
+    claim: "Incremental upsert and delete processing should be idempotent and version-aware across text, embeddings, metadata, caches, and citation targets; partial propagation can resurrect stale content or leave dangling evidence."
+    provenance: DERIVED
+    domain: incremental_indexing
+    concepts: [idempotency, tombstone, multi_representation_consistency]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["One logical source item can have multiple stored representations and events can be retried, duplicated, delayed, or reordered."]
+    derivation: "Without stable identity and monotonic/version-checked operations, an older retry can overwrite a newer representation; without delete/tombstone fanout, at least one query path can continue serving removed content."
+    limitations: ["Version semantics and transaction boundaries differ by store and ingestion architecture."]
+    applicability: "Continuous ingestion, re-embedding, deletion, and rollback."
+    curriculum_usage: { lessons: ["10.2"], labs: ["LAB-A"], assessments: ["Incident-10.1", "Mastery-10"] }
+
+  - id: CLM-008
+    claim: "Elasticsearch documents that writes may return before changes become visible to search, while refresh makes recent operations searchable and trades visibility latency against indexing/search work."
+    provenance: VERIFIED_FACT
+    domain: runtime_semantics
+    concepts: [refresh, search_visibility, indexing_tradeoff]
+    confidence: high
+    currentness_status: "CURRENT ELASTICSEARCH DOCUMENTATION / IMPLEMENTATION-SPECIFIC"
+    evidence: [{ source_type: official_docs, tier: 2, title: "The refresh parameter", authors: "Elastic", url: "https://www.elastic.co/docs/reference/elasticsearch/rest-apis/refresh-parameter", section: "Allowed refresh values and choosing a setting", accessed_at: "2026-09" }, { source_type: official_docs, tier: 2, title: "Optimistic concurrency control", authors: "Elastic", url: "https://www.elastic.co/docs/reference/elasticsearch/rest-apis/optimistic-concurrency-control", section: "Sequence number and primary term", accessed_at: "2026-09" }]
+    limitations: ["Refresh and concurrency-control details are Elasticsearch-specific and do not define every vector or document store."]
+    applicability: "Concrete production example of acknowledged-write versus query-visible state and version-checked updates."
+    curriculum_usage: { lessons: ["10.2"], labs: ["LAB-A"], assessments: ["Production-Source-Trace"] }
+
+  - id: CLM-009
+    claim: "Query rewriting, decomposition, and expansion can change retrieval opportunity but can also alter intent; their benefit must be measured against the original query with transformation lineage preserved."
+    provenance: HYPOTHESIS
+    domain: query_orchestration
+    concepts: [query_rewrite, decomposition, intent_drift]
+    confidence: high
+    currentness_status: "CURRENT / WORKLOAD-DEPENDENT"
+    hypothesis:
+      prediction: "Some slices gain evidence recall from transformations while exact-identifier, negation, temporal, or underspecified queries can lose intent fidelity."
+      measurement_target: "Original and transformed queries, retrieved evidence opportunity, intent labels, answer/citation quality, latency, cost, and slice-level paired deltas."
+      falsifying_observation: "Across preregistered slices, transformation adds no recall or quality benefit, or intent errors dominate within uncertainty."
+    limitations: ["Transformation quality depends on model, prompt, corpus, task, and retrieval backend."]
+    applicability: "Multi-hop questions, vocabulary mismatch, ambiguous queries, and controlled expansion."
+    curriculum_usage: { lessons: ["10.1", "10.3"], labs: ["LAB-B"], assessments: ["Mastery-10"] }
+
+  - id: CLM-010
+    claim: "Context assembly is a budgeted selection problem over evidence utility, duplication, authority, freshness, contradiction, token cost, and order; increasing top-k or input length can improve opportunity while also adding distractors and compute."
+    provenance: DERIVED
+    domain: context_assembly
+    concepts: [context_budget, evidence_selection, ordering]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT / WORKLOAD-DEPENDENT"
+    assumptions: ["The generator has a finite effective context budget and evidence items differ in relevance, authority, freshness, redundancy, and length."]
+    derivation: "Selecting an item consumes budget and can alter attention to every other item; therefore raw retrieval rank alone does not optimize answer utility, and a larger feasible context is not necessarily a better used context."
+    limitations: ["No universal scalar utility or optimal order exists across models and tasks."]
+    applicability: "Chunk deduplication, packing, compression, ordering, and long-context comparison."
+    curriculum_usage: { lessons: ["10.3"], labs: ["LAB-B", "LAB-D"], assessments: ["Mastery-10"] }
+
+  - id: CLM-011
+    claim: "Real-document context-memory conflict experiments show that models can fail to update an incorrect parametric answer from conflicting context and can exhibit parametric bias; the observed rate is experiment-specific."
+    provenance: VERIFIED_FACT
+    domain: contradiction
+    concepts: [context_memory_conflict, parametric_bias, knowledge_update]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "Studying Large Language Model Behaviors Under Context-Memory Conflicts With Real Documents", authors: "Evgenii Kortukov, Alexander Rubinstein, Elisa Nguyen, Seong Joon Oh", year: "2024", url: "https://arxiv.org/abs/2404.16032", section: "Real-document conflict framework and experiments", accessed_at: "2026-09" }]
+    limitations: ["Conflict behavior depends on models, document realism, prompts, answer types, and whether the contextual source is trustworthy."]
+    applicability: "Contradiction tests between retrieved evidence and model prior."
+    curriculum_usage: { lessons: ["10.4"], labs: ["LAB-C"], assessments: ["Incident-10.1"] }
+
+  - id: CLM-012
+    claim: "Contradiction handling requires an explicit claim, time, entity, source-authority, and version policy; majority vote over passages is not generally valid when sources differ in authority or describe different times."
+    provenance: DERIVED
+    domain: contradiction
+    concepts: [claim_normalization, source_authority, temporal_conflict]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Apparently conflicting passages can differ by claim scope, entity, timestamp, version, or authority."]
+    derivation: "Counting texts discards these variables, so identical surface disagreement can mean a true contradiction, an update, a scope mismatch, or duplicate propagation. A decision requires the missing semantics or abstention."
+    limitations: ["Authority policies require human/product judgment and may be contested."]
+    applicability: "Policy, technical documentation, news, medical, legal, and mutable enterprise knowledge."
+    curriculum_usage: { lessons: ["10.4"], labs: ["LAB-C"], assessments: ["Incident-10.1", "Mastery-10"] }
+
+  - id: CLM-013
+    claim: "ALCE evaluates answer correctness and citation quality separately and reports incomplete citation support in evaluated systems; emitting a citation marker is therefore not evidence that the cited passage entails the attached claim."
+    provenance: VERIFIED_FACT
+    domain: citations
+    concepts: [citation_correctness, citation_completeness, entailment]
+    confidence: high
+    currentness_status: "REFERENCE / CURRENT CAUTION"
+    evidence: [{ source_type: paper, tier: 1, title: "Enabling Large Language Models to Generate Text with Citations", authors: "Tianyu Gao, Howard Yen, Jiatong Yu, Danqi Chen", year: "2023", url: "https://arxiv.org/abs/2305.14627", section: "ALCE benchmark and citation metrics", accessed_at: "2026-09" }]
+    limitations: ["Automatic citation evaluators can disagree with expert judgments and inherit NLI/model error."]
+    applicability: "Claim-level citation support and completeness evaluation."
+    curriculum_usage: { lessons: ["10.5"], labs: ["LAB-C"], assessments: ["Mastery-10"] }
+
+  - id: CLM-014
+    claim: "RAG evaluation should attribute failure across source availability, index visibility, retrieval opportunity, context selection, generator use, answer correctness, and citation support rather than collapse them into one answer score."
+    provenance: DERIVED
+    domain: evaluation
+    concepts: [stage_attribution, evidence_opportunity, faithfulness]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Stage inputs/outputs and a claim/evidence judgment protocol are recorded for the same request and corpus snapshot."]
+    derivation: "If needed evidence is absent from the corpus, invisible, not retrieved, omitted from context, ignored in generation, or cited incorrectly, each failure admits a different intervention despite an identical wrong answer."
+    limitations: ["Claim extraction and entailment labels introduce evaluator error; causal attribution may require controlled replay."]
+    applicability: "Offline evaluation, canary analysis, and incident diagnosis."
+    curriculum_usage: { lessons: ["10.5"], labs: ["LAB-C", "LAB-D"], assessments: ["Incident-10.1", "Mastery-10"] }
+
+  - id: CLM-015
+    claim: "Published RAG-versus-long-context comparisons disagree by task and setup: a 2024 study reports stronger average long-context quality when sufficiently resourced with lower RAG cost, while a 2025 revisit reports task- and retrieval-method-dependent reversals."
+    provenance: VERIFIED_FACT
+    domain: architecture_selection
+    concepts: [rag_vs_long_context, cost_quality_tradeoff, workload_dependence]
+    confidence: high
+    currentness_status: "CURRENT / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "Retrieval Augmented Generation or Long-Context LLMs? A Comprehensive Study and Hybrid Approach", authors: "Zhuowan Li, Cheng Li, Mingyang Zhang, Qiaozhu Mei, Michael Bendersky", year: "2024", url: "https://arxiv.org/abs/2407.16833", section: "RAG/LC comparison and Self-Route", accessed_at: "2026-09" }, { source_type: paper, tier: 1, title: "Long Context vs. RAG for LLMs: An Evaluation and Revisits", authors: "Xinze Li, Yixin Cao, Yubo Ma, Aixin Sun", year: "2025", url: "https://arxiv.org/abs/2501.01880", section: "Evaluation and discussion", accessed_at: "2026-09" }]
+    limitations: ["Results depend on answerable-without-context filtering, corpus, retriever, summarization/chunking, model, task, token price, and quality metric."]
+    applicability: "Choosing or routing among retrieval, full/long context, and hybrid paths."
+    curriculum_usage: { lessons: ["10.6"], labs: ["LAB-D"], assessments: ["Mastery-10"] }
+
+  - id: CLM-016
+    claim: "Adaptive retrieval and corrective-RAG papers demonstrate mechanisms that decide when to retrieve or react to assessed evidence quality, but their reported gains do not establish self-reflection or evaluator-driven correction as a production default."
+    provenance: VERIFIED_FACT
+    domain: adaptive_rag
+    concepts: [adaptive_retrieval, retrieval_evaluator, self_reflection]
+    confidence: medium
+    currentness_status: "FRONTIER / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "Self-RAG: Learning to Retrieve, Generate, and Critique through Self-Reflection", authors: "Akari Asai, Zeqiu Wu, Yizhong Wang, Avirup Sil, Hannaneh Hajishirzi", year: "2023", url: "https://arxiv.org/abs/2310.11511", section: "Framework and experiments", accessed_at: "2026-09" }, { source_type: paper, tier: 1, title: "Corrective Retrieval Augmented Generation", authors: "Shi-Qi Yan, Jia-Chen Gu, Yun Zhu, Zhen-Hua Ling", year: "2024", url: "https://arxiv.org/abs/2401.15884", section: "Retrieval evaluator and corrective actions", accessed_at: "2026-09" }]
+    limitations: ["Evaluator calibration, extra retrieval/model calls, web-source quality, latency, cost, and error correlation require deployment-specific measurement."]
+    applicability: "Selective retrieval, evidence-quality routing, and corrective fallback experiments."
+    curriculum_usage: { lessons: ["10.3", "10.6"], labs: ["LAB-D"], assessments: ["Mastery-10"] }
+
+  - id: CLM-017
+    claim: "At Haystack commit 8a5406eea71a0fc19e94c4b9a5cd96df2158a45a, Pipeline.run dispatches component run methods, PromptBuilder.run renders supplied variables, DocumentWriter.run delegates duplicate-policy writes, and AnswerBuilder.run parses numeric references and attaches document copies; this path does not itself semantically verify citation entailment."
+    provenance: VERIFIED_FACT
+    domain: runtime_implementation
+    concepts: [haystack, pipeline_orchestration, answer_builder, citation_binding]
+    confidence: high
+    currentness_status: "CURRENT HAYSTACK SNAPSHOT / IMPLEMENTATION-SPECIFIC"
+    evidence:
+      - source_type: source_code
+        tier: 1
+        title: "Haystack pipeline, prompt, writer, and answer builders"
+        repository: "https://github.com/deepset-ai/haystack"
+        commit: "8a5406eea71a0fc19e94c4b9a5cd96df2158a45a"
+        verification_date: "2026-09-26"
+        file: "haystack/core/pipeline/pipeline.py; haystack/components/builders/prompt_builder.py; haystack/components/builders/answer_builder.py; haystack/components/writers/document_writer.py"
+        symbol: "Pipeline.run; Pipeline._run_component; PromptBuilder.run; AnswerBuilder.run; DocumentWriter.run"
+        entry_point: "Pipeline.run(data=...) or individual component run methods"
+        execution_path: "Pipeline.run -> Pipeline._run_component -> component.run; retrieved documents -> PromptBuilder.run -> generator -> AnswerBuilder.run; ingestion documents -> DocumentWriter.run -> document_store.write_documents"
+        url: "https://github.com/deepset-ai/haystack/blob/8a5406eea71a0fc19e94c4b9a5cd96df2158a45a/haystack/core/pipeline/pipeline.py"
+        accessed_at: "2026-09"
+    limitations: ["Static inspection only; no Haystack pipeline was executed.", "Reference parsing/binding is not semantic support validation.", "Haystack is one orchestration implementation, not the definition of RAG."]
+    applicability: "Production source reading for explicit component orchestration, prompt construction, document writes, and citation-reference binding."
+    curriculum_usage: { lessons: ["10.1", "10.2", "10.5"], labs: ["LAB-A", "LAB-C"], assessments: ["Production-Source-Trace"] }
