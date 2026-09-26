@@ -1,0 +1,182 @@
+module: "16-falsification-engineering"
+registry_version: "1.0.0"
+research_cutoff: "2026-09-26"
+change_reason: "Replace placeholders with hypothesis-driven property, metamorphic, differential, mutation, stochastic, and fault-injection testing mechanisms."
+claims:
+  - id: CLM-001
+    claim: "Falsification engineering turns a requirement or causal belief into a testable predicate, defines the valid input domain and oracle, searches for counterexamples, and records what surviving tests do not prove."
+    provenance: DERIVED
+    domain: falsification_contract
+    concepts: [property, oracle, counterexample]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["The requirement can be operationalized as an observable predicate or relation over executions."]
+    derivation: "A passing finite sample establishes only that no counterexample was observed under the sampled domain, oracle, budget, and implementation. Reproducible failure requires those boundaries to be explicit."
+    limitations: ["Some normative or open-world requirements cannot be reduced to one complete oracle."]
+    applicability: "Models, prompts, retrieval, agents, tools, runtimes, and end-to-end AI systems."
+    curriculum_usage: { lessons: ["16.1"], labs: ["LAB-A"], assessments: ["Mastery-16"] }
+  - id: CLM-002
+    claim: "QuickCheck established property-based testing in which programmers state properties and generate many inputs, including custom generators, to search for counterexamples."
+    provenance: VERIFIED_FACT
+    domain: property_based_testing
+    concepts: [property, generator, randomized_testing]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "QuickCheck: A Lightweight Tool for Random Testing of Haskell Programs", authors: "Koen Claessen, John Hughes", year: "2000", url: "https://doi.org/10.1145/351240.351266", section: "Properties, generators, and case studies", accessed_at: "2026-09" }]
+    limitations: ["Random generation does not prove a universal property and generator quality determines reachable cases."]
+    applicability: "Pure functions, protocol contracts, parsers, state machines, and AI-system invariants."
+    curriculum_usage: { lessons: ["16.2"], labs: ["LAB-A"], assessments: ["Mastery-16"] }
+  - id: CLM-003
+    claim: "A property test is only as strong as its generator, validity constraints, distribution, and shrinker; excessive filtering hides reachability problems, while invalid generation produces irrelevant failures."
+    provenance: DERIVED
+    domain: property_based_testing
+    concepts: [generator, shrinker, validity_domain]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Generated examples and shrink steps can be checked for domain validity."]
+    derivation: "The test explores the support induced by its generator. Filtering reduces effective trials; a shrinker that leaves the domain can replace the original failure with an invalid artifact."
+    limitations: ["Minimality depends on the shrink order and representation, not semantic simplicity alone."]
+    applicability: "Schema, prompt, state-machine, tool, and workflow generation."
+    curriculum_usage: { lessons: ["16.2"], labs: ["LAB-A"], assessments: ["Incident-16.1"] }
+  - id: CLM-004
+    claim: "Metamorphic testing addresses missing single-input oracles by specifying a valid transformation between source and follow-up inputs and the required relation between their outputs."
+    provenance: VERIFIED_FACT
+    domain: metamorphic_testing
+    concepts: [metamorphic_relation, source_input, follow_up_input]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "Metamorphic Testing: A New Approach for Generating Next Test Cases", authors: "T. Y. Chen, S. C. Cheung, S. M. Yiu", year: "1998", url: "https://www.cse.ust.hk/faculty/scc/publ/CS98-01-metamorphictesting.pdf", section: "Metamorphic testing method", accessed_at: "2026-09" }]
+    limitations: ["A wrong or context-breaking transformation creates false failures; relation satisfaction does not prove either output is correct."]
+    applicability: "Translation, classification, retrieval, ranking, extraction, generation, and workflow relations."
+    curriculum_usage: { lessons: ["16.3"], labs: ["LAB-B"], assessments: ["Mastery-16"] }
+  - id: CLM-005
+    claim: "A 2025 study catalogs metamorphic relations for NLP and evaluates a subset across LLMs, while also manually validating detected failures and reporting method limitations."
+    provenance: VERIFIED_FACT
+    domain: metamorphic_testing
+    concepts: [llm_testing, relation_catalog, oracle_quality]
+    confidence: high
+    currentness_status: "FRONTIER / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "Metamorphic Testing of Large Language Models for Natural Language Processing", authors: "Steven Cho, Stefano Ruberto, Valerio Terragni", year: "2025", url: "https://arxiv.org/abs/2511.02108", section: "Relation review, experiments, and manual validation", accessed_at: "2026-09" }]
+    limitations: ["Its tasks, selected relations, transformations, models, and empirical rates do not establish universal relations or production defect prevalence."]
+    applicability: "Design evidence for LLM metamorphic suites."
+    curriculum_usage: { lessons: ["16.3"], labs: ["LAB-B"], assessments: ["Mastery-16"] }
+  - id: CLM-006
+    claim: "CheckList organizes behavioral testing by capabilities and test types, including minimum-functionality, invariance, and directional-expectation tests, rather than relying on aggregate held-out accuracy."
+    provenance: VERIFIED_FACT
+    domain: behavioral_testing
+    concepts: [capability_matrix, invariance, directional_expectation]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "Beyond Accuracy: Behavioral Testing of NLP Models with CheckList", authors: "Marco Tulio Ribeiro, Tongshuang Wu, Carlos Guestrin, Sameer Singh", year: "2020", url: "https://aclanthology.org/2020.acl-main.442/", section: "Methodology and test types", accessed_at: "2026-09" }]
+    limitations: ["A capability matrix aids test ideation but does not prove completeness or determine product-specific severities."]
+    applicability: "Black-box behavioral contracts for language systems."
+    curriculum_usage: { lessons: ["16.1", "16.3"], labs: ["LAB-B"], assessments: ["Mastery-16"] }
+  - id: CLM-007
+    claim: "DeepXplore demonstrates differential testing across similar neural systems to find disagreement without labels; disagreement supplies a candidate counterexample, not an oracle identifying which system is wrong."
+    provenance: VERIFIED_FACT
+    domain: differential_testing
+    concepts: [differential_oracle, disagreement, adjudication]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "DeepXplore: Automated Whitebox Testing of Deep Learning Systems", authors: "Kexin Pei, Yinzhi Cao, Junfeng Yang, Suman Jana", year: "2017", url: "https://arxiv.org/abs/1705.06640", section: "Differential testing and neuron coverage", accessed_at: "2026-09" }]
+    limitations: ["Correlated systems can share a common-mode error; coverage and disagreement do not equal correctness."]
+    applicability: "Model, backend, prompt, parser, and system-version comparisons."
+    curriculum_usage: { lessons: ["16.4"], labs: ["LAB-C"], assessments: ["Mastery-16"] }
+  - id: CLM-008
+    claim: "Mutation testing injects controlled faults and measures whether a suite detects them; mutation score estimates sensitivity to the chosen non-equivalent mutants, not correctness against all real faults."
+    provenance: VERIFIED_FACT
+    domain: mutation_testing
+    concepts: [mutant, mutation_score, equivalent_mutant]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "An Analysis and Survey of the Development of Mutation Testing", authors: "Yue Jia, Mark Harman", year: "2011", url: "https://doi.org/10.1109/TSE.2010.62", section: "Mutation testing process and challenges", accessed_at: "2026-09" }]
+    limitations: ["Operator realism, equivalent mutants, subsumption, and execution cost can distort the score."]
+    applicability: "Test-suite adequacy for code, configuration, prompts, policies, tools, and workflow guards."
+    curriculum_usage: { lessons: ["16.4"], labs: ["LAB-C"], assessments: ["Mastery-16"] }
+  - id: CLM-009
+    claim: "For n independent identical Bernoulli trials with zero observed failures, the exact one-sided upper confidence bound on failure probability is 1-alpha^(1/n); it does not apply unchanged under dependence, shifting prompts, or adaptive search."
+    provenance: DERIVED
+    domain: stochastic_testing
+    concepts: [failure_probability, binomial_bound, repeated_trial]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT / WHEN ASSUMPTIONS HOLD"
+    assumptions: ["Trials are independent, identically distributed Bernoulli outcomes with a fixed failure predicate and no excluded attempts."]
+    derivation: "With failure probability p, observing zero failures has probability (1-p)^n. Setting (1-p)^n=alpha and solving for p gives the upper bound."
+    limitations: ["The bound says nothing about unseen input regions and is invalid for correlated retries or changing systems."]
+    applicability: "Repeated stochastic checks on a fixed item/population cell."
+    curriculum_usage: { lessons: ["16.5"], labs: ["LAB-D"], assessments: ["Mastery-16"] }
+  - id: CLM-010
+    claim: "Adaptive red-team or search-generated counterexamples are discovery evidence; estimating prevalence or comparing releases requires a separate frozen confirmatory sample or a procedure accounting for adaptive selection."
+    provenance: DERIVED
+    domain: adaptive_testing
+    concepts: [adaptive_search, discovery_set, confirmatory_set]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["The search policy uses observed failures to choose later tests."]
+    derivation: "Selection maximizes observed weakness and changes inclusion probabilities, so the found set is not an unbiased workload sample. Reusing it is useful for regression but not population prevalence without a sampling model."
+    limitations: ["A frozen set can become development data and must be supplemented with fresh protected sampling."]
+    applicability: "Fuzzing, red teaming, prompt search, adversarial generation, and incident mining."
+    curriculum_usage: { lessons: ["16.5"], labs: ["LAB-D"], assessments: ["Incident-16.1"] }
+  - id: CLM-011
+    claim: "Fault injection is interpretable only when the injected fault, target boundary, timing, expected invariant, blast radius, abort condition, and recovery oracle are explicit."
+    provenance: DERIVED
+    domain: fault_injection
+    concepts: [fault_model, blast_radius, recovery_oracle]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["The test environment can inject and observe faults without uncontrolled harm."]
+    derivation: "A failure after injection may be caused by invalid setup, propagation, recovery, or oracle error. Boundary-specific evidence and safety controls are required to distinguish these paths."
+    limitations: ["Synthetic faults may not reproduce correlated provider, data, or regional incidents."]
+    applicability: "Timeout, cancellation, malformed event, stale cache, tool error, partial response, worker crash, and quota tests."
+    curriculum_usage: { lessons: ["16.5"], labs: ["LAB-D"], assessments: ["Mastery-16"] }
+  - id: CLM-012
+    claim: "A counterexample becomes durable regression evidence only after validity and oracle adjudication, minimization without losing the failure, deduplication, root-cause attribution, versioned fixture promotion, and later retirement review."
+    provenance: DERIVED
+    domain: counterexample_lifecycle
+    concepts: [minimization, regression_fixture, deduplication]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["The failure can be replayed or represented with sufficient system and environment lineage."]
+    derivation: "Raw discoveries can be invalid, flaky, redundant, or tied to obsolete behavior. Lifecycle controls preserve the smallest causal evidence while preventing permanent suite growth from untriaged artifacts."
+    limitations: ["Nondeterministic providers and unavailable historical state can prevent exact replay."]
+    applicability: "All generated, incident-derived, and red-team counterexamples."
+    curriculum_usage: { lessons: ["16.6"], labs: ["LAB-A", "LAB-D"], assessments: ["Incident-16.1"] }
+  - id: CLM-013
+    claim: "Input, state, path, neuron, requirement, or mutation coverage measures exercised structure under its definition; high coverage is necessary evidence for some strategies but never proves correctness or test-oracle validity."
+    provenance: DERIVED
+    domain: test_adequacy
+    concepts: [coverage, adequacy, oracle_validity]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Coverage is computed consistently over a declared structural universe."]
+    derivation: "Coverage records whether a structural element was exercised, not whether its behavior was checked correctly. A weak oracle can pass every covered element."
+    limitations: ["Different coverage definitions are not directly comparable and can be gamed."]
+    applicability: "Test portfolio measurement and search guidance."
+    curriculum_usage: { lessons: ["16.1", "16.6"], labs: ["LAB-C"], assessments: ["Mastery-16"] }
+  - id: CLM-014
+    claim: "At Hypothesis commit 9c55f97e507eae21677457e84737b386fd06e271, given wraps generated-example tests, RuleBasedStateMachine/run_state_machine_as_test exercise stateful rules, ConjectureRunner drives exploration, and Shrinker minimizes interesting examples."
+    provenance: VERIFIED_FACT
+    domain: testing_runtime
+    concepts: [hypothesis, conjecture_engine, shrinking]
+    confidence: high
+    currentness_status: "CURRENT SOURCE SNAPSHOT"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "Hypothesis core and stateful APIs", repository: "https://github.com/HypothesisWorks/hypothesis", commit: "9c55f97e507eae21677457e84737b386fd06e271", verification_date: "2026-09-26", file: "hypothesis/src/hypothesis/core.py; hypothesis/src/hypothesis/stateful.py", symbol: "given; find; RuleBasedStateMachine; run_state_machine_as_test", entry_point: "@given(...) test or run_state_machine_as_test(...)", execution_path: "strategy/state-machine definition -> generated choices/rules -> predicate/assertion execution -> failing example", url: "https://github.com/HypothesisWorks/hypothesis/tree/9c55f97e507eae21677457e84737b386fd06e271/hypothesis/src/hypothesis", accessed_at: "2026-09" }
+      - { source_type: source_code, tier: 1, title: "Hypothesis Conjecture engine and shrinker", repository: "https://github.com/HypothesisWorks/hypothesis", commit: "9c55f97e507eae21677457e84737b386fd06e271", verification_date: "2026-09-26", file: "hypothesis/src/hypothesis/internal/conjecture/engine.py; hypothesis/src/hypothesis/internal/conjecture/shrinker.py", symbol: "ConjectureRunner; Shrinker", entry_point: "generated test execution after @given/find/stateful setup", execution_path: "choice generation and execution -> interesting example -> shrink passes -> minimized replayable example", url: "https://github.com/HypothesisWorks/hypothesis/tree/9c55f97e507eae21677457e84737b386fd06e271/hypothesis/src/hypothesis/internal/conjecture", accessed_at: "2026-09" }
+    limitations: ["Static Python source inspection only; engine behavior was not executed, and this implementation does not define all property-based testing systems."]
+    applicability: "Production source-reading example for generation, stateful exploration, and shrinking."
+    curriculum_usage: { lessons: ["16.2", "16.6"], labs: ["LAB-A"], assessments: ["Production-Source-Trace"] }
+  - id: CLM-015
+    claim: "A risk-weighted portfolio combining example, property, metamorphic, differential, mutation, and fault-injection tests should find more unique consequential failures per unit cost than maximizing any one coverage score."
+    provenance: HYPOTHESIS
+    domain: test_portfolio
+    concepts: [portfolio, unique_failure_yield, test_cost]
+    confidence: medium
+    currentness_status: "CURRENT / WORKLOAD-DEPENDENT"
+    hypothesis:
+      prediction: "A portfolio allocated by hazard and historical escape data increases unique high-severity failures found before release at equal evaluation cost."
+      measurement_target: "Unique adjudicated failure clusters, severity, overlap by method, time/cost to discovery, false-positive rate, shrink/triage cost, and escaped incidents."
+      falsifying_observation: "The portfolio finds no more unique consequential failures or causes higher total decision cost than the best preregistered single-method baseline."
+    limitations: ["Historical risk weighting can miss novel failure classes and generated cases can share hidden common causes."]
+    applicability: "Release and continuous falsification programs."
+    curriculum_usage: { lessons: ["16.6"], labs: ["LAB-D"], assessments: ["Mastery-16"] }

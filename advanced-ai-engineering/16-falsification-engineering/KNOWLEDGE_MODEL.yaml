@@ -1,0 +1,63 @@
+module: "16-falsification-engineering"
+registry_version: "1.0.0"
+
+required_concepts: [falsification_contract, property, oracle, generator, shrinker, stateful_testing, metamorphic_relation, behavioral_test, differential_testing, mutation_testing, stochastic_trial, adaptive_search, fault_injection, counterexample_lifecycle, test_adequacy]
+prerequisite_concepts: [measurement_validity, experimental_unit, evaluation_contract, grader_validity, attempt_lineage, state_transition, system_boundary]
+first_occurrence_concepts: [falsification_contract, property_based_testing, shrinker, metamorphic_relation, differential_testing, mutation_testing, adaptive_search, counterexample_lifecycle]
+
+concept_dependencies:
+  - { concept: property, depends_on: [measurement_validity, system_boundary] }
+  - { concept: generator, depends_on: [property, experimental_unit] }
+  - { concept: shrinker, depends_on: [generator, oracle] }
+  - { concept: metamorphic_relation, depends_on: [property, oracle] }
+  - { concept: differential_testing, depends_on: [oracle, system_boundary] }
+  - { concept: mutation_testing, depends_on: [property, test_adequacy] }
+  - { concept: stochastic_trial, depends_on: [experimental_unit, attempt_lineage] }
+  - { concept: counterexample_lifecycle, depends_on: [grader_validity, attempt_lineage] }
+
+mechanisms:
+  - { id: "MECH-01", description: "A falsification contract specifies requirement, valid domain, observable predicate/relation, oracle, search budget, lineage, severity, and the claim a passing test cannot support.", evidence_ids: ["CLM-001", "CLM-006", "CLM-013"], derived_from: [] }
+  - { id: "MECH-02", description: "Property-based testing generates valid examples or state-machine actions, checks invariants, and shrinks a failing execution while preserving domain validity and failure.", evidence_ids: ["CLM-002", "CLM-003", "CLM-014"], derived_from: ["MECH-01"] }
+  - { id: "MECH-03", description: "Metamorphic testing transforms an input under a justified relation and checks the corresponding output relation when a complete single-case oracle is unavailable.", evidence_ids: ["CLM-004", "CLM-005"], derived_from: ["MECH-01"] }
+  - { id: "MECH-04", description: "Differential testing finds disagreements for adjudication, while mutation testing perturbs known boundaries to measure whether a suite detects chosen fault classes.", evidence_ids: ["CLM-007", "CLM-008"], derived_from: ["MECH-01"] }
+  - { id: "MECH-05", description: "Stochastic and adaptive tests separate per-cell repetition from population coverage and separate counterexample discovery from confirmatory estimation.", evidence_ids: ["CLM-009", "CLM-010"], derived_from: ["MECH-01"] }
+  - { id: "MECH-06", description: "Fault injection crosses an explicit boundary under a bounded blast radius and tests propagation, invariant preservation, recovery, and effect evidence.", evidence_ids: ["CLM-011"], derived_from: ["MECH-01"] }
+  - { id: "MECH-07", description: "A counterexample pipeline adjudicates, minimizes, deduplicates, attributes, promotes, replays, and retires failures while a portfolio measures unique risk-weighted yield instead of one coverage target.", evidence_ids: ["CLM-012", "CLM-013", "CLM-015"], derived_from: ["MECH-02", "MECH-03", "MECH-04", "MECH-05", "MECH-06"] }
+
+mathematical_models:
+  - { id: "MATH-01", description: "Generator support S_G is the set of inputs reachable with nonzero probability. A property test can falsify P only on sampled x in S_G intersect valid-domain D; passing says nothing about D outside S_G.", evidence_ids: ["CLM-001", "CLM-003"], derived_from: ["MECH-01", "MECH-02"] }
+  - { id: "MATH-02", description: "A metamorphic relation has an input predicate R_i(x,x') and required output predicate R_o(f(x),f(x')); a violation is evidence only when x and x' are valid and R_i is semantically justified.", evidence_ids: ["CLM-004", "CLM-005"], derived_from: ["MECH-03"] }
+  - { id: "MATH-03", description: "Mutation score MS=K/(M-E), where K chosen mutants are killed, M generated, and E adjudicated equivalent/invalid. It measures sensitivity to this operator distribution, not all real defects.", evidence_ids: ["CLM-008"], derived_from: ["MECH-04"] }
+  - { id: "MATH-04", description: "With zero failures in n IID Bernoulli trials, one-sided confidence 1-alpha gives p_upper=1-alpha^(1/n). Trials, outcome predicate, and denominator must remain fixed; dependence invalidates the calculation.", evidence_ids: ["CLM-009"], derived_from: ["MECH-05"] }
+  - { id: "MATH-05", description: "Portfolio yield can be reported as unique adjudicated severity-weighted failure clusters divided by total test, compute, judge, and triage cost; weights are risk policy and duplicate clustering is an empirical procedure.", evidence_ids: ["CLM-012", "CLM-015"], derived_from: ["MECH-07"] }
+
+implementation_mechanisms:
+  - { id: "IMPL-01", description: "A test manifest pins property/relation/oracle version, generator and seed, system/config revisions, raw attempts, environment, transformation, shrink trace, expected invariant, and terminal verdict.", evidence_ids: ["CLM-001", "CLM-003", "CLM-012"], derived_from: ["MECH-01", "MECH-02", "MECH-07"] }
+  - { id: "IMPL-02", description: "A fault matrix enumerates component, fault, injection point/time, observability, expected containment/recovery, abort threshold, cleanup, and postcondition evidence.", evidence_ids: ["CLM-011"], derived_from: ["MECH-06"] }
+  - { id: "IMPL-03", description: "Pinned Hypothesis source connects @given/find and rule-based state machines to ConjectureRunner exploration and Shrinker counterexample minimization.", evidence_ids: ["CLM-014"], derived_from: ["MECH-02"] }
+
+failure_modes:
+  - { id: "FAIL-01", description: "Oracle illusion encodes an ambiguous, incomplete, circular, or judge-biased requirement and treats every disagreement as a system defect.", evidence_ids: ["CLM-001", "CLM-004", "CLM-007"], derived_from: ["MECH-01", "MECH-03", "MECH-04"] }
+  - { id: "FAIL-02", description: "Generator theater reaches only easy inputs, filters heavily, violates domain constraints, or shrinks into a different/invalid failure.", evidence_ids: ["CLM-003", "CLM-014"], derived_from: ["MECH-02"] }
+  - { id: "FAIL-03", description: "Unsound metamorphism assumes a paraphrase, order swap, irrelevant insertion, or format change preserves meaning when the task or policy makes it consequential.", evidence_ids: ["CLM-004", "CLM-005"], derived_from: ["MECH-03"] }
+  - { id: "FAIL-04", description: "Common-mode differential failure makes agreeing systems wrong, while implementation or policy differences create expected disagreement.", evidence_ids: ["CLM-007"], derived_from: ["MECH-04"] }
+  - { id: "FAIL-05", description: "Mutation-score gaming selects trivial/equivalent mutants or operators unlike production defects and mistakes score maximization for correctness.", evidence_ids: ["CLM-008"], derived_from: ["MECH-04"] }
+  - { id: "FAIL-06", description: "False stochastic confidence counts correlated retries as independent, drops failed attempts, or generalizes a fixed-cell bound to unseen inputs.", evidence_ids: ["CLM-009"], derived_from: ["MECH-05"] }
+  - { id: "FAIL-07", description: "Adaptive-test leakage uses discovered worst cases to estimate prevalence or repeatedly tunes against a nominal holdout.", evidence_ids: ["CLM-010"], derived_from: ["MECH-05"] }
+  - { id: "FAIL-08", description: "Unsafe or unrealistic injection causes uncontrolled effects, tests the injector rather than the recovery path, or misses correlated real faults.", evidence_ids: ["CLM-011"], derived_from: ["MECH-06"] }
+  - { id: "FAIL-09", description: "Counterexample cemetery stores flaky, duplicate, unminimized, unowned failures until the suite becomes slow and ignored.", evidence_ids: ["CLM-012", "CLM-015"], derived_from: ["MECH-07"] }
+
+production_connections:
+  - { id: "PROD-01", description: "Release falsification combines versioned properties, risk-weighted generators/relations/faults, independent adjudication, confirmatory samples, and complete attempt/effect evidence.", evidence_ids: ["CLM-001", "CLM-010", "CLM-011", "CLM-012"], derived_from: ["MECH-01", "MECH-05", "MECH-06", "MECH-07"] }
+  - { id: "PROD-02", description: "Program health is measured by unique consequential failures, time/cost to discovery and shrink, false positives, replay rate, mutant/fault sensitivity, suite latency, and escaped incidents—not case count alone.", evidence_ids: ["CLM-008", "CLM-012", "CLM-013", "CLM-015"], derived_from: ["MECH-04", "MECH-07"] }
+
+research_connections:
+  - { id: "RESEARCH-01", description: "QuickCheck, metamorphic testing, differential testing, mutation testing, and CheckList remain distinct reference families whose assumptions must be adapted to stochastic composed AI systems.", evidence_ids: ["CLM-002", "CLM-004", "CLM-006", "CLM-007", "CLM-008"], derived_from: ["MECH-02", "MECH-03", "MECH-04"] }
+  - { id: "RESEARCH-02", description: "2025 LLM metamorphic research expands the relation catalog but leaves transformation soundness, free-form output oracles, and product transfer workload-dependent.", evidence_ids: ["CLM-005"], derived_from: ["MECH-03"] }
+
+candidate_capabilities:
+  - { capability: "Translate AI-system requirements into falsifiable properties, valid domains, oracles, severity, and explicit non-claims.", mapped_mechanisms: ["MECH-01", "MATH-01", "FAIL-01"] }
+  - { capability: "Implement generator- and state-machine-based tests that preserve validity and shrink failures without changing their cause.", mapped_mechanisms: ["MECH-02", "IMPL-01", "IMPL-03", "FAIL-02"] }
+  - { capability: "Design and adjudicate sound behavioral, metamorphic, differential, and mutation tests without equating disagreement or coverage with correctness.", mapped_mechanisms: ["MECH-03", "MECH-04", "MATH-02", "MATH-03", "FAIL-03", "FAIL-04", "FAIL-05"] }
+  - { capability: "Reason about stochastic repetition, adaptive discovery, confirmatory estimation, and safe boundary-specific fault injection.", mapped_mechanisms: ["MECH-05", "MECH-06", "MATH-04", "IMPL-02", "FAIL-06", "FAIL-07", "FAIL-08"] }
+  - { capability: "Operate a counterexample lifecycle and optimize a falsification portfolio for unique consequential failures and escaped-risk reduction.", mapped_mechanisms: ["MECH-07", "MATH-05", "FAIL-09", "PROD-01", "PROD-02"] }
