@@ -1,0 +1,207 @@
+module: "13-harness-engineering"
+registry_version: "1.0.0"
+research_cutoff: "2026-09-26"
+change_reason: "Replace placeholders with verified model-I/O contracts, structured-output mechanisms, streaming, portability, recovery, and pinned source behavior."
+claims:
+  - id: CLM-001
+    claim: "A model harness is a typed boundary that compiles application intent and state into a provider/model request, then normalizes transport events into validated application outcomes; it must preserve information rather than hide unsupported semantics."
+    provenance: DERIVED
+    domain: harness_architecture
+    concepts: [request_compilation, response_normalization, typed_boundary]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["The application supports more than raw free-text generation or may change model/provider/runtime versions."]
+    derivation: "Application types and provider protocols differ. An explicit boundary localizes transformations and lets callers distinguish unsupported capability, transport failure, invalid structure, semantic failure, and success."
+    limitations: ["The exact boundary and adapter topology are application-specific."]
+    applicability: "Hosted and self-served model integrations."
+    curriculum_usage: { lessons: ["13.1"], labs: ["LAB-A"], assessments: ["Mastery-13"] }
+  - id: CLM-002
+    claim: "A canonical request manifest should version task, prompt/template, messages/content blocks, model alias and resolved target, sampling/stopping parameters, tool/output schemas, context-selection inputs, timeout, metadata, and adapter policy."
+    provenance: DERIVED
+    domain: request_contract
+    concepts: [request_manifest, versioning, canonicalization]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["The harness can record configuration without persisting prohibited sensitive content."]
+    derivation: "Without the effective request inputs and transformation versions, two calls cannot be compared, replayed, attributed, or audited when behavior changes."
+    limitations: ["Provider-hidden preprocessing and model revisions may remain unavailable; privacy policy may require hashes or redaction."]
+    applicability: "Model request construction and provenance."
+    curriculum_usage: { lessons: ["13.1", "13.6"], labs: ["LAB-A", "LAB-D"], assessments: ["Incident-13.1"] }
+  - id: CLM-003
+    claim: "Prompt wording, formatting, delimiter, and ordering variations can change model behavior in evaluated workloads, so templates and serializers are executable, versioned dependencies rather than neutral strings."
+    provenance: VERIFIED_FACT
+    domain: prompt_contract
+    concepts: [prompt_sensitivity, template_version, serialization]
+    confidence: high
+    currentness_status: "CURRENT / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "When Punctuation Matters: A Large-Scale Comparison of Prompt Robustness Methods for LLMs", authors: "Mikhail Seleznyov, Mikhail Chaichuk, Gleb Ershov, Alexander Panchenko, Elena Tutubalina, Oleg Somov", year: "2025", url: "https://aclanthology.org/2025.findings-emnlp.1109/", section: "Abstract, experimental design, and results", accessed_at: "2026-09" }]
+    limitations: ["Sensitivity magnitude and useful mitigations vary by model, task, perturbation, and evaluation design."]
+    applicability: "Prompt/template regression and provider/model migration tests."
+    curriculum_usage: { lessons: ["13.1"], labs: ["LAB-A"], assessments: ["Mastery-13"] }
+  - id: CLM-004
+    claim: "Capability negotiation must be explicit per resolved target and endpoint: accepted content roles/types, context/output limits, tool calling, schema dialect/subset, streaming events, log probabilities, seeds, usage, cancellation, and error semantics cannot be inferred from a shared API shape."
+    provenance: DERIVED
+    domain: portability
+    concepts: [capability_matrix, provider_adapter, unsupported_feature]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Providers, endpoints, models, or serving backends expose non-identical features or semantics."]
+    derivation: "A common field name does not prove common support or meaning. Rejecting or deliberately emulating unsupported features avoids silent degradation in adapters and fallbacks."
+    limitations: ["Capabilities can change faster than static metadata and require conformance probes."]
+    applicability: "Multi-model, multi-provider, and hosted/local harnesses."
+    curriculum_usage: { lessons: ["13.2"], labs: ["LAB-A", "LAB-D"], assessments: ["Incident-13.1"] }
+  - id: CLM-005
+    claim: "JSON Schema Draft 2020-12 separates core and validation vocabularies, and format is annotation by default unless format assertion behavior is enabled; dialect and supported vocabulary must therefore be pinned."
+    provenance: VERIFIED_FACT
+    domain: schema_contract
+    concepts: [json_schema, dialect, format_assertion]
+    confidence: high
+    currentness_status: "REFERENCE / CURRENT SPECIFICATION"
+    evidence: [{ source_type: specification, tier: 1, title: "JSON Schema Draft 2020-12 Core and Validation", authors: "JSON Schema specification editors", year: "2022", version: "Draft 2020-12", url: "https://json-schema.org/draft/2020-12", section: "Core and Validation vocabularies; format annotation/assertion", accessed_at: "2026-09" }]
+    limitations: ["Provider and decoder implementations often support only subsets or extensions."]
+    applicability: "Structured outputs, tool arguments, and application validators."
+    curriculum_usage: { lessons: ["13.3"], labs: ["LAB-B"], assessments: ["Mastery-13"] }
+  - id: CLM-006
+    claim: "Grammar-constrained decoding masks invalid continuations so generated text remains inside a declared formal language in the evaluated implementation/task setup; it is a structural mechanism, not a semantic verifier."
+    provenance: VERIFIED_FACT
+    domain: constrained_decoding
+    concepts: [grammar, token_masking, structural_validity]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "Grammar-Constrained Decoding for Structured NLP Tasks without Finetuning", authors: "Saibo Geng, Martin Josifoski, Maxime Peyrard, Robert West", year: "2023", version: "arXiv v6, 2024", url: "https://arxiv.org/abs/2305.13971", section: "Method and experiments", accessed_at: "2026-09" }]
+    limitations: ["Guarantees are relative to the implemented grammar, tokenizer integration, supported schema subset, and termination behavior; task correctness is separate."]
+    applicability: "JSON, tool-call, DSL, and other formally describable outputs."
+    curriculum_usage: { lessons: ["13.3"], labs: ["LAB-B"], assessments: ["Mastery-13"] }
+  - id: CLM-007
+    claim: "Syntactic parse success, schema conformance, application invariant satisfaction, factual/task correctness, authorization, and side-effect completion are distinct gates; passing an earlier gate cannot establish a later one."
+    provenance: DERIVED
+    domain: output_validation
+    concepts: [validation_ladder, semantic_validation, postcondition]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["The application can define at least some domain invariants or external checks beyond syntax."]
+    derivation: "Each gate constrains a different property: language membership, structural shape, domain meaning, evidence, permission, and environment state. No logical implication connects them without additional assumptions."
+    limitations: ["Some semantic claims lack deterministic oracles and require calibrated abstention or human review."]
+    applicability: "Every structured model output and tool proposal."
+    curriculum_usage: { lessons: ["13.3", "13.5"], labs: ["LAB-B", "LAB-C"], assessments: ["Incident-13.1"] }
+  - id: CLM-008
+    claim: "JSONSchemaBench evaluates constrained decoders on efficiency, schema-feature coverage, and output quality using real-world schemas plus the official test suite, demonstrating that structure generation requires more than a single valid-JSON rate."
+    provenance: VERIFIED_FACT
+    domain: structured_output_evaluation
+    concepts: [jsonschemabench, coverage, efficiency, quality]
+    confidence: high
+    currentness_status: "CURRENT REFERENCE / BENCHMARK-SPECIFIC"
+    evidence: [{ source_type: paper, tier: 1, title: "JSONSchemaBench: A Rigorous Benchmark of Structured Outputs for Language Models", authors: "Saibo Geng, Hudson Cooper, Michał Moskal, Samuel Jenkins, Julian Berman, Nathan Ranchin, Robert West, Eric Horvitz, Harsha Nori", year: "2025", url: "https://arxiv.org/abs/2501.10868", section: "Benchmark design and experiments", accessed_at: "2026-09" }]
+    limitations: ["Framework versions, schemas, models, hardware, and quality tasks bound the findings; benchmark validity does not prove application semantics."]
+    applicability: "Selecting and regression-testing structured-generation backends."
+    curriculum_usage: { lessons: ["13.3", "13.6"], labs: ["LAB-B", "LAB-D"], assessments: ["Mastery-13"] }
+  - id: CLM-009
+    claim: "A streaming response is an event sequence, not a list of complete application objects: the harness must preserve order and IDs, assemble fragmented content/tool arguments, handle terminal/error/cancel events, and validate only complete units while still exposing partial-progress status."
+    provenance: DERIVED
+    domain: streaming
+    concepts: [event_assembly, partial_json, finish_reason]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["The provider may split logical fields across arbitrary transport chunks."]
+    derivation: "Chunk boundaries are transport boundaries. Parsing each chunk independently or dropping event identity confounds incomplete data with invalid data and can corrupt parallel choices or tool calls."
+    limitations: ["Exact event taxonomies and cancellation guarantees vary by protocol."]
+    applicability: "Streaming text, structured output, and tool-call arguments."
+    curriculum_usage: { lessons: ["13.4"], labs: ["LAB-C"], assessments: ["Incident-13.1"] }
+  - id: CLM-010
+    claim: "Retry policy must distinguish pre-dispatch validation, connection/transport, rate limit, provider overload, deadline/cancellation, truncation, invalid structure, refusal/policy, and semantic failure because retryability, backoff, and evidence differ."
+    provenance: DERIVED
+    domain: recovery
+    concepts: [error_taxonomy, retry_budget, attempt_lineage]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["The harness preserves dispatch state, status/headers where available, attempt identity, and remaining deadline/budget."]
+    derivation: "Retrying invalid input is futile, retrying after deadline harms utility, and retrying a stochastic semantic failure creates a new sample rather than repairing transport. Classification determines whether to reject, back off, repair, resample, fallback, or stop."
+    limitations: ["Provider error mapping can be lossy; application-specific failures need additional classes."]
+    applicability: "Synchronous and streaming model calls."
+    curriculum_usage: { lessons: ["13.5"], labs: ["LAB-C"], assessments: ["Incident-13.1"] }
+  - id: CLM-011
+    claim: "Fallback is valid only when the alternate target satisfies the request's required capabilities and has passed prompt/schema/serializer conformance tests; availability alone does not make outputs substitutable."
+    provenance: DERIVED
+    domain: portability
+    concepts: [fallback, semantic_compatibility, conformance]
+    confidence: high
+    currentness_status: "CURRENT / WORKLOAD-DEPENDENT"
+    assumptions: ["The application declares required capabilities and acceptable output semantics before dispatch."]
+    derivation: "A fallback can change tokenizer, context limits, roles, tool protocol, schema subset, safety behavior, latency, cost, and quality. Compatibility is an evaluated relation, not a provider-name mapping."
+    limitations: ["Emergency degradation policies may deliberately relax requirements but must expose that outcome."]
+    applicability: "Model routing, failover, and hosted/local substitution."
+    curriculum_usage: { lessons: ["13.2", "13.5"], labs: ["LAB-A", "LAB-C"], assessments: ["Mastery-13"] }
+  - id: CLM-012
+    claim: "Replay provenance includes resolved provider/endpoint/model, harness and adapter versions, effective serialized request, prompt/tool/schema identities, sampling and stopping parameters, seed if supported, timestamps, attempts, raw events, normalized response, usage, and terminal status; this enables diagnosis but not guaranteed bitwise reproduction."
+    provenance: DERIVED
+    domain: reproducibility
+    concepts: [replay_manifest, raw_response, normalized_response]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Recording respects privacy, retention, and secret-redaction requirements."]
+    derivation: "Observed behavior is conditional on the effective request and execution target. Missing transformation inputs prevents attribution; stochastic kernels, hidden revisions, and provider state can still prevent exact replay."
+    limitations: ["Raw content may be unavailable or prohibited; hashes and fixture-based conformance may be the strongest permissible evidence."]
+    applicability: "Regression, incident response, and audit."
+    curriculum_usage: { lessons: ["13.6"], labs: ["LAB-D"], assessments: ["Incident-13.1"] }
+  - id: CLM-013
+    claim: "Harness metrics must include every attempt and stage—queue, serialization, connection, time to first event, stream duration, validation/repair, tokens/usage, cancellation, and final outcome—because successful-final-attempt metrics hide retry amplification."
+    provenance: DERIVED
+    domain: observability
+    concepts: [attempt_amplification, stage_latency, usage_accounting]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Attempts share a root request ID and timestamps/usage are available or explicitly missing."]
+    derivation: "End-to-end latency and cost accumulate across failed and successful attempts. Conditioning only on the final success produces survivorship bias and undercounts load."
+    limitations: ["Provider usage fields and token definitions can differ; client estimates require versioned error bounds."]
+    applicability: "Capacity, cost, SLO, and reliability telemetry at the model boundary."
+    curriculum_usage: { lessons: ["13.6"], labs: ["LAB-D"], assessments: ["Mastery-13"] }
+  - id: CLM-014
+    claim: "XGrammar describes compiling grammars against tokenizer information and applying token masks during decoding, with optimizations and inference-engine co-design; its reported performance is implementation-, schema-, model-, and serving-condition-specific."
+    provenance: VERIFIED_FACT
+    domain: constrained_decoding
+    concepts: [xgrammar, grammar_compilation, token_mask]
+    confidence: high
+    currentness_status: "CURRENT IMPLEMENTATION FAMILY"
+    evidence: [{ source_type: paper, tier: 1, title: "XGrammar: Flexible and Efficient Structured Generation Engine for Large Language Models", authors: "Yixin Dong, Charlie F. Ruan, Yaxing Cai, Ruihang Lai, Ziyi Xu, Yilong Zhao, Tianqi Chen", year: "2025", version: "MLSys 2025 / arXiv v3", url: "https://arxiv.org/abs/2411.15100", section: "Design, implementation, and evaluation", accessed_at: "2026-09" }]
+    limitations: ["Do not transfer reported speedups or near-zero-overhead claims without reproducing model, grammar, backend, hardware, batch, and cache conditions."]
+    applicability: "Self-hosted constrained generation and source reading."
+    curriculum_usage: { lessons: ["13.3"], labs: ["LAB-B"], assessments: ["Production-Source-Trace"] }
+  - id: CLM-015
+    claim: "At XGrammar commit 4221346f3d26b8306b46de19cb40c8a525c4871c, GrammarCompiler.compile_json_schema compiles a schema for tokenizer-aware matching; GrammarMatcher accepts tokens and fills next-token bitmasks; the Transformers LogitsProcessor accepts the prior token, fills masks, and applies them to logits."
+    provenance: VERIFIED_FACT
+    domain: runtime_implementation
+    concepts: [xgrammar, grammar_compiler, grammar_matcher, logits_processor]
+    confidence: high
+    currentness_status: "CURRENT SOURCE SNAPSHOT"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "XGrammar compiler", repository: "https://github.com/mlc-ai/xgrammar", commit: "4221346f3d26b8306b46de19cb40c8a525c4871c", verification_date: "2026-09-26", file: "python/xgrammar/compiler.py", symbol: "GrammarCompiler.compile_json_schema", entry_point: "application constructs GrammarCompiler and calls compile_json_schema", execution_path: "schema serialization -> native compiler handle -> CompiledGrammar", url: "https://github.com/mlc-ai/xgrammar/blob/4221346f3d26b8306b46de19cb40c8a525c4871c/python/xgrammar/compiler.py", accessed_at: "2026-09" }
+      - { source_type: source_code, tier: 1, title: "XGrammar matcher", repository: "https://github.com/mlc-ai/xgrammar", commit: "4221346f3d26b8306b46de19cb40c8a525c4871c", verification_date: "2026-09-26", file: "python/xgrammar/matcher.py", symbol: "GrammarMatcher.accept_token; GrammarMatcher.fill_next_token_bitmask", entry_point: "decoder or logits processor advances a matcher", execution_path: "compiled grammar -> matcher state -> fill valid-token bitmask -> sample -> accept token -> next matcher state", url: "https://github.com/mlc-ai/xgrammar/blob/4221346f3d26b8306b46de19cb40c8a525c4871c/python/xgrammar/matcher.py", accessed_at: "2026-09" }
+      - { source_type: source_code, tier: 1, title: "XGrammar Transformers integration", repository: "https://github.com/mlc-ai/xgrammar", commit: "4221346f3d26b8306b46de19cb40c8a525c4871c", verification_date: "2026-09-26", file: "python/xgrammar/contrib/hf.py", symbol: "LogitsProcessor.__call__", entry_point: "Transformers generation invokes the logits processor", execution_path: "accept last sampled token -> fill next-token bitmask -> apply_token_bitmask_inplace to scores", url: "https://github.com/mlc-ai/xgrammar/blob/4221346f3d26b8306b46de19cb40c8a525c4871c/python/xgrammar/contrib/hf.py", accessed_at: "2026-09" }
+    limitations: ["Static inspection only; native implementation and end-to-end generation were not executed.", "This source path is specific to the pinned integration and does not define hosted-provider behavior."]
+    applicability: "Implementation example for tokenizer-coupled constrained decoding."
+    curriculum_usage: { lessons: ["13.3"], labs: ["LAB-B"], assessments: ["Production-Source-Trace"] }
+  - id: CLM-016
+    claim: "XGrammar-2's 2026 maintainer report adds composable structural tags and batching/speculative-decoding integration for complex agent formats, while explicitly framing constraints as format enforcement rather than semantic correction."
+    provenance: VERIFIED_FACT
+    domain: structured_output_frontier
+    concepts: [xgrammar_2, structural_tag, agent_format]
+    confidence: medium
+    currentness_status: "FRONTIER / IMPLEMENTATION-SPECIFIC"
+    evidence: [{ source_type: official_blog, tier: 2, title: "XGrammar-2: Fast and Customizable Structured Generation for Tool Calling and Agents", authors: "MLC Community", year: "2026", url: "https://blog.mlc.ai/2026/05/04/xgrammar-2-fast-customizable-structured-generation", section: "Structural Tag, serving support, and evaluation", accessed_at: "2026-09" }]
+    limitations: ["Maintainer-authored evidence; adoption and performance claims were not independently reproduced here."]
+    applicability: "Frontier protocols combining free text, reasoning channels, and structured tool calls."
+    curriculum_usage: { lessons: ["13.3"], labs: ["LAB-B"], assessments: ["Mastery-13"] }
+  - id: CLM-017
+    claim: "Provider conformance probes over canonical fixtures, stream chunking, schema features, errors, and usage will detect adapter drift earlier than production outcome metrics alone."
+    provenance: HYPOTHESIS
+    domain: portability
+    concepts: [conformance_suite, adapter_drift, contract_test]
+    confidence: high
+    currentness_status: "CURRENT / WORKLOAD-DEPENDENT"
+    hypothesis:
+      prediction: "A versioned conformance suite detects incompatible provider/model/adapter changes before or during canary with lower user-impacting failure than end-outcome monitoring alone."
+      measurement_target: "Fixture pass rate by capability, raw-versus-normalized deltas, stream assembly, schema coverage, error classification, usage reconciliation, canary failures, and time to detection."
+      falsifying_observation: "The suite adds no earlier detection or reduction in user-impacting regressions over a preregistered outcome-only baseline within uncertainty."
+    limitations: ["Fixtures can miss emergent behavioral drift and may themselves encode stale assumptions."]
+    applicability: "Adapter, model, endpoint, and provider upgrades."
+    curriculum_usage: { lessons: ["13.2", "13.6"], labs: ["LAB-A", "LAB-D"], assessments: ["Incident-13.1"] }

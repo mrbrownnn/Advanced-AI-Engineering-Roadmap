@@ -1,0 +1,185 @@
+module: "13-harness-engineering"
+registry_version: "1.0.0"
+
+required_concepts:
+  - "model_harness"
+  - "canonical_request"
+  - "effective_request"
+  - "provider_adapter"
+  - "capability_matrix"
+  - "prompt_template_versioning"
+  - "structured_output"
+  - "schema_dialect"
+  - "constrained_decoding"
+  - "validation_ladder"
+  - "stream_event_assembly"
+  - "error_normalization"
+  - "retry_budget"
+  - "fallback_conformance"
+  - "attempt_lineage"
+  - "replay_manifest"
+
+prerequisite_concepts:
+  - "tokenization"
+  - "sampling"
+  - "behavior_uncertainty"
+  - "context_budget"
+  - "data_lineage"
+  - "agent_loop"
+  - "tool_contract"
+  - "latency_distribution"
+  - "goodput"
+
+first_occurrence_concepts:
+  - "model_harness"
+  - "canonical_request"
+  - "effective_request"
+  - "provider_adapter"
+  - "capability_matrix"
+  - "prompt_template_versioning"
+  - "schema_dialect"
+  - "validation_ladder"
+  - "stream_event_assembly"
+  - "error_normalization"
+  - "fallback_conformance"
+  - "attempt_lineage"
+  - "replay_manifest"
+
+concept_dependencies:
+  - { concept: "canonical_request", depends_on: ["model_harness", "data_lineage"] }
+  - { concept: "effective_request", depends_on: ["canonical_request", "provider_adapter"] }
+  - { concept: "capability_matrix", depends_on: ["provider_adapter", "tool_contract"] }
+  - { concept: "prompt_template_versioning", depends_on: ["effective_request", "behavior_uncertainty"] }
+  - { concept: "constrained_decoding", depends_on: ["tokenization", "sampling", "schema_dialect"] }
+  - { concept: "validation_ladder", depends_on: ["structured_output", "schema_dialect"] }
+  - { concept: "stream_event_assembly", depends_on: ["provider_adapter", "structured_output"] }
+  - { concept: "retry_budget", depends_on: ["error_normalization", "latency_distribution"] }
+  - { concept: "fallback_conformance", depends_on: ["capability_matrix", "validation_ladder"] }
+  - { concept: "replay_manifest", depends_on: ["effective_request", "attempt_lineage"] }
+
+mechanisms:
+  - id: "MECH-01"
+    description: "A canonical harness compiles a typed application request through a capability-checked adapter into an effective provider request, then preserves raw events while producing a normalized validated outcome."
+    evidence_ids: ["CLM-001", "CLM-002", "CLM-004"]
+    derived_from: []
+  - id: "MECH-02"
+    description: "Prompts, serializers, tool descriptions, schemas, and adapter transforms are versioned executable dependencies whose ordering and formatting are regression-tested."
+    evidence_ids: ["CLM-002", "CLM-003", "CLM-012"]
+    derived_from: ["MECH-01"]
+  - id: "MECH-03"
+    description: "Capability negotiation rejects, deliberately emulates, or explicitly degrades unsupported request features instead of silently dropping them."
+    evidence_ids: ["CLM-004", "CLM-011", "CLM-017"]
+    derived_from: ["MECH-01"]
+  - id: "MECH-04"
+    description: "Structured-output handling pins a schema dialect/subset and separately evaluates parsing, schema conformance, application invariants, task semantics, authority, and external postconditions."
+    evidence_ids: ["CLM-005", "CLM-006", "CLM-007", "CLM-008"]
+    derived_from: ["MECH-01"]
+  - id: "MECH-05"
+    description: "Constrained decoding compiles a formal structure with tokenizer information, tracks grammar state, masks invalid next tokens, and advances state after sampling; guarantees remain scoped to implemented constraints."
+    evidence_ids: ["CLM-006", "CLM-014", "CLM-015", "CLM-016"]
+    derived_from: ["MECH-04"]
+  - id: "MECH-06"
+    description: "A streaming assembler treats chunks as ordered protocol events, correlates choices/tool calls, accumulates fragmented fields, records partial status, and validates complete logical units at termination."
+    evidence_ids: ["CLM-009"]
+    derived_from: ["MECH-01", "MECH-04"]
+  - id: "MECH-07"
+    description: "Recovery normalizes failure stage and class, consumes a shared attempt/deadline/cost budget, and chooses reject, backoff, repair, resample, compatible fallback, or stop."
+    evidence_ids: ["CLM-010", "CLM-011", "CLM-013"]
+    derived_from: ["MECH-01", "MECH-03", "MECH-04", "MECH-06"]
+  - id: "MECH-08"
+    description: "Replay and conformance evidence joins canonical and effective requests, target/adapter versions, raw events, normalized output, attempts, usage, timing, terminal status, and validation results."
+    evidence_ids: ["CLM-002", "CLM-012", "CLM-013", "CLM-017"]
+    derived_from: ["MECH-01", "MECH-02", "MECH-03", "MECH-06", "MECH-07"]
+
+mathematical_models:
+  - id: "MATH-01"
+    description: "For request r and target p, dispatch is admissible when required capabilities C_req(r) are a subset of verified capabilities C_verified(p), after accounting for explicitly declared emulations; this set relation is an exact policy rule, while capability discovery is empirical."
+    evidence_ids: ["CLM-004", "CLM-011", "CLM-017"]
+    derived_from: ["MECH-03"]
+  - id: "MATH-02"
+    description: "Validation is a non-equivalent predicate vector V=(parse,schema,invariants,task/evidence,authorization,postcondition). Overall acceptance is the conjunction of the gates required by the application; an omitted gate is not implied by earlier successes."
+    evidence_ids: ["CLM-005", "CLM-006", "CLM-007"]
+    derived_from: ["MECH-04"]
+  - id: "MATH-03"
+    description: "For sequential attempts, end-to-end latency is pre-harness time plus the sum of serialization, queue/connection, model stream, validation/repair, and backoff durations across all attempts. Cost and token usage likewise sum over attempts; overlapping work uses critical-path timing."
+    evidence_ids: ["CLM-010", "CLM-013"]
+    derived_from: ["MECH-07", "MECH-08"]
+  - id: "MATH-04"
+    description: "Attempt amplification A=N_attempts/N_root_requests and token amplification A_tok=T_all_attempts/T_final_accepted quantify retry/fallback overhead for a declared window; neither measures quality, and zero accepted output requires an explicit denominator policy."
+    evidence_ids: ["CLM-013"]
+    derived_from: ["MECH-08"]
+
+implementation_mechanisms:
+  - id: "IMPL-01"
+    description: "The adapter interface returns either an explicit unsupported-capability result, normalized typed events/outcome with raw payload references, or a staged typed error; it never silently removes a required field."
+    evidence_ids: ["CLM-001", "CLM-004", "CLM-009", "CLM-010"]
+    derived_from: ["MECH-01", "MECH-03", "MECH-06", "MECH-07"]
+  - id: "IMPL-02"
+    description: "A schema compiler/validator contract records dialect, supported vocabulary/subset, strictness, grammar/tokenizer identity, compilation cache key, validation errors, and semantic-validator version."
+    evidence_ids: ["CLM-005", "CLM-006", "CLM-008", "CLM-014"]
+    derived_from: ["MECH-04", "MECH-05"]
+  - id: "IMPL-03"
+    description: "Pinned XGrammar source traces JSON-schema compilation, matcher bitmask generation/token acceptance, and a Transformers logits processor that applies the mask."
+    evidence_ids: ["CLM-015"]
+    derived_from: ["MECH-05"]
+
+failure_modes:
+  - id: "FAIL-01"
+    description: "Adapter semantic loss maps incompatible provider fields into a common shape while dropping roles, content blocks, finish reasons, tool IDs, refusals, usage, or errors."
+    evidence_ids: ["CLM-001", "CLM-004", "CLM-017"]
+    derived_from: ["MECH-01", "MECH-03"]
+  - id: "FAIL-02"
+    description: "Prompt drift changes formatting, ordering, examples, or serialization without a version bump and is misdiagnosed as model drift."
+    evidence_ids: ["CLM-002", "CLM-003"]
+    derived_from: ["MECH-02"]
+  - id: "FAIL-03"
+    description: "Schema illusion treats parseable JSON or decoder-conformant output as semantically correct, authorized, or externally completed."
+    evidence_ids: ["CLM-005", "CLM-006", "CLM-007"]
+    derived_from: ["MECH-04", "MATH-02"]
+  - id: "FAIL-04"
+    description: "Unsupported-schema drift accepts a provider or decoder subset that ignores keywords, format assertions, recursion, ordering, or other required constraints."
+    evidence_ids: ["CLM-005", "CLM-008", "CLM-014"]
+    derived_from: ["MECH-03", "MECH-04", "IMPL-02"]
+  - id: "FAIL-05"
+    description: "Streaming corruption parses chunks as complete JSON, merges parallel calls by position rather than stable identity, loses terminal events, or reports partial output as complete."
+    evidence_ids: ["CLM-009"]
+    derived_from: ["MECH-06"]
+  - id: "FAIL-06"
+    description: "Retry amplification misclassifies deterministic request/adapter/semantic errors as transient and multiplies latency, cost, and load while hiding failed attempts."
+    evidence_ids: ["CLM-010", "CLM-013"]
+    derived_from: ["MECH-07", "MATH-03", "MATH-04"]
+  - id: "FAIL-07"
+    description: "Fallback incompatibility returns an available response from a target that cannot preserve required schema, context, tool, policy, latency, or quality semantics."
+    evidence_ids: ["CLM-004", "CLM-011", "CLM-017"]
+    derived_from: ["MECH-03", "MECH-07"]
+  - id: "FAIL-08"
+    description: "Replay theater records a seed and final normalized text but omits effective request, target revision, adapter transforms, raw events, failed attempts, or hidden provider state."
+    evidence_ids: ["CLM-002", "CLM-012", "CLM-013"]
+    derived_from: ["MECH-08"]
+
+production_connections:
+  - id: "PROD-01"
+    description: "Ship adapters behind a capability registry and conformance suite covering canonical fixtures, schema vocabulary, stream fragmentation, error mapping, cancellation, usage, and raw-versus-normalized preservation."
+    evidence_ids: ["CLM-004", "CLM-008", "CLM-009", "CLM-010", "CLM-017"]
+    derived_from: ["MECH-03", "MECH-04", "MECH-06", "MECH-07", "MECH-08", "IMPL-01"]
+  - id: "PROD-02"
+    description: "Release prompt/schema/adapter changes with immutable manifests, paired workload slices, invalid and truncated streams, provider failures, fallback tests, canary limits, and rollback while retaining every attempt in latency/cost accounting."
+    evidence_ids: ["CLM-002", "CLM-003", "CLM-011", "CLM-012", "CLM-013"]
+    derived_from: ["MECH-02", "MECH-07", "MECH-08"]
+
+research_connections:
+  - id: "RESEARCH-01"
+    description: "Grammar-constrained decoding and XGrammar establish structural-control mechanisms, while JSONSchemaBench makes schema coverage, efficiency, and output quality separate evaluation axes."
+    evidence_ids: ["CLM-006", "CLM-008", "CLM-014", "CLM-015"]
+    derived_from: ["MECH-04", "MECH-05"]
+  - id: "RESEARCH-02"
+    description: "2025–2026 evidence extends prompt-robustness and structured-generation work toward richer agent protocols, but no universal prompt, schema subset, adapter, or zero-overhead guarantee is established."
+    evidence_ids: ["CLM-003", "CLM-008", "CLM-016"]
+    derived_from: ["MECH-02", "MECH-05"]
+
+candidate_capabilities:
+  - { capability: "Compile typed application intent into an auditable effective model request without silently losing required semantics.", mapped_mechanisms: ["MECH-01", "MECH-02", "IMPL-01", "FAIL-01", "FAIL-02"] }
+  - { capability: "Negotiate target capabilities and prove fallback compatibility with conformance fixtures.", mapped_mechanisms: ["MECH-03", "MATH-01", "FAIL-04", "FAIL-07", "PROD-01"] }
+  - { capability: "Engineer structured outputs with pinned dialects, constrained decoding, and distinct syntactic, structural, semantic, authority, and effect gates.", mapped_mechanisms: ["MECH-04", "MECH-05", "MATH-02", "IMPL-02", "IMPL-03", "FAIL-03"] }
+  - { capability: "Assemble streaming events correctly and recover according to failure stage under shared deadline, attempt, and cost budgets.", mapped_mechanisms: ["MECH-06", "MECH-07", "MATH-03", "FAIL-05", "FAIL-06"] }
+  - { capability: "Reproduce and diagnose harness behavior from canonical/effective requests, raw events, normalized outputs, attempts, usage, and validation evidence.", mapped_mechanisms: ["MECH-08", "MATH-04", "FAIL-08", "PROD-02"] }
