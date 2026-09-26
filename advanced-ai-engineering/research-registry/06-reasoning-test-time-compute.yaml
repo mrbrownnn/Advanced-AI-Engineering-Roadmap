@@ -1,0 +1,341 @@
+module: "06-reasoning-test-time-compute"
+registry_version: "1.0.0"
+research_cutoff: "2026-09-26"
+change_reason: "Replace generated placeholders with verified test-time reasoning mechanisms, qualified mathematical models, source tracing, and falsifiable failure hypotheses."
+
+claims:
+  - id: CLM-001
+    claim: "Chain-of-thought prompting elicits intermediate text and improved accuracy on the models and arithmetic, commonsense, and symbolic tasks evaluated by Wei et al.; it does not establish that visible rationales are universally beneficial or faithful accounts of model causation."
+    provenance: VERIFIED_FACT
+    domain: reasoning_elicitation
+    concepts: [chain_of_thought, intermediate_reasoning, task_dependence]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models"
+        authors: "Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Brian Ichter, Fei Xia, Ed Chi, Quoc Le, Denny Zhou"
+        year: "2022"
+        url: "https://arxiv.org/abs/2201.11903"
+        section: "Abstract and experiments"
+        accessed_at: "2026-09"
+    limitations:
+      - "Effects depend on model, scale, prompt exemplars, task, decoding, and scoring."
+      - "Outputting steps is an observable behavior, not proof of an internal causal trace."
+    applicability: "Empirical baseline for tasks where intermediate token generation may improve answer construction."
+    curriculum_usage: { lessons: ["6.1"], labs: ["LAB-A"], assessments: ["Mastery-06"] }
+
+  - id: CLM-002
+    claim: "Self-consistency samples diverse chain-of-thought paths and selects an answer by marginalizing over their final answers; its paper reports gains on evaluated reasoning benchmarks, but benefit depends on sample diversity, error correlation, answer normalization, and compute budget."
+    provenance: VERIFIED_FACT
+    domain: parallel_reasoning
+    concepts: [self_consistency, answer_voting, sample_diversity]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "Self-Consistency Improves Chain of Thought Reasoning in Language Models"
+        authors: "Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc Le, Ed Chi, Sharan Narang, Aakanksha Chowdhery, Denny Zhou"
+        year: "2023"
+        url: "https://arxiv.org/abs/2203.11171"
+        section: "Method and experiments"
+        accessed_at: "2026-09"
+    limitations:
+      - "Correlated wrong answers can dominate a vote."
+      - "Plurality over normalized answers is not the same event as a strict majority of independent correct/incorrect trials."
+    applicability: "Tasks with automatically comparable final answers and sufficient sampling diversity."
+    curriculum_usage: { lessons: ["6.2"], labs: ["LAB-B"], assessments: ["Mastery-06"] }
+
+  - id: CLM-003
+    claim: "Tree of Thoughts introduces explicit branching, evaluation, lookahead, and backtracking over text units; the paper's benefits are task- and search-configuration-specific, and tree expansion can multiply model calls without improving the selector."
+    provenance: VERIFIED_FACT
+    domain: reasoning_search
+    concepts: [tree_of_thoughts, branching_search, backtracking]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "Tree of Thoughts: Deliberate Problem Solving with Large Language Models"
+        authors: "Shunyu Yao, Dian Yu, Jeffrey Zhao, Izhak Shafran, Thomas L. Griffiths, Yuan Cao, Karthik Narasimhan"
+        year: "2023"
+        url: "https://arxiv.org/abs/2305.10601"
+        section: "Framework and experiments"
+        accessed_at: "2026-09"
+    limitations:
+      - "Results on Game of 24, Creative Writing, and Mini Crosswords do not establish general gains."
+      - "Self-evaluation errors can prune good branches or retain persuasive wrong ones."
+    applicability: "Problems with useful intermediate states, branching choices, and a discriminative value or verifier signal."
+    curriculum_usage: { lessons: ["6.3"], labs: ["LAB-C"], assessments: ["Mastery-06"] }
+
+  - id: CLM-004
+    claim: "Outcome supervision scores final results, while process supervision scores intermediate steps; Lightman et al. report process-supervision advantages on their MATH setup and release PRM800K, but that result does not make process reward models universally more reliable or transferable."
+    provenance: VERIFIED_FACT
+    domain: verification
+    concepts: [outcome_verifier, process_reward_model, step_supervision]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "Let's Verify Step by Step"
+        authors: "Hunter Lightman, Vineet Kosaraju, Yura Burda, Harri Edwards, Bowen Baker, Teddy Lee, Jan Leike, John Schulman, Ilya Sutskever, Karl Cobbe"
+        year: "2023"
+        url: "https://arxiv.org/abs/2305.20050"
+        section: "Abstract, supervision comparison, and PRM800K release"
+        accessed_at: "2026-09"
+    limitations:
+      - "Step labels are costly, task-specific, and may encode annotation policy rather than general correctness."
+      - "A verifier can be miscalibrated or exploited by the candidate generator."
+    applicability: "Candidate ranking or search where intermediate steps have meaningful, labelable correctness."
+    curriculum_usage: { lessons: ["6.4"], labs: ["LAB-C"], assessments: ["Incident-06.1", "Mastery-06"] }
+
+  - id: CLM-005
+    claim: "Snell et al. find that effective allocation between verifier-guided search and adaptive response-distribution methods varies with prompt difficulty in their studied setting, supporting workload-adaptive rather than uniform test-time compute policies."
+    provenance: VERIFIED_FACT
+    domain: compute_allocation
+    concepts: [test_time_scaling, adaptive_compute, problem_difficulty]
+    confidence: high
+    currentness_status: "FRONTIER / WORKLOAD-DEPENDENT"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "Scaling LLM Test-Time Compute Optimally can be More Effective than Scaling Model Parameters"
+        authors: "Charlie Snell, Jaehoon Lee, Kelvin Xu, Aviral Kumar"
+        year: "2024"
+        url: "https://arxiv.org/abs/2408.03314"
+        section: "Abstract and evaluation"
+        accessed_at: "2026-09"
+    limitations:
+      - "Reported efficiency/model-scaling comparisons are tied to the paper's base models, reward models, difficulty estimator, tasks, and FLOPs accounting."
+      - "Prompt difficulty is latent and must be estimated without target-label leakage."
+    applicability: "Systems choosing per-request test-time strategy or budget under a fixed aggregate compute envelope."
+    curriculum_usage: { lessons: ["6.5"], labs: ["LAB-D"], assessments: ["Mastery-06"] }
+
+  - id: CLM-006
+    claim: "The s1 paper implements budget forcing by truncating a model's thinking or appending 'Wait' when it attempts to stop; the reported gains apply to its trained model and evaluated competition-math setting, not to arbitrary models or domains."
+    provenance: VERIFIED_FACT
+    domain: compute_control
+    concepts: [budget_forcing, sequential_reasoning, stopping_control]
+    confidence: high
+    currentness_status: "FRONTIER / WORKLOAD-DEPENDENT"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "s1: Simple test-time scaling"
+        authors: "Niklas Muennighoff, Zitong Yang, Weijia Shi, Xiang Lisa Li, Li Fei-Fei, Hannaneh Hajishirzi, Luke Zettlemoyer, Percy Liang, Emmanuel Candes, Tatsunori Hashimoto"
+        year: "2025"
+        url: "https://arxiv.org/abs/2501.19393"
+        section: "Abstract and budget-forcing method"
+        accessed_at: "2026-09"
+    limitations:
+      - "Appending a continuation cue does not guarantee useful additional computation and may induce repetition or answer revision."
+      - "Training recipe and output format are part of the mechanism."
+    applicability: "Reasoning models whose learned output protocol exposes a controllable thinking boundary."
+    curriculum_usage: { lessons: ["6.5"], labs: ["LAB-A", "LAB-D"], assessments: ["Mastery-06"] }
+
+  - id: CLM-007
+    claim: "Visible chain-of-thought is not a guaranteed faithful explanation: Turpin et al. show biased inputs can influence answers without being acknowledged in rationales, and Chen et al. find current reasoning models often fail to reveal use of evaluated hints."
+    provenance: VERIFIED_FACT
+    domain: reasoning_observability
+    concepts: [cot_faithfulness, rationale_monitoring, hidden_influence]
+    confidence: high
+    currentness_status: "REFERENCE / CURRENT CAUTION"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "Language Models Don't Always Say What They Think: Unfaithful Explanations in Chain-of-Thought Prompting"
+        authors: "Miles Turpin, Julian Michael, Ethan Perez, Samuel R. Bowman"
+        year: "2023"
+        url: "https://arxiv.org/abs/2305.04388"
+        section: "Abstract and biasing experiments"
+        accessed_at: "2026-09"
+      - source_type: paper
+        tier: 1
+        title: "Reasoning Models Don't Always Say What They Think"
+        authors: "Yanda Chen et al."
+        year: "2025"
+        url: "https://arxiv.org/abs/2505.05410"
+        section: "Abstract and hint-faithfulness experiments"
+        accessed_at: "2026-09"
+    limitations:
+      - "These studies falsify universal faithfulness; they do not prove that every rationale is unfaithful."
+      - "Faithfulness probes are intervention-specific and do not directly reveal hidden states."
+    applicability: "Safety monitoring, debugging, audit logging, and user-facing explanation design."
+    curriculum_usage: { lessons: ["6.1", "6.6"], labs: ["LAB-A"], assessments: ["Incident-06.1", "Mastery-06"] }
+
+  - id: CLM-008
+    claim: "A 2026 preprint reports diminishing marginal returns and cases where longer reasoning abandons previously correct answers; this is frontier evidence against monotonic 'more thinking is always better,' not a universal overthinking law."
+    provenance: VERIFIED_FACT
+    domain: compute_scaling
+    concepts: [overthinking, nonmonotonic_utility, adaptive_stopping]
+    confidence: medium
+    currentness_status: "FRONTIER"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "When More Thinking Hurts: Overthinking in LLM Test-Time Compute Scaling"
+        authors: "Shu Zhou, Rui Ling, Junan Chen, Xin Wang, Tao Fan, Hao Wang"
+        year: "2026"
+        url: "https://arxiv.org/abs/2604.10739"
+        section: "Abstract"
+        accessed_at: "2026-09"
+    limitations:
+      - "Preprint evidence requires replication across more models, tasks, prompts, and stopping interventions."
+      - "Observed token length can be both a cause and a consequence of difficulty."
+    applicability: "Designing budget sweeps and adaptive stopping tests rather than assuming monotone scaling."
+    curriculum_usage: { lessons: ["6.5"], labs: ["LAB-D"], assessments: ["Mastery-06"] }
+
+  - id: CLM-009
+    claim: "If k candidate correctness events are independent Bernoulli trials with identical success probability p, oracle pass@k is 1-(1-p)^k; correlated or non-identically distributed candidates invalidate this formula."
+    provenance: DERIVED
+    domain: reasoning_metrics
+    concepts: [pass_at_k, independence_assumption, oracle_success]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions:
+      - "Each candidate is judged against an objective ground truth."
+      - "Correctness events are independent with common probability p."
+      - "Oracle pass@k asks whether any candidate is correct, not whether a deployable selector chooses it."
+    derivation: "The probability all k candidates fail is (1-p)^k; the complementary event that at least one succeeds has probability 1-(1-p)^k."
+    limitations:
+      - "Shared prompts, model state, decoding, and failure modes usually correlate samples."
+      - "It does not include verifier error, cost, latency, or answer selection."
+    applicability: "Toy planning and independence-sensitivity analysis for repeated sampling."
+    curriculum_usage: { lessons: ["6.2"], labs: ["LAB-B"], assessments: ["Mastery-06"] }
+
+  - id: CLM-010
+    claim: "Given n sampled completions with c correct and k<=n, 1-C(n-c,k)/C(n,k) is the probability that a uniformly selected size-k subset contains at least one of those c correct completions; it is the finite-sample pass@k estimator used in code-generation evaluation, not a majority-vote metric."
+    provenance: DERIVED
+    domain: reasoning_metrics
+    concepts: [pass_at_k_estimator, finite_sample, without_replacement]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions:
+      - "Exactly c of the n observed samples pass a deterministic correctness test."
+      - "A size-k subset is selected uniformly without replacement."
+    derivation: "There are C(n,k) size-k subsets and C(n-c,k) all-failure subsets; subtract their ratio from one."
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "Evaluating Large Language Models Trained on Code"
+        authors: "Mark Chen et al."
+        year: "2021"
+        url: "https://arxiv.org/abs/2107.03374"
+        section: "pass@k estimator"
+        accessed_at: "2026-09"
+    limitations:
+      - "Requires an executable or otherwise objective candidate-level judge."
+      - "Does not measure selection accuracy or user-visible utility."
+    applicability: "Offline evaluation when multiple candidates per problem are generated and objectively checked."
+    curriculum_usage: { lessons: ["6.2"], labs: ["LAB-B"], assessments: ["Mastery-06"] }
+
+  - id: CLM-011
+    claim: "For odd k independent binary votes each correct with probability p, strict-majority correctness is sum from j=(k+1)/2 to k of C(k,j)p^j(1-p)^(k-j); real self-consistency often violates independence and uses multi-class plurality after answer normalization."
+    provenance: DERIVED
+    domain: reasoning_metrics
+    concepts: [majority_vote, binomial_model, error_correlation]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions:
+      - "k is odd, votes are independent, and each has identical correctness probability p."
+      - "Correctness is binary and the selector requires a strict majority of correct votes."
+    derivation: "The count of correct votes is Binomial(k,p); sum its probability mass above k/2."
+    limitations:
+      - "Plurality can select the correct answer without a majority when wrong answers split, or select a correlated wrong answer."
+      - "The equation does not model parsing, abstention, ties, or verifier selection."
+    applicability: "Analytical baseline for how diversity/correlation changes voting expectations."
+    curriculum_usage: { lessons: ["6.2"], labs: ["LAB-B"], assessments: ["Mastery-06"] }
+
+  - id: CLM-012
+    claim: "A complete test-time compute ledger sums generator, verifier, tool, and orchestration work across all candidates, while wall-clock latency depends on parallelism and critical path; candidate count or output tokens alone are incomplete cost measures."
+    provenance: DERIVED
+    domain: compute_accounting
+    concepts: [compute_ledger, critical_path, total_tokens, verifier_cost]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions:
+      - "All terms are converted to one declared unit such as GPU-seconds, accelerator FLOPs, tokens by model class, or monetary cost."
+      - "The timing boundary and parallel execution resources are explicitly recorded."
+    derivation: "Total resource use is additive over executed work after unit conversion; elapsed time follows the dependency critical path and can be smaller than summed work when branches run in parallel."
+    limitations:
+      - "Token counts are not compute-equivalent across models, sequence positions, batch shapes, or verifier types."
+      - "FLOPs estimates omit memory, communication, idle capacity, and billing rules."
+    applicability: "Cost/latency comparison of sequential reasoning, best-of-N, voting, and tree search."
+    curriculum_usage: { lessons: ["6.5"], labs: ["LAB-B", "LAB-C", "LAB-D"], assessments: ["Mastery-06"] }
+
+  - id: CLM-013
+    claim: "Oracle best-of-N uses ground truth to ask whether any candidate is correct; a deployable verifier-selected best-of-N can be worse because selection has false-positive and false-negative errors, so oracle pass@N is an upper bound only under a candidate set and correctness definition."
+    provenance: DERIVED
+    domain: verification
+    concepts: [oracle_best_of_n, verifier_selection, selection_gap]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions:
+      - "The oracle and verifier operate on the same generated candidate set."
+      - "Ground-truth correctness is well-defined for the oracle comparison."
+    derivation: "The oracle succeeds whenever at least one candidate is correct. A fallible selector can choose a wrong candidate from a set containing a correct one but cannot create a correct candidate absent from the set; therefore realized selection success cannot exceed oracle set success under these boundaries."
+    limitations:
+      - "If the verifier changes generation/search, the candidate sets differ and the simple bound comparison no longer isolates selection."
+    applicability: "Separating generator diversity from verifier quality in repeated-sampling experiments."
+    curriculum_usage: { lessons: ["6.4"], labs: ["LAB-B", "LAB-C"], assessments: ["Mastery-06"] }
+
+  - id: CLM-014
+    claim: "At Transformers commit 27166ea03f12c940f23176a904ab1d2ff1a3dcbb, GenerationMixin._prepare_generated_length makes max_new_tokens determine max_length as prompt length plus new-token budget; _get_stopping_criteria assembles length, time, stop-string, EOS, and optional custom criteria, and StoppingCriteriaList ORs their per-row decisions."
+    provenance: VERIFIED_FACT
+    domain: runtime_implementation
+    concepts: [generation_budget, stopping_criteria, transformers_source_trace]
+    confidence: high
+    currentness_status: "CURRENT TRANSFORMERS SNAPSHOT"
+    evidence:
+      - source_type: source_code
+        tier: 1
+        title: "Transformers generation and stopping implementation"
+        repository: "https://github.com/huggingface/transformers"
+        commit: "27166ea03f12c940f23176a904ab1d2ff1a3dcbb"
+        verification_date: "2026-09-26"
+        file: "src/transformers/generation/utils.py; src/transformers/generation/stopping_criteria.py"
+        symbol: "GenerationMixin.generate; GenerationMixin._prepare_generated_length; GenerationMixin._get_stopping_criteria; StoppingCriteriaList.__call__; MaxLengthCriteria.__call__"
+        entry_point: "GenerationMixin.generate(...)"
+        execution_path: "generate -> prepare generation config/length -> build stopping criteria -> selected decode loop -> StoppingCriteriaList.__call__"
+        url: "https://github.com/huggingface/transformers/blob/27166ea03f12c940f23176a904ab1d2ff1a3dcbb/src/transformers/generation/utils.py"
+        accessed_at: "2026-09"
+    limitations:
+      - "Static source inspection only; the path was not executed in this repository."
+      - "Generic generation length/time controls do not constitute a semantic reasoning-budget controller or quality-aware stopping policy."
+    applicability: "Source-reading exercise distinguishing runtime token/time stops from higher-level test-time reasoning policies."
+    curriculum_usage: { lessons: ["6.5"], labs: ["LAB-D"], assessments: ["Production-Source-Trace"] }
+
+  - id: CLM-015
+    claim: "A useful adaptive-compute policy should allocate additional work only when its predicted marginal value exceeds its marginal cost, but difficulty and value estimates must be validated for calibration, subgroup error, and label leakage before production use."
+    provenance: HYPOTHESIS
+    domain: compute_allocation
+    concepts: [marginal_value, adaptive_budget, difficulty_estimation]
+    confidence: high
+    currentness_status: "FRONTIER / WORKLOAD-DEPENDENT"
+    hypothesis:
+      prediction: "Compared at equal aggregate cost, a calibrated adaptive policy improves declared utility by spending less on easy/low-value cases and more on cases with positive measured return."
+      measurement_target: "Per-item difficulty prediction, allocated work, candidate diversity, verifier confidence, correctness/utility, subgroup metrics, total compute, critical-path latency, and calibration on held-out time-split data."
+      falsifying_observation: "At equal cost the adaptive policy fails to improve utility, concentrates error on a subgroup, or its apparent gain disappears when difficulty features with target leakage are removed."
+    limitations:
+      - "Marginal value can be nonstationary after model, prompt, benchmark, or verifier changes."
+    applicability: "Online routing among direct answer, sequential reasoning, parallel sampling, and search."
+    curriculum_usage: { lessons: ["6.5", "6.6"], labs: ["LAB-D"], assessments: ["Incident-06.1", "Mastery-06"] }
+
+  - id: CLM-016
+    claim: "A verifier-guided search can increase benchmark score while reducing real utility if the generator learns or discovers patterns that exploit verifier errors; evidence requires held-out objective checks and adversarial candidate sets rather than verifier score alone."
+    provenance: HYPOTHESIS
+    domain: verification
+    concepts: [verifier_gaming, reward_hacking, distribution_shift]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    hypothesis:
+      prediction: "As search pressure or candidate count increases, verifier score rises faster than independently checked correctness, with selected outputs exhibiting repeated exploitable features."
+      measurement_target: "Verifier score, independent correctness, score-correctness calibration, candidate count/search depth, selected-vs-rejected examples, adversarial perturbations, and temporal/out-of-domain holdouts."
+      falsifying_observation: "Verifier calibration and independently checked utility remain stable across increased search pressure and adversarial candidate sets."
+    limitations:
+      - "A widening score-quality gap can also arise from evaluator noise or distribution shift without deliberate exploitation."
+    applicability: "Best-of-N, process-reward search, tree search, and iterative critique systems."
+    curriculum_usage: { lessons: ["6.4", "6.6"], labs: ["LAB-C"], assessments: ["Incident-06.1", "Mastery-06"] }

@@ -1,0 +1,191 @@
+module: "06-reasoning-test-time-compute"
+registry_version: "1.0.0"
+
+required_concepts:
+  - "reasoning_trace_contract"
+  - "chain_of_thought"
+  - "self_consistency"
+  - "best_of_n"
+  - "pass_at_k"
+  - "tree_search"
+  - "outcome_verification"
+  - "process_verification"
+  - "test_time_compute_ledger"
+  - "adaptive_budgeting"
+  - "stopping_policy"
+  - "reasoning_faithfulness"
+  - "verifier_gaming"
+  - "overthinking"
+
+prerequisite_concepts:
+  - "autoregressive_decoding"
+  - "sampling_and_temperature"
+  - "conditional_probability"
+  - "binomial_probability"
+  - "serving_latency_and_goodput"
+  - "experimental_design"
+
+first_occurrence_concepts:
+  - "reasoning_trace_contract"
+  - "self_consistency"
+  - "best_of_n"
+  - "pass_at_k"
+  - "tree_search"
+  - "process_verification"
+  - "test_time_compute_ledger"
+  - "adaptive_budgeting"
+  - "reasoning_faithfulness"
+  - "verifier_gaming"
+  - "overthinking"
+
+concept_dependencies:
+  - concept: "chain_of_thought"
+    depends_on: ["autoregressive_decoding", "reasoning_trace_contract"]
+  - concept: "self_consistency"
+    depends_on: ["sampling_and_temperature", "chain_of_thought", "conditional_probability"]
+  - concept: "pass_at_k"
+    depends_on: ["conditional_probability", "binomial_probability", "best_of_n"]
+  - concept: "tree_search"
+    depends_on: ["chain_of_thought", "outcome_verification", "process_verification"]
+  - concept: "adaptive_budgeting"
+    depends_on: ["test_time_compute_ledger", "stopping_policy", "serving_latency_and_goodput"]
+  - concept: "verifier_gaming"
+    depends_on: ["outcome_verification", "process_verification", "experimental_design"]
+
+mechanisms:
+  - id: "MECH-01"
+    description: "Chain-of-thought prompting changes the generated token trajectory by eliciting intermediate text before an answer. It is an observable generation protocol whose accuracy effect and faithfulness must be tested separately for each model, task, prompt, and decoding policy."
+    evidence_ids: ["CLM-001", "CLM-007"]
+    derived_from: []
+
+  - id: "MECH-02"
+    description: "Self-consistency and best-of-N spend parallel sampling compute to create a candidate set, then aggregate normalized final answers or select with a verifier. Candidate diversity, error correlation, parsing, and selector quality determine whether more samples improve deployed accuracy."
+    evidence_ids: ["CLM-002", "CLM-009", "CLM-010", "CLM-011", "CLM-013"]
+    derived_from: ["MECH-01"]
+
+  - id: "MECH-03"
+    description: "Tree search alternates proposal, state expansion, evaluation, pruning, and possible backtracking. Search is useful only when intermediate states expose informative decisions and the value or verifier signal discriminates good branches well enough to repay additional calls."
+    evidence_ids: ["CLM-003", "CLM-004", "CLM-016"]
+    derived_from: ["MECH-01", "MECH-02"]
+
+  - id: "MECH-04"
+    description: "Outcome verification scores final products, whereas process verification scores intermediate steps. Either can rank candidates or guide search, but neither score is ground truth; calibration, coverage, distribution shift, and exploitation resistance are part of the mechanism contract."
+    evidence_ids: ["CLM-004", "CLM-013", "CLM-016"]
+    derived_from: []
+
+  - id: "MECH-05"
+    description: "A test-time compute controller chooses strategy, budget, parallelism, and stopping per request. A fixed token cap, elapsed-time stop, sequential continuation cue, or adaptive marginal-value policy are distinct controls and can produce different quality, cost, and tail-latency surfaces."
+    evidence_ids: ["CLM-005", "CLM-006", "CLM-008", "CLM-014", "CLM-015"]
+    derived_from: ["MECH-01", "MECH-02", "MECH-03", "MECH-04"]
+
+mathematical_models:
+  - id: "MATH-01"
+    description: "IID oracle pass@k: P(any correct) = 1-(1-p)^k for k independent candidates with common correctness probability p. This is an analytical baseline, not a prediction when samples share correlated errors."
+    evidence_ids: ["CLM-009"]
+    derived_from: ["MECH-02"]
+
+  - id: "MATH-02"
+    description: "Finite-sample pass@k: 1-C(n-c,k)/C(n,k), for n observed candidates containing c correct and a uniformly chosen size-k subset without replacement. It estimates oracle set success, not verifier-selected or majority-vote accuracy."
+    evidence_ids: ["CLM-010"]
+    derived_from: ["MECH-02"]
+
+  - id: "MATH-03"
+    description: "For odd k IID binary votes with per-vote correctness p, strict-majority accuracy is the upper binomial tail sum from j=(k+1)/2 through k of C(k,j)p^j(1-p)^(k-j). Multi-class plurality, correlated samples, ties, and parsing violate this model."
+    evidence_ids: ["CLM-011"]
+    derived_from: ["MECH-02"]
+
+  - id: "MATH-04"
+    description: "Compute ledger: C_total is the unit-normalized sum of generator, verifier, tool, and orchestration work over executed branches. Wall-clock latency is governed by the dependency critical path under declared parallel resources and therefore need not equal summed work."
+    evidence_ids: ["CLM-012"]
+    derived_from: ["MECH-02", "MECH-03", "MECH-04", "MECH-05"]
+
+  - id: "MATH-05"
+    description: "Decision model U(B)=Q(B)-lambda*C(B), where B is a declared test-time budget, Q is measured task utility, C is measured cost, and lambda encodes a stakeholder trade-off in compatible units. This is an engineering objective, not a universal law; constraints for latency, safety, and subgroup quality may not be reducible to one scalar."
+    evidence_ids: ["CLM-005", "CLM-008", "CLM-015"]
+    derived_from: ["MECH-05", "MATH-04"]
+
+implementation_mechanisms:
+  - id: "IMPL-01"
+    description: "A candidate record captures request and prompt revision, model and decoding configuration, random seed, candidate text, parsed answer, token counts, timestamps, finish reason, generator cost, and correctness where an objective judge exists."
+    evidence_ids: ["CLM-002", "CLM-010", "CLM-012"]
+    derived_from: ["MECH-02", "MATH-04"]
+
+  - id: "IMPL-02"
+    description: "A verifier interface records verifier revision, input view, score semantics, threshold or rank policy, calibration set, selected candidate, abstention, cost, and an independent correctness label when available."
+    evidence_ids: ["CLM-004", "CLM-013", "CLM-016"]
+    derived_from: ["MECH-04"]
+
+  - id: "IMPL-03"
+    description: "A budget controller declares sequential and parallel limits, per-branch and global token/time/cost ceilings, stopping conditions, cancellation semantics, fallback, and telemetry. It prevents completed or pruned branches from silently consuming unaccounted work."
+    evidence_ids: ["CLM-005", "CLM-006", "CLM-012", "CLM-015"]
+    derived_from: ["MECH-05", "MATH-04"]
+
+  - id: "IMPL-04"
+    description: "Pinned Transformers source trace: GenerationMixin.generate prepares generated length and builds a StoppingCriteriaList; max_new_tokens is translated into total max_length from prompt length, and the criteria list ORs per-row length, time, stop-string, EOS, confidence, and custom stops."
+    evidence_ids: ["CLM-014"]
+    derived_from: ["MECH-05"]
+
+failure_modes:
+  - id: "FAIL-01"
+    description: "Correlated-candidate collapse: more samples reproduce the same error, so oracle pass@k and voting improve less than an IID model predicts while cost grows. Measure pairwise answer/path diversity and correctness correlation, not sample count alone."
+    evidence_ids: ["CLM-002", "CLM-009", "CLM-011"]
+    derived_from: ["MECH-02", "MATH-01", "MATH-03"]
+
+  - id: "FAIL-02"
+    description: "Selection gap: the candidate pool contains a correct answer but answer normalization, tie handling, or a fallible verifier selects a wrong one. Report oracle set success, selected success, parsing failures, and verifier confusion separately."
+    evidence_ids: ["CLM-002", "CLM-010", "CLM-013"]
+    derived_from: ["MECH-02", "MECH-04"]
+
+  - id: "FAIL-03"
+    description: "Verifier gaming: stronger search pressure finds outputs that receive higher verifier scores without higher independent correctness. Detect a widening score-quality gap with held-out judges, adversarial candidates, and search-depth sweeps."
+    evidence_ids: ["CLM-016"]
+    derived_from: ["MECH-03", "MECH-04"]
+
+  - id: "FAIL-04"
+    description: "Overthinking or premature stopping: extra generation can revise a correct answer, loop, or waste cost, while an aggressive stop can truncate useful work. Measure correctness transitions over prefixes and conditional marginal gains rather than assuming monotonic quality."
+    evidence_ids: ["CLM-006", "CLM-008", "CLM-014", "CLM-015"]
+    derived_from: ["MECH-05"]
+
+  - id: "FAIL-05"
+    description: "Faithfulness failure: a visible rationale omits or misstates the factor that changed the answer. Counterfactual prompt interventions and hint-awareness tests can falsify universal faithfulness but cannot directly expose all hidden computation."
+    evidence_ids: ["CLM-007"]
+    derived_from: ["MECH-01"]
+
+  - id: "FAIL-06"
+    description: "Production budget collapse: an offline accuracy gain consumes enough sequential tokens, parallel candidates, verifier calls, or search branches to violate latency, cost, capacity, or SLO-goodput constraints under load."
+    evidence_ids: ["CLM-005", "CLM-012", "CLM-015"]
+    derived_from: ["MECH-02", "MECH-03", "MECH-04", "MECH-05", "MATH-04"]
+
+production_connections:
+  - id: "PROD-01"
+    description: "Deploy reasoning policies as workload-conditional routes: direct response, bounded sequential reasoning, parallel sampling, or verifier-guided search. Gate routes by measured utility, cost, critical-path latency, capacity impact, calibration, and subgroup constraints."
+    evidence_ids: ["CLM-005", "CLM-012", "CLM-015"]
+    derived_from: ["MECH-05", "MATH-04", "MATH-05", "FAIL-06"]
+
+  - id: "PROD-02"
+    description: "Production telemetry joins request, candidate, verifier, and resource records so oracle opportunity, selection quality, marginal compute value, cancellation waste, and user-visible latency can be reconstructed without treating rationale text as ground truth."
+    evidence_ids: ["CLM-007", "CLM-012", "CLM-013", "CLM-016"]
+    derived_from: ["IMPL-01", "IMPL-02", "IMPL-03"]
+
+research_connections:
+  - id: "RESEARCH-01"
+    description: "Reference methods—chain-of-thought, self-consistency, Tree of Thoughts, and process verification—define reusable mechanism families, while later test-time-scaling work makes allocation and stopping explicitly problem- and budget-dependent."
+    evidence_ids: ["CLM-001", "CLM-002", "CLM-003", "CLM-004", "CLM-005", "CLM-006"]
+    derived_from: ["MECH-01", "MECH-02", "MECH-03", "MECH-04", "MECH-05"]
+
+  - id: "RESEARCH-02"
+    description: "Faithfulness and overthinking results are adversarial evidence against using rationale length, plausibility, or additional tokens as universal proxies for causal validity or answer quality."
+    evidence_ids: ["CLM-007", "CLM-008"]
+    derived_from: ["FAIL-04", "FAIL-05"]
+
+candidate_capabilities:
+  - capability: "Separate elicited reasoning text, candidate-set opportunity, selection quality, and final task utility."
+    mapped_mechanisms: ["MECH-01", "MECH-02", "MECH-04", "FAIL-02", "FAIL-05"]
+  - capability: "Derive and audit pass@k and majority baselines without hiding independence or oracle assumptions."
+    mapped_mechanisms: ["MATH-01", "MATH-02", "MATH-03", "FAIL-01"]
+  - capability: "Implement parallel sampling and verifier-guided search with complete candidate, verifier, and compute telemetry."
+    mapped_mechanisms: ["MECH-02", "MECH-03", "IMPL-01", "IMPL-02", "IMPL-03"]
+  - capability: "Choose and falsify adaptive test-time budgets under quality, cost, latency, capacity, and subgroup constraints."
+    mapped_mechanisms: ["MECH-05", "MATH-04", "MATH-05", "FAIL-04", "FAIL-06", "PROD-01"]
+  - capability: "Diagnose faithfulness, verifier gaming, correlated samples, and production regressions using discriminating experiments."
+    mapped_mechanisms: ["FAIL-01", "FAIL-02", "FAIL-03", "FAIL-04", "FAIL-05", "FAIL-06", "PROD-02"]
