@@ -1,0 +1,329 @@
+module: "07-model-behavior-uncertainty"
+registry_version: "1.0.0"
+research_cutoff: "2026-09-26"
+change_reason: "Replace generated placeholders with scoped failure semantics, calibrated uncertainty models, selective prediction, regression controls, and a pinned generation-score source trace."
+
+claims:
+  - id: CLM-001
+    claim: "Calibration is defined relative to a declared event and population: among predictions assigned confidence q, the event should occur with frequency q in the conditioning limit; a model may be calibrated for one event, dataset, prompt, or subgroup and miscalibrated for another."
+    provenance: DERIVED
+    domain: calibration
+    concepts: [event_definition, population_calibration, conditional_frequency]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions:
+      - "The target event, confidence score, sampling unit, and evaluation population are fixed."
+      - "Correctness labels are sufficiently reliable for the stated event."
+    derivation: "Calibration compares E[Y | Q=q] with q for binary event Y and forecast Q. Changing Y, the conditioning population, or score semantics changes the estimand."
+    limitations:
+      - "Finite data require binning, smoothing, or another estimator and cannot establish pointwise equality for every q."
+      - "Aggregate calibration can hide subgroup or conditional miscalibration."
+    applicability: "Any claim that a model confidence represents probability of answer correctness or another behavioral event."
+    curriculum_usage: { lessons: ["7.2"], labs: ["LAB-B"], assessments: ["Mastery-07"] }
+
+  - id: CLM-002
+    claim: "Expected calibration error (ECE) is a bin-based empirical summary whose value depends on bin count, bin boundaries, weighting, sample size, and event definition; a low ECE does not by itself prove useful ranking, accuracy, subgroup calibration, or decision utility."
+    provenance: DERIVED
+    domain: calibration_metrics
+    concepts: [expected_calibration_error, binning, estimator_sensitivity]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions:
+      - "Each evaluated item has a scalar confidence and binary correctness label."
+      - "The reported estimator uses a declared partition of confidence values."
+    derivation: "ECE is the weighted sum over bins of the absolute gap between bin mean confidence and bin empirical accuracy; altering the partition alters both conditional estimates and their gaps."
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "On Calibration of Modern Neural Networks"
+        authors: "Chuan Guo, Geoff Pleiss, Yu Sun, Kilian Q. Weinberger"
+        year: "2017"
+        url: "https://arxiv.org/abs/1706.04599"
+        section: "Calibration metrics and temperature scaling"
+        accessed_at: "2026-09"
+    limitations:
+      - "Alternative calibration estimators have different bias and variance; none removes the need to declare the event and population."
+    applicability: "Calibration reports for classification-like LLM tasks with a scalar confidence."
+    curriculum_usage: { lessons: ["7.2"], labs: ["LAB-B"], assessments: ["Mastery-07"] }
+
+  - id: CLM-003
+    claim: "Scalar temperature scaling divides logits by a positive fitted temperature before softmax and therefore preserves their argmax while changing probability sharpness; its calibration benefit is validation-distribution-specific and need not survive task or population shift."
+    provenance: VERIFIED_FACT
+    domain: calibration_methods
+    concepts: [temperature_scaling, logit_calibration, distribution_shift]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "On Calibration of Modern Neural Networks"
+        authors: "Chuan Guo, Geoff Pleiss, Yu Sun, Kilian Q. Weinberger"
+        year: "2017"
+        url: "https://arxiv.org/abs/1706.04599"
+        section: "Temperature scaling"
+        accessed_at: "2026-09"
+    limitations:
+      - "A single temperature cannot repair arbitrary class-, prompt-, subgroup-, or domain-conditional errors."
+      - "Free-form sequence correctness is not automatically represented by one next-token softmax."
+    applicability: "Post-hoc calibration when logits and representative labeled calibration data are available."
+    curriculum_usage: { lessons: ["7.2"], labs: ["LAB-B"], assessments: ["Mastery-07"] }
+
+  - id: CLM-004
+    claim: "Ovadia et al. show across their studied image-classification models and shifts that uncertainty quality can degrade under dataset shift; in LLM systems this supports revalidation under prompt, task, language, temporal, retrieval, and model-version changes rather than assuming in-distribution calibration transfers."
+    provenance: VERIFIED_FACT
+    domain: distribution_shift
+    concepts: [shift, calibration_drift, uncertainty_quality]
+    confidence: high
+    currentness_status: "REFERENCE / CURRENT CAUTION"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "Can You Trust Your Model's Uncertainty? Evaluating Predictive Uncertainty Under Dataset Shift"
+        authors: "Yaniv Ovadia et al."
+        year: "2019"
+        url: "https://arxiv.org/abs/1906.02530"
+        section: "Dataset-shift experiments and conclusions"
+        accessed_at: "2026-09"
+    limitations:
+      - "The original experiments are image classification, so the LLM shift categories are an engineering extension, not a reported result from that paper."
+    applicability: "Regression and monitoring plans for confidence estimators deployed outside their calibration population."
+    curriculum_usage: { lessons: ["7.2", "7.6"], labs: ["LAB-B", "LAB-D"], assessments: ["Incident-07.1", "Mastery-07"] }
+
+  - id: CLM-005
+    claim: "Selective prediction trades coverage for risk by answering only accepted cases; its quality must be reported as a risk-coverage curve or at prespecified operating points because a policy can obtain low risk trivially by abstaining on nearly everything."
+    provenance: DERIVED
+    domain: selective_prediction
+    concepts: [abstention, coverage, selective_risk]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions:
+      - "An acceptance rule maps each item and available score to answer or abstain."
+      - "Loss is defined on answered items and coverage is the accepted fraction of the target population."
+    derivation: "For accepted set A, coverage=P(A) and selective risk=E[L | A]. Changing the threshold changes both; risk without coverage omits how much traffic was rejected."
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "Selective Classification for Deep Neural Networks"
+        authors: "Yonatan Geifman, Ran El-Yaniv"
+        year: "2017"
+        url: "https://arxiv.org/abs/1705.08500"
+        section: "Selective classification problem and risk-coverage definitions"
+        accessed_at: "2026-09"
+    limitations:
+      - "Abstention has its own cost and may shift harm to users or downstream systems."
+      - "AUC summaries can hide unacceptable local operating regions or subgroup disparities."
+    applicability: "Routing answers to deliver, retry, retrieve, escalate, or abstain."
+    curriculum_usage: { lessons: ["7.3"], labs: ["LAB-C"], assessments: ["Mastery-07"] }
+
+  - id: CLM-006
+    claim: "Jiang et al. find that examined T5, BART, and GPT-2 QA probabilities are not well calibrated and evaluate several calibration methods; these results are task/model-specific and do not make one confidence construction a universal correctness probability."
+    provenance: VERIFIED_FACT
+    domain: language_model_calibration
+    concepts: [qa_calibration, sequence_confidence, post_hoc_calibration]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "How Can We Know When Language Models Know? On the Calibration of Language Models for Question Answering"
+        authors: "Zhengbao Jiang, Jun Araki, Haibo Ding, Graham Neubig"
+        year: "2021"
+        url: "https://arxiv.org/abs/2012.00955"
+        section: "Abstract, methods, and experiments"
+        accessed_at: "2026-09"
+    limitations:
+      - "Model families and QA formats predate current instruction and reasoning models."
+    applicability: "Reference evidence that token/sequence probabilities require event-specific validation and calibration."
+    curriculum_usage: { lessons: ["7.2"], labs: ["LAB-B"], assessments: ["Mastery-07"] }
+
+  - id: CLM-007
+    claim: "Kadavath et al. report useful calibration and scaling behavior for P(True) and P(IK) in their evaluated models and formats, but also report limited cross-task calibration for P(IK); verbalized or prompted self-evaluation therefore requires per-task validation."
+    provenance: VERIFIED_FACT
+    domain: self_evaluation
+    concepts: [p_true, p_ik, verbalized_confidence]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "Language Models (Mostly) Know What They Know"
+        authors: "Saurav Kadavath et al."
+        year: "2022"
+        url: "https://arxiv.org/abs/2207.05221"
+        section: "P(True), P(IK), calibration, and task transfer experiments"
+        accessed_at: "2026-09"
+    limitations:
+      - "Prompt format, model family, evaluation labels, and access to multiple samples affect results."
+    applicability: "Candidate self-evaluation signals whose correctness discrimination and calibration are separately measured."
+    curriculum_usage: { lessons: ["7.2", "7.3"], labs: ["LAB-B", "LAB-C"], assessments: ["Mastery-07"] }
+
+  - id: CLM-008
+    claim: "TruthfulQA measures whether answers reproduce selected human falsehoods and misconceptions across its authored question set; performance on it is one behavioral slice and not a complete hallucination, factuality, or safety measure."
+    provenance: VERIFIED_FACT
+    domain: behavior_benchmarks
+    concepts: [truthfulness, imitative_falsehood, benchmark_scope]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "TruthfulQA: Measuring How Models Mimic Human Falsehoods"
+        authors: "Stephanie Lin, Jacob Hilton, Owain Evans"
+        year: "2022"
+        url: "https://arxiv.org/abs/2109.07958"
+        section: "Dataset construction, metrics, and limitations"
+        accessed_at: "2026-09"
+    limitations:
+      - "A fixed benchmark can become contaminated, stale, or unrepresentative of deployment."
+      - "Truthfulness and informativeness are distinct scoring dimensions."
+    applicability: "Regression slice for misconception-sensitive QA when paired with deployment-specific tests."
+    curriculum_usage: { lessons: ["7.1", "7.6"], labs: ["LAB-A", "LAB-D"], assessments: ["Mastery-07"] }
+
+  - id: CLM-009
+    claim: "FActScore decomposes long-form generations into atomic facts and measures the fraction supported by a knowledge source; automated estimates inherit decomposition, retrieval, source-quality, entailment, and temporal-validity errors."
+    provenance: VERIFIED_FACT
+    domain: factuality_measurement
+    concepts: [atomic_facts, factual_precision, evidence_support]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "FActScore: Fine-grained Atomic Evaluation of Factual Precision in Long Form Text Generation"
+        authors: "Sewon Min, Kalpesh Krishna, Xinxi Lyu, Mike Lewis, Wen-tau Yih, Pang Wei Koh, Mohit Iyyer, Luke Zettlemoyer, Hannaneh Hajishirzi"
+        year: "2023"
+        url: "https://arxiv.org/abs/2305.14251"
+        section: "Metric definition and automated estimator"
+        accessed_at: "2026-09"
+    limitations:
+      - "Precision over expressed facts does not measure omitted required facts, usefulness, reasoning validity, or all harms."
+    applicability: "Long-form factual precision where evidence sources and atomic claims can be audited."
+    curriculum_usage: { lessons: ["7.1", "7.4"], labs: ["LAB-A"], assessments: ["Mastery-07"] }
+
+  - id: CLM-010
+    claim: "SelfCheckGPT uses disagreement among multiple stochastic samples from a black-box model as a signal for factual errors in generated passages; consistent repetition of the same falsehood and legitimately diverse wording are counterexamples to treating inconsistency as correctness."
+    provenance: VERIFIED_FACT
+    domain: black_box_uncertainty
+    concepts: [self_consistency_signal, sample_disagreement, hallucination_detection]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "SelfCheckGPT: Zero-Resource Black-Box Hallucination Detection for Generative Large Language Models"
+        authors: "Potsawee Manakul, Adian Liusie, Mark J. F. Gales"
+        year: "2023"
+        url: "https://arxiv.org/abs/2303.08896"
+        section: "Method and passage-level experiments"
+        accessed_at: "2026-09"
+    limitations:
+      - "Sampling count, temperature, comparison model, claim granularity, and domain determine cost and signal quality."
+    applicability: "Black-box uncertainty signal when model internals or token probabilities are unavailable."
+    curriculum_usage: { lessons: ["7.4"], labs: ["LAB-C"], assessments: ["Mastery-07"] }
+
+  - id: CLM-011
+    claim: "Semantic entropy clusters sampled answers by meaning before measuring uncertainty and is reported as more predictive of model accuracy than compared baselines on the paper's evaluated QA datasets; its result depends on sampling and semantic-equivalence judgments and is not a universal hallucination detector."
+    provenance: VERIFIED_FACT
+    domain: semantic_uncertainty
+    concepts: [semantic_entropy, meaning_clusters, confabulation_detection]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "Semantic Uncertainty: Linguistic Invariances for Uncertainty Estimation in Natural Language Generation"
+        authors: "Lorenz Kuhn, Yarin Gal, Sebastian Farquhar"
+        year: "2023"
+        url: "https://arxiv.org/abs/2302.09664"
+        section: "Semantic entropy method and QA experiments"
+        accessed_at: "2026-09"
+    limitations:
+      - "Entailment or clustering errors can merge contradictory meanings or split paraphrases."
+      - "Multiple samples add cost; low entropy can still represent a stable false belief."
+    applicability: "Free-form QA uncertainty where semantic equivalence is more appropriate than surface-string variation."
+    curriculum_usage: { lessons: ["7.4"], labs: ["LAB-C"], assessments: ["Mastery-07"] }
+
+  - id: CLM-012
+    claim: "Conformal factuality provides finite-sample marginal guarantees for its defined entailment-set correctness under exchangeability and a fixed calibration procedure; the guarantee does not imply per-prompt correctness, semantic completeness, subgroup coverage, or validity after uncontrolled shift."
+    provenance: VERIFIED_FACT
+    domain: conformal_prediction
+    concepts: [conformal_factuality, marginal_coverage, exchangeability]
+    confidence: high
+    currentness_status: "FRONTIER / WORKLOAD-DEPENDENT"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "Language Models with Conformal Factuality Guarantees"
+        authors: "Christopher Mohri, Tatsunori Hashimoto"
+        year: "2024"
+        url: "https://arxiv.org/abs/2402.10978"
+        section: "Conformal factuality framework, guarantees, and experiments"
+        accessed_at: "2026-09"
+    limitations:
+      - "Guarantee semantics inherit the entailment relation, back-off construction, annotations, and exchangeability assumptions."
+    applicability: "Systems able to return less-specific answers or sets and maintain a representative calibration stream."
+    curriculum_usage: { lessons: ["7.5"], labs: ["LAB-D"], assessments: ["Mastery-07"] }
+
+  - id: CLM-013
+    claim: "Kalai and Vempala prove a hallucination lower bound for a specified class of arbitrary facts under their generative calibration assumptions; it does not prove that all factual errors are unavoidable or that calibration causes every practical hallucination."
+    provenance: VERIFIED_FACT
+    domain: hallucination_theory
+    concepts: [calibration_lower_bound, arbitrary_facts, good_turing]
+    confidence: high
+    currentness_status: "FRONTIER / THEORETICAL"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "Calibrated Language Models Must Hallucinate"
+        authors: "Adam Tauman Kalai, Santosh S. Vempala"
+        year: "2024"
+        url: "https://arxiv.org/abs/2311.14648"
+        section: "Definitions, lower-bound theorem, and scope discussion"
+        accessed_at: "2026-09"
+    limitations:
+      - "The theorem's arbitrary-fact and calibration definitions must not be silently extended to systematic facts, retrieved evidence, post-training, or tool-grounded systems."
+    applicability: "Teaching why one theoretical result cannot substitute for an operational failure taxonomy and measurement."
+    curriculum_usage: { lessons: ["7.1"], labs: ["LAB-A"], assessments: ["Mastery-07"] }
+
+  - id: CLM-014
+    claim: "At Transformers commit 27166ea03f12c940f23176a904ab1d2ff1a3dcbb, generation outputs can expose processed scores and raw logits, and GenerationMixin.compute_transition_scores optionally applies log_softmax to reconstruct selected-token transition scores; these values describe generation likelihood under that path, not calibrated answer correctness."
+    provenance: VERIFIED_FACT
+    domain: runtime_implementation
+    concepts: [generation_scores, transition_scores, correctness_confidence]
+    confidence: high
+    currentness_status: "CURRENT TRANSFORMERS SNAPSHOT"
+    evidence:
+      - source_type: source_code
+        tier: 1
+        title: "Transformers generation output and transition-score implementation"
+        repository: "https://github.com/huggingface/transformers"
+        commit: "27166ea03f12c940f23176a904ab1d2ff1a3dcbb"
+        verification_date: "2026-09-26"
+        file: "src/transformers/generation/utils.py"
+        symbol: "GenerateDecoderOnlyOutput; GenerationMixin.compute_transition_scores"
+        entry_point: "GenerationMixin.generate(...) with return_dict_in_generate/output_scores/output_logits"
+        execution_path: "generate -> decode loop records scores/logits -> output object; compute_transition_scores -> stack/gather selected-token scores -> optional log_softmax"
+        url: "https://github.com/huggingface/transformers/blob/27166ea03f12c940f23176a904ab1d2ff1a3dcbb/src/transformers/generation/utils.py"
+        accessed_at: "2026-09"
+    limitations:
+      - "Static source inspection only; behavior was not executed in this repository."
+      - "Processors, warpers, beam search, length, tokenization, and normalization choices affect score semantics."
+    applicability: "Source-reading exercise that prevents conflating token likelihood with correctness probability."
+    curriculum_usage: { lessons: ["7.2"], labs: ["LAB-B"], assessments: ["Production-Source-Trace"] }
+
+  - id: CLM-015
+    claim: "A behavior regression system should detect changes on versioned slices and then test competing causes; an aggregate score can remain stable while severity, subgroup, language, prompt family, temporal knowledge, refusal, or calibration behavior regresses."
+    provenance: HYPOTHESIS
+    domain: behavior_regression
+    concepts: [slice_regression, versioning, causal_diagnosis]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    hypothesis:
+      prediction: "A release-level aggregate can pass while one preregistered high-risk slice shows a practically important behavior or calibration regression."
+      measurement_target: "Prompt/model/runtime versions, slice membership, repeated-sample outcomes, severity-weighted failures, confidence and labels, coverage-risk, temporal knowledge date, retrieval/tool state, and paired release deltas with uncertainty."
+      falsifying_observation: "All adequately powered preregistered slices remain within equivalence/non-inferiority margins and the apparent regression disappears under label audit and matched reruns."
+    limitations:
+      - "Slices discovered after observing a failure are exploratory until replicated on held-out data."
+      - "No finite suite proves absence of unknown behavior failures."
+    applicability: "Pre-release gates, canaries, and post-release incident diagnosis."
+    curriculum_usage: { lessons: ["7.6"], labs: ["LAB-D"], assessments: ["Incident-07.1", "Mastery-07"] }

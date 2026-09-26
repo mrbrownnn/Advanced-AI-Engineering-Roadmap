@@ -1,0 +1,179 @@
+module: "07-model-behavior-uncertainty"
+registry_version: "1.0.0"
+
+required_concepts:
+  - "behavior_contract"
+  - "failure_taxonomy"
+  - "factuality_and_truthfulness"
+  - "confidence_event"
+  - "calibration"
+  - "proper_scoring_and_calibration_error"
+  - "temperature_scaling"
+  - "distribution_shift"
+  - "selective_prediction"
+  - "risk_coverage"
+  - "self_evaluation"
+  - "sample_disagreement"
+  - "semantic_uncertainty"
+  - "conformal_factuality"
+  - "behavior_regression"
+
+prerequisite_concepts:
+  - "sampling_and_logits"
+  - "test_time_candidates"
+  - "evidence_provenance"
+  - "experimental_units"
+  - "confidence_intervals"
+
+first_occurrence_concepts:
+  - "behavior_contract"
+  - "failure_taxonomy"
+  - "confidence_event"
+  - "calibration"
+  - "selective_prediction"
+  - "risk_coverage"
+  - "semantic_uncertainty"
+  - "conformal_factuality"
+  - "behavior_regression"
+
+concept_dependencies:
+  - concept: "calibration"
+    depends_on: ["confidence_event", "experimental_units"]
+  - concept: "temperature_scaling"
+    depends_on: ["sampling_and_logits", "calibration"]
+  - concept: "selective_prediction"
+    depends_on: ["calibration", "risk_coverage"]
+  - concept: "semantic_uncertainty"
+    depends_on: ["test_time_candidates", "sample_disagreement"]
+  - concept: "conformal_factuality"
+    depends_on: ["calibration", "evidence_provenance"]
+  - concept: "behavior_regression"
+    depends_on: ["behavior_contract", "failure_taxonomy", "confidence_intervals"]
+
+mechanisms:
+  - id: "MECH-01"
+    description: "A behavior contract defines the task, permitted evidence, knowledge cutoff, output obligations, correctness/factuality/refusal events, severity, unit of analysis, and population. The same text can be correct under one contract and unsupported, stale, or noncompliant under another."
+    evidence_ids: ["CLM-008", "CLM-009", "CLM-013"]
+    derived_from: []
+  - id: "MECH-02"
+    description: "Calibration maps a declared confidence score to the empirical frequency of a declared event on a declared population. Token likelihood, sequence likelihood, verbal self-report, sample agreement, verifier score, and semantic entropy are different signals and require separate validation."
+    evidence_ids: ["CLM-001", "CLM-002", "CLM-006", "CLM-007", "CLM-014"]
+    derived_from: ["MECH-01"]
+  - id: "MECH-03"
+    description: "Selective prediction applies an acceptance rule to answer, abstain, retrieve, retry, or escalate. Its operating point trades accepted coverage against conditional risk and must include the utility and subgroup impact of rejected traffic."
+    evidence_ids: ["CLM-005", "CLM-007"]
+    derived_from: ["MECH-02"]
+  - id: "MECH-04"
+    description: "Black-box and semantic uncertainty methods compare multiple sampled outputs at surface, claim, or meaning level. Disagreement may expose instability, while repeated correlated falsehoods and legitimate paraphrases make raw consistency an ambiguous correctness signal."
+    evidence_ids: ["CLM-010", "CLM-011"]
+    derived_from: []
+  - id: "MECH-05"
+    description: "Conformal factuality calibrates a back-off or uncertainty-set procedure on exchangeable labeled examples to provide its stated marginal coverage guarantee. Guarantee scope follows the score, entailment relation, calibration population, and output construction."
+    evidence_ids: ["CLM-012"]
+    derived_from: ["MECH-01", "MECH-02"]
+  - id: "MECH-06"
+    description: "Behavior regression compares pinned releases on versioned, severity-weighted slices and repeated samples, then uses label audit and matched reruns to distinguish model, prompt, runtime, retrieval/tool, evaluator, and population changes."
+    evidence_ids: ["CLM-004", "CLM-008", "CLM-015"]
+    derived_from: ["MECH-01", "MECH-02", "MECH-03", "MECH-04"]
+
+mathematical_models:
+  - id: "MATH-01"
+    description: "Calibration target for binary event Y and confidence Q: E[Y | Q=q]=q on the declared population. Finite samples estimate rather than prove this conditional equality, and aggregate equality does not imply subgroup calibration."
+    evidence_ids: ["CLM-001"]
+    derived_from: ["MECH-02"]
+  - id: "MATH-02"
+    description: "Binned ECE: sum_b (n_b/n)*|acc_b-conf_b|. It is an estimator defined by bins and weighting; report binning rules, counts, uncertainty, and complementary proper scores rather than presenting it as a complete calibration property."
+    evidence_ids: ["CLM-002"]
+    derived_from: ["MECH-02", "MATH-01"]
+  - id: "MATH-03"
+    description: "Temperature scaling: p_T(y|x)=softmax(z(x)/T)_y for fitted T>0. Positive scalar division preserves logit order/argmax, while fitted probability sharpness is conditional on representative calibration data."
+    evidence_ids: ["CLM-003"]
+    derived_from: ["MECH-02"]
+  - id: "MATH-04"
+    description: "Selective prediction: coverage(t)=P(accept at threshold t) and risk(t)=E[L | accept at t]. A risk-coverage curve or declared operating points are required; low conditional risk at negligible coverage is not broad reliability."
+    evidence_ids: ["CLM-005"]
+    derived_from: ["MECH-03"]
+  - id: "MATH-05"
+    description: "Binary Brier score is the sample mean of (q_i-y_i)^2 and negative log-likelihood is the sample mean of -[y_i log q_i+(1-y_i)log(1-q_i)]. Both couple calibration and predictive sharpness; neither diagnoses slice causes alone."
+    evidence_ids: ["CLM-001", "CLM-002"]
+    derived_from: ["MECH-02", "MATH-01"]
+
+implementation_mechanisms:
+  - id: "IMPL-01"
+    description: "A behavior record stores prompt/task and versions, allowed evidence and knowledge date, sampled output, atomic claims, labels with adjudication, failure categories and severity, confidence signals, route/abstention, and evaluator provenance."
+    evidence_ids: ["CLM-008", "CLM-009", "CLM-015"]
+    derived_from: ["MECH-01", "MECH-06"]
+  - id: "IMPL-02"
+    description: "A calibration pipeline partitions train/calibration/test by the intended deployment unit, fits transformations only on calibration data, freezes thresholds before test, and reports proper scores, reliability estimates, ranking, and risk-coverage with uncertainty and slices."
+    evidence_ids: ["CLM-001", "CLM-002", "CLM-003", "CLM-004", "CLM-005"]
+    derived_from: ["MECH-02", "MECH-03"]
+  - id: "IMPL-03"
+    description: "A multi-sample uncertainty pipeline preserves raw generations, seeds and decoding settings, extracts claims/answers, records equivalence judgments, and compares uncertainty with independent correctness rather than using consistency as its own label."
+    evidence_ids: ["CLM-010", "CLM-011"]
+    derived_from: ["MECH-04"]
+  - id: "IMPL-04"
+    description: "Pinned Transformers source trace records processed per-step scores or raw logits from generation and optionally reconstructs selected-token transition scores with compute_transition_scores. A separate labeled mapping is required before interpreting them as answer correctness confidence."
+    evidence_ids: ["CLM-014"]
+    derived_from: ["MECH-02"]
+
+failure_modes:
+  - id: "FAIL-01"
+    description: "Metric-category error: one aggregate 'hallucination rate' merges unsupported claims, contradictions, stale knowledge, instruction violations, invalid refusals, and evaluator failures, preventing targeted diagnosis."
+    evidence_ids: ["CLM-008", "CLM-009", "CLM-013"]
+    derived_from: ["MECH-01"]
+  - id: "FAIL-02"
+    description: "Confidence semantic error: next-token or sequence likelihood is labeled probability of correctness without a declared event and held-out calibration evidence. Decoding transforms and length effects can change the score without changing factual correctness."
+    evidence_ids: ["CLM-006", "CLM-014"]
+    derived_from: ["MECH-02", "IMPL-04"]
+  - id: "FAIL-03"
+    description: "Shifted calibration: a score or threshold validated on one task, prompt, language, time window, or model version is reused after shift and loses calibration or ranking quality."
+    evidence_ids: ["CLM-003", "CLM-004", "CLM-007"]
+    derived_from: ["MECH-02", "MECH-06"]
+  - id: "FAIL-04"
+    description: "Abstention utility failure: aggregate selective risk falls because the system rejects most traffic or disproportionately rejects a subgroup, while escalation load and user harm grow."
+    evidence_ids: ["CLM-005"]
+    derived_from: ["MECH-03", "MATH-04"]
+  - id: "FAIL-05"
+    description: "Consistency illusion: stochastic samples converge on the same false belief, or valid paraphrases are split into different meanings, so surface or semantic disagreement misranks factual risk."
+    evidence_ids: ["CLM-010", "CLM-011"]
+    derived_from: ["MECH-04", "IMPL-03"]
+  - id: "FAIL-06"
+    description: "Guarantee leakage: a marginal conformal guarantee is presented as per-item, subgroup, semantic-completeness, or post-shift correctness despite changed assumptions or score semantics."
+    evidence_ids: ["CLM-012"]
+    derived_from: ["MECH-05"]
+  - id: "FAIL-07"
+    description: "Hidden slice regression: release-level means remain stable while a severe, temporal, language, prompt-family, or subgroup failure worsens; post-hoc slice discovery then overstates certainty unless replicated."
+    evidence_ids: ["CLM-004", "CLM-008", "CLM-015"]
+    derived_from: ["MECH-06"]
+
+production_connections:
+  - id: "PROD-01"
+    description: "An uncertainty policy routes answers through accept, abstain, retrieve, tool-check, retry, or human escalation using thresholds selected on deployment-like data and monitored for coverage, conditional risk, capacity, subgroup impact, and cost."
+    evidence_ids: ["CLM-004", "CLM-005", "CLM-007", "CLM-015"]
+    derived_from: ["MECH-03", "IMPL-02", "FAIL-03", "FAIL-04"]
+  - id: "PROD-02"
+    description: "A regression gate combines stable anchor sets, time-sensitive sets, adversarial cases, sampled production cases, severity weights, paired release comparisons, evaluator audits, and explicit promotion/rollback thresholds."
+    evidence_ids: ["CLM-008", "CLM-009", "CLM-015"]
+    derived_from: ["MECH-06", "IMPL-01", "FAIL-07"]
+
+research_connections:
+  - id: "RESEARCH-01"
+    description: "Current uncertainty mechanisms form distinct families: probability calibration, prompted self-evaluation, stochastic disagreement, semantic clustering, learned probes, and conformal output control. Their scores and guarantees are not interchangeable."
+    evidence_ids: ["CLM-003", "CLM-006", "CLM-007", "CLM-010", "CLM-011", "CLM-012"]
+    derived_from: ["MECH-02", "MECH-04", "MECH-05"]
+  - id: "RESEARCH-02"
+    description: "Theoretical lower bounds for arbitrary facts and empirical factuality benchmarks answer different questions; neither supplies a universal taxonomy or production failure rate."
+    evidence_ids: ["CLM-008", "CLM-009", "CLM-013"]
+    derived_from: ["MECH-01"]
+
+candidate_capabilities:
+  - capability: "Define behavior and failure events with evidence, temporal, severity, and unit boundaries."
+    mapped_mechanisms: ["MECH-01", "IMPL-01", "FAIL-01"]
+  - capability: "Build and audit a calibration pipeline without equating generation likelihood with answer correctness."
+    mapped_mechanisms: ["MECH-02", "MATH-01", "MATH-02", "MATH-03", "MATH-05", "IMPL-02", "IMPL-04", "FAIL-02"]
+  - capability: "Design an abstention policy and defend its risk, coverage, subgroup, escalation, and cost operating point."
+    mapped_mechanisms: ["MECH-03", "MATH-04", "FAIL-04", "PROD-01"]
+  - capability: "Compare sample disagreement, semantic uncertainty, and conformal controls under their actual assumptions."
+    mapped_mechanisms: ["MECH-04", "MECH-05", "IMPL-03", "FAIL-05", "FAIL-06", "RESEARCH-01"]
+  - capability: "Detect and diagnose behavior regressions across versions, slices, shifts, and evaluator changes."
+    mapped_mechanisms: ["MECH-06", "FAIL-03", "FAIL-07", "PROD-02"]
