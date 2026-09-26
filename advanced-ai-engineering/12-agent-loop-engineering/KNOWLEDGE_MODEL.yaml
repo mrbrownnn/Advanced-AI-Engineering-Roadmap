@@ -1,0 +1,179 @@
+module: "12-agent-loop-engineering"
+registry_version: "1.0.0"
+
+required_concepts:
+  - "agent_loop"
+  - "state_transition"
+  - "tool_contract"
+  - "observation_envelope"
+  - "action_authorization"
+  - "step_budget"
+  - "resource_budget"
+  - "terminal_predicate"
+  - "tool_failure_taxonomy"
+  - "retry_policy"
+  - "replanning"
+  - "progress_signal"
+  - "stall_detection"
+  - "reflection"
+  - "trajectory_evaluation"
+
+prerequisite_concepts:
+  - "behavior_uncertainty"
+  - "context_budget"
+  - "memory_provenance"
+  - "schema_validation"
+  - "latency_distribution"
+  - "goodput"
+  - "data_lineage"
+
+first_occurrence_concepts:
+  - "state_transition"
+  - "agent_loop"
+  - "tool_contract"
+  - "observation_envelope"
+  - "action_authorization"
+  - "terminal_predicate"
+  - "tool_failure_taxonomy"
+  - "progress_signal"
+  - "stall_detection"
+  - "trajectory_evaluation"
+
+concept_dependencies:
+  - { concept: "agent_loop", depends_on: ["state_transition", "behavior_uncertainty"] }
+  - { concept: "tool_contract", depends_on: ["schema_validation", "data_lineage"] }
+  - { concept: "observation_envelope", depends_on: ["tool_contract", "data_lineage"] }
+  - { concept: "action_authorization", depends_on: ["tool_contract"] }
+  - { concept: "terminal_predicate", depends_on: ["agent_loop", "step_budget", "resource_budget"] }
+  - { concept: "retry_policy", depends_on: ["tool_failure_taxonomy", "tool_contract"] }
+  - { concept: "replanning", depends_on: ["observation_envelope", "retry_policy"] }
+  - { concept: "stall_detection", depends_on: ["progress_signal", "agent_loop"] }
+  - { concept: "reflection", depends_on: ["memory_provenance", "trajectory_evaluation"] }
+  - { concept: "trajectory_evaluation", depends_on: ["agent_loop", "goodput", "latency_distribution"] }
+
+mechanisms:
+  - id: "MECH-01"
+    description: "A controller advances an explicit state through observe, propose, validate/authorize, execute, observe-result, and terminate transitions; the model proposes decisions but does not define execution truth."
+    evidence_ids: ["CLM-001", "CLM-011"]
+    derived_from: []
+  - id: "MECH-02"
+    description: "A versioned tool contract makes arguments, authority, side effects, retry safety, deadlines, outcomes, and completion evidence machine-checkable."
+    evidence_ids: ["CLM-003", "CLM-004"]
+    derived_from: ["MECH-01"]
+  - id: "MECH-03"
+    description: "An observation envelope preserves call identity, tool/version, request arguments, timing, raw and parsed output, error/effect state, truncation, and provenance before the next model decision."
+    evidence_ids: ["CLM-009"]
+    derived_from: ["MECH-02"]
+  - id: "MECH-04"
+    description: "The controller enforces orthogonal hard resource limits and workload-specific semantic terminal predicates, including verified success, explicit failure, safe abstention, and escalation."
+    evidence_ids: ["CLM-005", "CLM-014"]
+    derived_from: ["MECH-01"]
+  - id: "MECH-05"
+    description: "Recovery classifies a failure before choosing retry, argument repair, backoff, alternative tool, replan, postcondition check, compensation/escalation, or termination."
+    evidence_ids: ["CLM-006", "CLM-007"]
+    derived_from: ["MECH-02", "MECH-03", "MECH-04"]
+  - id: "MECH-06"
+    description: "Progress and cycle detectors combine state deltas, action signatures, error classes, plan similarity, verified subgoals, and remaining budget; detection thresholds are evaluated against false stops and recovered success."
+    evidence_ids: ["CLM-005", "CLM-010"]
+    derived_from: ["MECH-01", "MECH-04", "MECH-05"]
+  - id: "MECH-07"
+    description: "Reflection or self-critique becomes a candidate state update, not proof; it must be grounded in external feedback, execution evidence, or a verifier before reuse."
+    evidence_ids: ["CLM-008"]
+    derived_from: ["MECH-03", "MECH-05"]
+  - id: "MECH-08"
+    description: "Trajectory evaluation slices task outcome, effect correctness, policy violations, intervention, recovery, resource use, latency, and cost rather than collapsing all behavior into final-answer success."
+    evidence_ids: ["CLM-012", "CLM-013"]
+    derived_from: ["MECH-01", "MECH-04", "MECH-05", "MECH-06"]
+
+mathematical_models:
+  - id: "MATH-01"
+    description: "Represent an episode as tau=(s_0,a_0,o_1,s_1,...,a_{T-1},o_T,s_T), with controller transition s_{t+1}=F(s_t,a_t,o_{t+1}). This is exact bookkeeping for a declared state schema; it is not a Markov model unless s_t is sufficient for future behavior."
+    evidence_ids: ["CLM-001", "CLM-009"]
+    derived_from: ["MECH-01", "MECH-03"]
+  - id: "MATH-02"
+    description: "For budget vector B=(B_steps,B_model,B_tool,B_tokens,B_time,B_cost,B_repeat,B_errors), continue only while every consumed resource c_i(t) stays below B_i and no semantic terminal predicate fires. Limits have their native units and do not imply successful completion."
+    evidence_ids: ["CLM-005", "CLM-014"]
+    derived_from: ["MECH-04"]
+  - id: "MATH-03"
+    description: "For a strictly sequential trajectory, elapsed work is the sum of controller, model, validation, tool, and observation-processing durations plus queue/network delays. Parallel or asynchronous branches require critical-path timing; summing all spans would overstate wall time."
+    evidence_ids: ["CLM-001", "CLM-013"]
+    derived_from: ["MECH-01", "MECH-08"]
+  - id: "MATH-04"
+    description: "Episode goodput under a declared SLO is verified-successful, policy-compliant episodes divided by wall-clock time; cost of success is total included spend divided by verified successes. Rejects, aborts, retries, and zero-success windows must remain in the denominator policy and cannot be silently dropped."
+    evidence_ids: ["CLM-013"]
+    derived_from: ["MECH-08"]
+
+implementation_mechanisms:
+  - id: "IMPL-01"
+    description: "A deterministic controller owns transition validation, tool dispatch, authority checks, budgets, terminal states, and structured failure handling; model text is an input to that controller."
+    evidence_ids: ["CLM-001", "CLM-004", "CLM-005", "CLM-011"]
+    derived_from: ["MECH-01", "MECH-02", "MECH-04"]
+  - id: "IMPL-02"
+    description: "A trajectory ledger records state/event IDs, model and prompt versions, proposed and authorized actions, tool versions/arguments, observation envelopes, retries, budgets, terminal reason, effects, tokens, latency, and cost."
+    evidence_ids: ["CLM-009", "CLM-013"]
+    derived_from: ["MECH-03", "MECH-08"]
+  - id: "IMPL-03"
+    description: "The pinned LangGraph trace illustrates a tool-calling graph and recursion-limit guard, while its create_react_agent factory is explicitly deprecated and therefore cannot define a current universal architecture."
+    evidence_ids: ["CLM-014"]
+    derived_from: ["MECH-01", "MECH-04"]
+
+failure_modes:
+  - id: "FAIL-01"
+    description: "Runaway execution exhausts tokens, calls, time, or money because success is asserted in prose and no independent budget or terminal predicate stops the loop."
+    evidence_ids: ["CLM-005", "CLM-014"]
+    derived_from: ["MECH-04", "MATH-02"]
+  - id: "FAIL-02"
+    description: "Blind retry repeats a deterministic invalid request or duplicates a side effect whose commit state is unknown."
+    evidence_ids: ["CLM-004", "CLM-006", "CLM-011"]
+    derived_from: ["MECH-02", "MECH-05"]
+  - id: "FAIL-03"
+    description: "Semantic tool corruption returns syntactically valid but wrong data, which the loop treats as authoritative and propagates into later actions."
+    evidence_ids: ["CLM-006", "CLM-007", "CLM-009"]
+    derived_from: ["MECH-03", "MECH-05"]
+  - id: "FAIL-04"
+    description: "Oscillation alternates plans, tools, or states without measurable progress; retries look active while consuming the remaining budget."
+    evidence_ids: ["CLM-007", "CLM-010"]
+    derived_from: ["MECH-06"]
+  - id: "FAIL-05"
+    description: "Premature completion accepts a plausible final answer without checking required artifacts, state changes, constraints, or postconditions."
+    evidence_ids: ["CLM-001", "CLM-004", "CLM-011"]
+    derived_from: ["MECH-01", "MECH-02", "MECH-04"]
+  - id: "FAIL-06"
+    description: "Reflection poisoning stores a persuasive but false causal diagnosis and biases subsequent attempts toward the same failing path."
+    evidence_ids: ["CLM-008"]
+    derived_from: ["MECH-07"]
+  - id: "FAIL-07"
+    description: "Authority collapse lets a model-selected tool or untrusted observation expand permissions, skip approval, or substitute claimed success for an observed effect."
+    evidence_ids: ["CLM-009", "CLM-011"]
+    derived_from: ["MECH-01", "MECH-03"]
+  - id: "FAIL-08"
+    description: "Benchmark blindness reports only final task success and hides invalid side effects, excessive retries, human rescue, deadline misses, and cost."
+    evidence_ids: ["CLM-012", "CLM-013"]
+    derived_from: ["MECH-08", "MATH-04"]
+
+production_connections:
+  - id: "PROD-01"
+    description: "Ship tool loops with versioned contracts, least-privilege authorization, independent budgets, semantic terminal checks, unknown-effect handling, full trajectory telemetry, canary limits, and a kill path."
+    evidence_ids: ["CLM-004", "CLM-005", "CLM-006", "CLM-009", "CLM-011"]
+    derived_from: ["MECH-01", "MECH-02", "MECH-03", "MECH-04", "MECH-05", "IMPL-01", "IMPL-02"]
+  - id: "PROD-02"
+    description: "Release evaluation injects malformed arguments, permission denial, rate limits, timeouts, partial/unknown effects, semantic corruption, unavailable tools, and changing topology, then measures recovery and harm-adjusted utility by workload slice."
+    evidence_ids: ["CLM-006", "CLM-007", "CLM-010", "CLM-012", "CLM-013"]
+    derived_from: ["MECH-05", "MECH-06", "MECH-08"]
+
+research_connections:
+  - id: "RESEARCH-01"
+    description: "ReAct, Toolformer, and Reflexion remain reference mechanism families for interleaved acting, learned tool use, and verbal feedback, but none establishes production runtime governance."
+    evidence_ids: ["CLM-002", "CLM-003", "CLM-008"]
+    derived_from: ["MECH-01", "MECH-02", "MECH-07"]
+  - id: "RESEARCH-02"
+    description: "ToolMaze adds 2026 benchmark evidence for dynamic replanning under explicit/implicit and transient/permanent perturbations; transfer to real tools and deployments remains unestablished."
+    evidence_ids: ["CLM-007"]
+    derived_from: ["MECH-05", "MECH-06", "MECH-08"]
+
+candidate_capabilities:
+  - { capability: "Implement a bounded observe-decide-act controller with explicit state, authority, transitions, and terminal outcomes.", mapped_mechanisms: ["MECH-01", "MECH-04", "MATH-01", "MATH-02", "IMPL-01", "FAIL-01", "FAIL-05"] }
+  - { capability: "Design and validate tool and observation contracts that preserve side-effect and provenance semantics.", mapped_mechanisms: ["MECH-02", "MECH-03", "IMPL-02", "FAIL-02", "FAIL-03", "FAIL-07"] }
+  - { capability: "Classify failures and choose retry, verification, replan, escalation, or stop without creating retry storms.", mapped_mechanisms: ["MECH-05", "MECH-06", "FAIL-02", "FAIL-04", "PROD-02"] }
+  - { capability: "Use reflection as a tested candidate update and falsify its value against no-reflection and oracle-feedback baselines.", mapped_mechanisms: ["MECH-07", "FAIL-06", "RESEARCH-01"] }
+  - { capability: "Evaluate complete trajectories for verified success, effects, violations, recovery, latency, resource use, and cost.", mapped_mechanisms: ["MECH-08", "MATH-03", "MATH-04", "FAIL-08", "PROD-01", "PROD-02"] }

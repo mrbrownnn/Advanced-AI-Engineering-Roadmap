@@ -1,0 +1,205 @@
+module: "12-agent-loop-engineering"
+registry_version: "1.0.0"
+research_cutoff: "2026-09-26"
+change_reason: "Replace placeholders with verified agent-loop, tool-contract, termination, recovery, evaluation, and source-code mechanisms."
+claims:
+  - id: CLM-001
+    claim: "An agent loop is a bounded state-transition controller: observe state, choose an action or terminal response, validate/authorize, execute, incorporate the resulting observation, and repeat until an explicit terminal condition."
+    provenance: DERIVED
+    domain: control_loop
+    concepts: [state_machine, observation, action, termination]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["The application exposes state, actions, observations, and terminal outcomes through an orchestrator."]
+    derivation: "Each tool action changes or queries environment state and returns an observation used by the next decision. Without explicit transition and terminal semantics, completion and safety cannot be checked independently of model prose."
+    limitations: ["Planner, model, and execution topology vary; this is a general control abstraction."]
+    applicability: "Tool-using assistants and goal-directed agents."
+    curriculum_usage: { lessons: ["12.1"], labs: ["LAB-A"], assessments: ["Mastery-12"] }
+  - id: CLM-002
+    claim: "ReAct demonstrates interleaving reasoning traces and environment actions on scoped language and decision tasks; it is a reference pattern, not evidence that unconstrained reasoning-action loops are universally reliable."
+    provenance: VERIFIED_FACT
+    domain: agent_pattern
+    concepts: [react, reasoning_action, observation]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "ReAct: Synergizing Reasoning and Acting in Language Models", authors: "Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik Narasimhan, Yuan Cao", year: "2023", url: "https://arxiv.org/abs/2210.03629", section: "Method and task experiments", accessed_at: "2026-09" }]
+    limitations: ["Results depend on models, demonstrations, environments, tools, and success metrics."]
+    applicability: "Historical foundation for observe-reason-act loops."
+    curriculum_usage: { lessons: ["12.1"], labs: ["LAB-A"], assessments: ["Mastery-12"] }
+  - id: CLM-003
+    claim: "Toolformer trains a model to decide whether, when, and how to call scoped APIs and incorporate results; its training method and benchmarks do not define runtime tool governance."
+    provenance: VERIFIED_FACT
+    domain: tool_use
+    concepts: [toolformer, api_call, tool_result]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "Toolformer: Language Models Can Teach Themselves to Use Tools", authors: "Timo Schick, Jane Dwivedi-Yu, Roberto Dessì, Roberta Raileanu, Maria Lomeli, Luke Zettlemoyer, Nicola Cancedda, Thomas Scialom", year: "2023", url: "https://arxiv.org/abs/2302.04761", section: "Method and experiments", accessed_at: "2026-09" }]
+    limitations: ["Production permissions, schemas, retries, side effects, and changing APIs require external controls."]
+    applicability: "Reference evidence that tool selection and result incorporation are distinct learned decisions."
+    curriculum_usage: { lessons: ["12.2"], labs: ["LAB-B"], assessments: ["Mastery-12"] }
+  - id: CLM-004
+    claim: "A tool contract must define name/version, typed arguments, validation, authorization, side-effect class, idempotency/retry semantics, timeout, result/error schema, and evidence of completion; natural-language descriptions alone are insufficient."
+    provenance: DERIVED
+    domain: tool_contract
+    concepts: [schema_validation, authorization, idempotency, timeout]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Model-generated calls can be malformed or unauthorized and tools can fail before, during, or after effects."]
+    derivation: "The orchestrator must distinguish invalid intent, rejected authority, safe retry, unknown commit state, and successful effect. Typed/versioned contracts provide machine-checkable transition semantics."
+    limitations: ["Durable transactions/checkpoints are developed in Module 14 and security controls in Module 18."]
+    applicability: "Every model-invoked API or executable tool."
+    curriculum_usage: { lessons: ["12.2"], labs: ["LAB-B"], assessments: ["Incident-12.1"] }
+  - id: CLM-005
+    claim: "Termination requires independent limits on steps, model/tool calls, tokens, elapsed time, cost, repeated state/action patterns, and unresolved errors plus semantic success/failure/abstention conditions."
+    provenance: DERIVED
+    domain: loop_control
+    concepts: [step_budget, deadline, cycle_detection, stop_condition]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["A loop can fail to emit a trustworthy terminal action and different resources can exhaust independently."]
+    derivation: "Any single cap leaves other unbounded dimensions; a final model assertion can be false. The controller therefore enforces hard budgets and verifies task-specific terminal predicates where possible."
+    limitations: ["Budgets and semantic verifiers are workload-specific; hard stopping may terminate recoverable tasks."]
+    applicability: "Preventing runaway, stuck, and economically unbounded agents."
+    curriculum_usage: { lessons: ["12.3"], labs: ["LAB-A"], assessments: ["Incident-12.1", "Mastery-12"] }
+  - id: CLM-006
+    claim: "Tool failures should be classified as validation, authorization, transient transport, rate limit, deterministic application error, semantic corruption, partial/unknown side effect, or timeout because retry and recovery differ by class."
+    provenance: DERIVED
+    domain: recovery
+    concepts: [error_taxonomy, retry_policy, semantic_failure]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Tool calls expose structured status and effect evidence or explicitly report unknown state."]
+    derivation: "Blind retry is unsafe after a possible side effect and useless for deterministic invalid input; semantic corruption may look successful. Classification determines retry, repair, alternative tool, verification, compensation, or escalation."
+    limitations: ["Some failures remain ambiguous without tool-side observability or idempotency keys."]
+    applicability: "Tool execution and anomaly recovery."
+    curriculum_usage: { lessons: ["12.3"], labs: ["LAB-B", "LAB-C"], assessments: ["Incident-12.1"] }
+  - id: CLM-007
+    claim: "ToolMaze evaluates explicit/implicit and transient/permanent tool perturbations and reports recovery degradation and futile trial-and-error in its 2026 setup, supporting failure-injection rather than happy-path-only evaluation."
+    provenance: VERIFIED_FACT
+    domain: recovery
+    concepts: [toolmaze, replanning, perturbation]
+    confidence: medium
+    currentness_status: "FRONTIER / BENCHMARK-SPECIFIC"
+    evidence: [{ source_type: paper, tier: 1, title: "When Tools Fail: Benchmarking Dynamic Replanning and Anomaly Recovery in LLM Agents", authors: "Dongsheng Zhu, Xuchen Ma, Yucheng Shen, Xiang Li, Yukun Zhao, Shuaiqiang Wang, Lingyong Yan, Dawei Yin", year: "2026", url: "https://arxiv.org/abs/2606.05806", section: "Perturbation taxonomy, benchmark, and experiments", accessed_at: "2026-09" }]
+    limitations: ["Preprint uses simulated tools/tasks and specific models; rates do not transfer universally."]
+    applicability: "Dynamic-replanning and tool-failure test design."
+    curriculum_usage: { lessons: ["12.3"], labs: ["LAB-C"], assessments: ["Mastery-12"] }
+  - id: CLM-008
+    claim: "Reflexion stores verbal feedback/reflections for later trials and reports scoped improvements; reflection can also preserve a wrong diagnosis, so it requires outcome-grounded validation."
+    provenance: VERIFIED_FACT
+    domain: self_correction
+    concepts: [reflexion, feedback, episodic_memory]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "Reflexion: Language Agents with Verbal Reinforcement Learning", authors: "Noah Shinn, Federico Cassano, Edward Berman, Ashwin Gopinath, Karthik Narasimhan, Shunyu Yao", year: "2023", url: "https://arxiv.org/abs/2303.11366", section: "Framework, experiments, and ablations", accessed_at: "2026-09" }]
+    limitations: ["Reported gains depend on feedback signal, task, model, memory, and baseline; self-critique is not independent evidence."]
+    applicability: "Feedback-driven retries and cross-trial learning experiments."
+    curriculum_usage: { lessons: ["12.4"], labs: ["LAB-C"], assessments: ["Mastery-12"] }
+  - id: CLM-009
+    claim: "An observation is untrusted state input: the controller must preserve tool identity, call ID, arguments, timestamps, raw/parsed result, error/effect status, and truncation so the model cannot silently reinterpret missing or malformed data as success."
+    provenance: DERIVED
+    domain: state_integrity
+    concepts: [observation_envelope, provenance, result_validation]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Tool outputs can be large, malformed, stale, adversarial, or partially delivered."]
+    derivation: "The next decision depends on the observation. Losing provenance or status makes failure, absence, truncation, and success observationally confounded."
+    limitations: ["Content-level security and prompt injection are treated in Module 18."]
+    applicability: "Every tool-to-model observation boundary."
+    curriculum_usage: { lessons: ["12.2", "12.5"], labs: ["LAB-B"], assessments: ["Incident-12.1"] }
+  - id: CLM-010
+    claim: "Repeated identical/near-identical actions, no state progress, alternating states, rising error count, and repeated plan text are useful loop-stall signals but none alone proves failure."
+    provenance: HYPOTHESIS
+    domain: loop_pathology
+    concepts: [stall_detection, oscillation, progress_metric]
+    confidence: high
+    currentness_status: "CURRENT / WORKLOAD-DEPENDENT"
+    hypothesis:
+      prediction: "A detector combining state-progress and action/error repetition identifies runaway episodes earlier than a step cap at an acceptable false-stop rate."
+      measurement_target: "State hashes/deltas, action signatures, error classes, plan similarity, verified progress, remaining budget, stop timing, false stops, and recovered success."
+      falsifying_observation: "The detector does not improve cost or harm-adjusted success over a preregistered step-cap baseline within uncertainty."
+    limitations: ["Legitimate polling, iterative refinement, and repeated reads can resemble stalls."]
+    applicability: "Online detection of loops, oscillation, and retry storms."
+    curriculum_usage: { lessons: ["12.3", "12.4"], labs: ["LAB-A", "LAB-C"], assessments: ["Incident-12.1"] }
+  - id: CLM-011
+    claim: "High-impact actions require an authority policy outside the model, with least privilege, scoped credentials, preconditions, previews/approvals where required, postcondition verification, and an explicit response to unknown commit state."
+    provenance: DERIVED
+    domain: action_governance
+    concepts: [least_privilege, approval, postcondition]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["The model can propose actions but is not itself a trusted authorization oracle."]
+    derivation: "Separating proposal from authorization prevents model text or untrusted observations from expanding capability. Verification distinguishes claimed from actual effect."
+    limitations: ["Detailed threat modeling belongs to Module 18; durable exactly-once/compensation patterns belong to Module 14."]
+    applicability: "External writes, payments, deployments, messages, and destructive actions."
+    curriculum_usage: { lessons: ["12.5"], labs: ["LAB-B"], assessments: ["Incident-12.1", "Mastery-12"] }
+  - id: CLM-012
+    claim: "AgentBench evaluates agents across multiple interactive environments and reports heterogeneous failure causes; one benchmark score cannot establish general agent capability."
+    provenance: VERIFIED_FACT
+    domain: evaluation
+    concepts: [agentbench, interactive_environment, task_success]
+    confidence: high
+    currentness_status: "REFERENCE / CURRENT CAUTION"
+    evidence: [{ source_type: paper, tier: 1, title: "AgentBench: Evaluating LLMs as Agents", authors: "Xiao Liu et al.", year: "2024", version: "arXiv v3 revised 2025", url: "https://arxiv.org/abs/2308.03688", section: "Benchmark environments and failure analysis", accessed_at: "2026-09" }]
+    limitations: ["Environment coverage, tool interfaces, model versions, and task metrics constrain transfer."]
+    applicability: "Evidence for environment- and task-sliced evaluation."
+    curriculum_usage: { lessons: ["12.6"], labs: ["LAB-D"], assessments: ["Mastery-12"] }
+  - id: CLM-013
+    claim: "Agent evaluation must report task success together with side-effect correctness, violations, intervention/escalation, steps, model/tool calls, tokens, elapsed time, cost, and failure/rejection handling; success-only scores can reward wasteful or unsafe paths."
+    provenance: DERIVED
+    domain: evaluation
+    concepts: [cost_of_success, side_effect_correctness, intervention]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Episodes expose trajectories, effects, resource use, and terminal status including failures and aborts."]
+    derivation: "Two episodes with the same final answer can differ in unauthorized effects, retries, cost, latency, and user intervention. A production objective must account for those outcomes."
+    limitations: ["Metric weights and utility of abstention/escalation are product-specific."]
+    applicability: "Offline, shadow, and loaded agent evaluation."
+    curriculum_usage: { lessons: ["12.6"], labs: ["LAB-D"], assessments: ["Mastery-12"] }
+  - id: CLM-014
+    claim: "At LangGraph commit 7daa3ab49d678a5da75edb08baa87db4a2be52c3, deprecated create_react_agent constructs a tool-calling graph that repeats while tool calls remain, exposes remaining_steps behavior, and compiles the workflow; Pregel.stream enforces a configurable recursion limit and raises GraphRecursionError when exhausted without reaching a stop condition."
+    provenance: VERIFIED_FACT
+    domain: runtime_implementation
+    concepts: [langgraph, react_graph, recursion_limit]
+    confidence: high
+    currentness_status: "CURRENT SNAPSHOT / DEPRECATED FACTORY"
+    evidence:
+      - source_type: source_code
+        tier: 1
+        title: "LangGraph prebuilt ReAct graph"
+        repository: "https://github.com/langchain-ai/langgraph"
+        commit: "7daa3ab49d678a5da75edb08baa87db4a2be52c3"
+        verification_date: "2026-09-26"
+        file: "libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py"
+        symbol: "create_react_agent"
+        entry_point: "create_react_agent(...).invoke/stream or compiled Pregel stream execution"
+        execution_path: "create_react_agent -> compiled workflow -> agent model node -> AIMessage tool_calls -> tool node -> ToolMessage observations -> agent node until no tool_calls/return-direct/interrupt"
+        url: "https://github.com/langchain-ai/langgraph/blob/7daa3ab49d678a5da75edb08baa87db4a2be52c3/libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py"
+        accessed_at: "2026-09"
+      - source_type: source_code
+        tier: 1
+        title: "LangGraph Pregel execution stream"
+        repository: "https://github.com/langchain-ai/langgraph"
+        commit: "7daa3ab49d678a5da75edb08baa87db4a2be52c3"
+        verification_date: "2026-09-26"
+        file: "libs/langgraph/langgraph/pregel/main.py"
+        symbol: "Pregel.stream"
+        entry_point: "compiled graph stream execution"
+        execution_path: "Pregel.stream -> execution loop -> recursion-limit exhaustion -> GraphRecursionError"
+        url: "https://github.com/langchain-ai/langgraph/blob/7daa3ab49d678a5da75edb08baa87db4a2be52c3/libs/langgraph/langgraph/pregel/main.py"
+        accessed_at: "2026-09"
+      - source_type: source_code
+        tier: 1
+        title: "LangGraph recursion-limit error type"
+        repository: "https://github.com/langchain-ai/langgraph"
+        commit: "7daa3ab49d678a5da75edb08baa87db4a2be52c3"
+        verification_date: "2026-09-26"
+        file: "libs/langgraph/langgraph/errors.py"
+        symbol: "GraphRecursionError"
+        entry_point: "raised by Pregel stream execution"
+        execution_path: "Pregel.stream recursion-limit check -> GraphRecursionError"
+        url: "https://github.com/langchain-ai/langgraph/blob/7daa3ab49d678a5da75edb08baa87db4a2be52c3/libs/langgraph/langgraph/errors.py"
+        accessed_at: "2026-09"
+    limitations: ["Static inspection only; code was not executed.", "The factory is explicitly deprecated in favor of langchain.agents.create_agent.", "A recursion limit is a guardrail, not semantic success detection."]
+    applicability: "Source-reading example of an implementation-specific tool loop and hard step guard."
+    curriculum_usage: { lessons: ["12.1", "12.3"], labs: ["LAB-A"], assessments: ["Production-Source-Trace"] }
