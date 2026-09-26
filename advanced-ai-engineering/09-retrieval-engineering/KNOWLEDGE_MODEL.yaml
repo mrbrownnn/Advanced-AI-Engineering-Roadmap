@@ -1,0 +1,153 @@
+module: "09-retrieval-engineering"
+registry_version: "1.0.0"
+
+required_concepts:
+  - "retrieval_contract"
+  - "bm25"
+  - "dense_dual_encoder"
+  - "similarity_metrics"
+  - "exact_knn"
+  - "ann_recall"
+  - "hnsw"
+  - "filtered_ann"
+  - "hybrid_fusion"
+  - "reranking"
+  - "late_interaction"
+  - "recall_at_k"
+  - "mrr"
+  - "ndcg"
+  - "latency_quality_frontier"
+
+prerequisite_concepts:
+  - "data_lineage"
+  - "distribution_shift"
+  - "embeddings"
+  - "experimental_units"
+  - "latency_goodput"
+
+first_occurrence_concepts:
+  - "retrieval_contract"
+  - "bm25"
+  - "dense_dual_encoder"
+  - "ann_recall"
+  - "hnsw"
+  - "filtered_ann"
+  - "hybrid_fusion"
+  - "reranking"
+  - "late_interaction"
+
+concept_dependencies:
+  - { concept: "hnsw", depends_on: ["exact_knn", "similarity_metrics"] }
+  - { concept: "hybrid_fusion", depends_on: ["bm25", "dense_dual_encoder"] }
+  - { concept: "reranking", depends_on: ["retrieval_contract", "hybrid_fusion"] }
+  - { concept: "latency_quality_frontier", depends_on: ["ann_recall", "reranking", "latency_goodput"] }
+
+mechanisms:
+  - id: "MECH-01"
+    description: "A retrieval contract fixes query population, corpus snapshot, document/chunk identity, relevance event and judgments, filters/ACLs, cutoff, latency/capacity boundary, and downstream consumer."
+    evidence_ids: ["CLM-008", "CLM-009", "CLM-010"]
+    derived_from: []
+  - id: "MECH-02"
+    description: "Lexical retrieval scores analyzed query terms against indexed terms and corpus statistics; analyzer, fields, BM25 parameters, and snapshot are semantic inputs."
+    evidence_ids: ["CLM-001", "CLM-011"]
+    derived_from: ["MECH-01"]
+  - id: "MECH-03"
+    description: "Dense dual encoders map queries and documents to vectors; exact or approximate similarity search generates candidates. Encoder relevance and index approximation are separate error sources."
+    evidence_ids: ["CLM-002", "CLM-003", "CLM-004"]
+    derived_from: ["MECH-01"]
+  - id: "MECH-04"
+    description: "Hybrid retrieval unions lexical and dense lists and fuses ranks or calibrated scores; it helps only when branches contribute complementary relevant candidates."
+    evidence_ids: ["CLM-005"]
+    derived_from: ["MECH-02", "MECH-03"]
+  - id: "MECH-05"
+    description: "Rerankers and late-interaction models spend more work on a finite candidate set to improve ordering; candidates missing upstream remain unrecoverable."
+    evidence_ids: ["CLM-006", "CLM-007"]
+    derived_from: ["MECH-04"]
+  - id: "MECH-06"
+    description: "Evaluation separates relevance quality, ANN approximation, and stage/end-to-end performance across query slices, filters, corpus snapshots, and load."
+    evidence_ids: ["CLM-004", "CLM-008", "CLM-009", "CLM-010", "CLM-012"]
+    derived_from: ["MECH-01", "MECH-02", "MECH-03", "MECH-04", "MECH-05"]
+
+mathematical_models:
+  - id: "MATH-01"
+    description: "BM25 term contribution uses IDF multiplied by saturated term frequency normalized by document length; k1, b, analyzer, field, and corpus statistics must be declared."
+    evidence_ids: ["CLM-001"]
+    derived_from: ["MECH-02"]
+  - id: "MATH-02"
+    description: "ANN recall@k = |A_k intersection E_k|/|E_k| under identical vectors, metric, filter, snapshot, and tie policy; this is not relevance recall."
+    evidence_ids: ["CLM-004"]
+    derived_from: ["MECH-03"]
+  - id: "MATH-03"
+    description: "RRF score(d)=sum_r w_r/(c+rank_r(d)); missing-item and duplicate-identity policies plus c, depth, and weights are explicit."
+    evidence_ids: ["CLM-005"]
+    derived_from: ["MECH-04"]
+  - id: "MATH-04"
+    description: "Recall@k, reciprocal rank, and nDCG@k represent set coverage, first hit, and graded discounted gain respectively; judgment incompleteness remains a limitation."
+    evidence_ids: ["CLM-009"]
+    derived_from: ["MECH-06"]
+  - id: "MATH-05"
+    description: "Serial stage latency adds on the critical path; parallel lexical/vector branches join by their maximum plus fusion/shared overhead, while all branch work affects capacity."
+    evidence_ids: ["CLM-010"]
+    derived_from: ["MECH-06"]
+
+implementation_mechanisms:
+  - id: "IMPL-01"
+    description: "An index manifest pins corpus, chunker, analyzer or encoder, vector normalization, distance, index build, filter schema, deletion state, and immutable snapshot."
+    evidence_ids: ["CLM-001", "CLM-002", "CLM-003"]
+    derived_from: ["MECH-02", "MECH-03"]
+  - id: "IMPL-02"
+    description: "Query traces retain normalized query, branch candidates/raw scores/ranks, fusion, reranker input/output/truncation, filters, timings, cache state, and final IDs."
+    evidence_ids: ["CLM-005", "CLM-006", "CLM-010"]
+    derived_from: ["MECH-04", "MECH-05", "MECH-06"]
+  - id: "IMPL-03"
+    description: "Pinned Lucene trace covers BM25Similarity.idf/scorer, KnnFloatVectorQuery.approximateSearch, and HnswGraphSearcher search/searchLevel."
+    evidence_ids: ["CLM-011"]
+    derived_from: ["MECH-02", "MECH-03"]
+
+failure_modes:
+  - id: "FAIL-01"
+    description: "Analyzer mismatch destroys lexical identity through incompatible tokenization, normalization, fields, or corpus statistics."
+    evidence_ids: ["CLM-001", "CLM-011"]
+    derived_from: ["MECH-02"]
+  - id: "FAIL-02"
+    description: "Encoder/index confusion attributes missing relevance to HNSW although exact vector search also misses it, or blames embeddings without measuring approximation against exact ground truth."
+    evidence_ids: ["CLM-002", "CLM-003", "CLM-004"]
+    derived_from: ["MECH-03", "MATH-02"]
+  - id: "FAIL-03"
+    description: "Filtered ANN suffers recall/tail transitions, fallback storms, or ACL leakage when filter semantics and search strategy disagree."
+    evidence_ids: ["CLM-012"]
+    derived_from: ["MECH-03"]
+  - id: "FAIL-04"
+    description: "Hybrid fusion adds latency but no recall because branches return redundant candidates or identity normalization fragments duplicates."
+    evidence_ids: ["CLM-005"]
+    derived_from: ["MECH-04"]
+  - id: "FAIL-05"
+    description: "Reranker gains saturate or reverse when candidate recall is low, truncation drops evidence, scores shift by domain, or rerank depth saturates capacity."
+    evidence_ids: ["CLM-006", "CLM-007", "CLM-008"]
+    derived_from: ["MECH-05"]
+  - id: "FAIL-06"
+    description: "Offline metric improvement fails online because judgments, query mix, unjudged policy, freshness, latency, or user action differ."
+    evidence_ids: ["CLM-008", "CLM-009", "CLM-010"]
+    derived_from: ["MECH-06"]
+
+production_connections:
+  - id: "PROD-01"
+    description: "Tune candidate depth, ANN effort, branch fanout, fusion, and reranking jointly on a quality-latency-cost frontier under representative concurrency and filters."
+    evidence_ids: ["CLM-004", "CLM-005", "CLM-006", "CLM-010", "CLM-012"]
+    derived_from: ["MECH-06"]
+  - id: "PROD-02"
+    description: "Index releases use immutable snapshots, shadow queries, exact-vector audits, slice metrics, deletion/ACL tests, canary, and rollback."
+    evidence_ids: ["CLM-008", "CLM-010", "CLM-011", "CLM-012"]
+    derived_from: ["IMPL-01", "IMPL-02", "IMPL-03"]
+
+research_connections:
+  - id: "RESEARCH-01"
+    description: "BEIR and later heterogeneous benchmarks reject universal retriever rankings; current choices remain workload-dependent."
+    evidence_ids: ["CLM-008"]
+    derived_from: ["MECH-06"]
+
+candidate_capabilities:
+  - { capability: "Implement and explain lexical, dense, and exact/approximate candidate paths.", mapped_mechanisms: ["MECH-02", "MECH-03", "MATH-01", "MATH-02", "IMPL-03"] }
+  - { capability: "Build hybrid fusion and reranking with inspectable candidate lineage.", mapped_mechanisms: ["MECH-04", "MECH-05", "MATH-03", "IMPL-02"] }
+  - { capability: "Evaluate retrieval with relevance, approximation, and system boundaries separated.", mapped_mechanisms: ["MECH-06", "MATH-04", "MATH-05", "PROD-01"] }
+  - { capability: "Diagnose filtered ANN and offline-to-online regressions.", mapped_mechanisms: ["FAIL-02", "FAIL-03", "FAIL-04", "FAIL-05", "FAIL-06", "PROD-02"] }

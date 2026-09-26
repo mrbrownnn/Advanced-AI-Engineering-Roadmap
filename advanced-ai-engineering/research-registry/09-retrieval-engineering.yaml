@@ -1,0 +1,156 @@
+module: "09-retrieval-engineering"
+registry_version: "1.0.0"
+research_cutoff: "2026-09-26"
+change_reason: "Replace placeholders with verified lexical, dense, ANN, fusion, reranking, evaluation, and source-trace mechanisms."
+claims:
+  - id: CLM-001
+    claim: "BM25 combines inverse document frequency, saturating term frequency, and document-length normalization; tokenization, field statistics, k1, b, corpus, and query terms are part of its behavior, so it is not a parameter-free lexical baseline."
+    provenance: VERIFIED_FACT
+    domain: lexical_retrieval
+    concepts: [bm25, idf, length_normalization]
+    confidence: high
+    currentness_status: "REFERENCE / CURRENT DEFAULT"
+    evidence: [{ source_type: paper, tier: 1, title: "The Probabilistic Relevance Framework: BM25 and Beyond", authors: "Stephen Robertson, Hugo Zaragoza", year: "2009", url: "https://www.staff.city.ac.uk/~sbrp622/papers/foundations_bm25_review.pdf", section: "BM25 derivation and variables", accessed_at: "2026-09" }]
+    limitations: ["Exact scoring variants and analyzer behavior differ among engines."]
+    applicability: "Lexical candidate generation, exact identifiers, rare terms, and strong baseline comparisons."
+    curriculum_usage: { lessons: ["9.1"], labs: ["LAB-A"], assessments: ["Mastery-09"] }
+  - id: CLM-002
+    claim: "Dense Passage Retrieval uses separately encoded queries and passages with inner-product search and reports gains over its BM25 baseline on evaluated open-domain QA datasets; those gains do not establish dense retrieval dominance across domains or shifts."
+    provenance: VERIFIED_FACT
+    domain: dense_retrieval
+    concepts: [dual_encoder, embeddings, inner_product]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "Dense Passage Retrieval for Open-Domain Question Answering", authors: "Vladimir Karpukhin, Barlas Oğuz, Sewon Min, Patrick Lewis, Ledell Wu, Sergey Edunov, Danqi Chen, Wen-tau Yih", year: "2020", url: "https://arxiv.org/abs/2004.04906", section: "Method and experiments", accessed_at: "2026-09" }]
+    limitations: ["Training negatives, encoder revision, corpus, chunking, metric, and benchmark determine transfer."]
+    applicability: "Semantic candidate retrieval where a representative relevance-training signal exists."
+    curriculum_usage: { lessons: ["9.2"], labs: ["LAB-A"], assessments: ["Mastery-09"] }
+  - id: CLM-003
+    claim: "HNSW organizes an approximate-nearest-neighbor graph into randomized hierarchical layers and exposes search/build trade-offs; its recall, latency, memory, and update behavior depend on data geometry, distance, construction/search parameters, filters, and implementation."
+    provenance: VERIFIED_FACT
+    domain: ann
+    concepts: [hnsw, graph_search, approximate_recall]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "Efficient and robust approximate nearest neighbor search using Hierarchical Navigable Small World graphs", authors: "Yu. A. Malkov, D. A. Yashunin", year: "2018", url: "https://arxiv.org/abs/1603.09320", section: "Algorithm and experiments", accessed_at: "2026-09" }]
+    limitations: ["Paper complexity and benchmarks do not predict a filtered, mutable production index universally."]
+    applicability: "High-recall approximate vector candidate generation when memory/build cost is acceptable."
+    curriculum_usage: { lessons: ["9.3"], labs: ["LAB-B"], assessments: ["Mastery-09"] }
+  - id: CLM-004
+    claim: "ANN recall@k is the fraction of exact top-k neighbors recovered under the same vectors, distance, filters, and snapshot; it measures approximation error, not semantic relevance or downstream answer quality."
+    provenance: DERIVED
+    domain: ann_metrics
+    concepts: [ann_recall, exact_knn, metric_boundary]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions: ["Exact and approximate searches use identical indexed items, vector values, similarity definition, filter, and tie policy."]
+    derivation: "ANN recall@k=|A_k intersection E_k|/|E_k| compares approximate set A_k to exact set E_k; relevance labels do not appear in this definition."
+    limitations: ["Ties and approximate exact baselines require explicit handling."]
+    applicability: "Separating index approximation loss from encoder/relevance loss."
+    curriculum_usage: { lessons: ["9.3", "9.6"], labs: ["LAB-B"], assessments: ["Mastery-09"] }
+  - id: CLM-005
+    claim: "Reciprocal rank fusion combines result lists by summing reciprocal functions of rank and therefore avoids direct score-scale comparability; its constant, list depth, weights, duplicate identity, and missing-item policy remain tunable."
+    provenance: VERIFIED_FACT
+    domain: hybrid_retrieval
+    concepts: [rrf, rank_fusion, lexical_dense]
+    confidence: high
+    currentness_status: "REFERENCE / CURRENT DEFAULT"
+    evidence: [{ source_type: paper, tier: 1, title: "Reciprocal Rank Fusion Outperforms Condorcet and Individual Rank Learning Methods", authors: "Gordon V. Cormack, Charles L. A. Clarke, Stefan Büttcher", year: "2009", url: "https://dl.acm.org/doi/10.1145/1571941.1572114", section: "RRF definition and experiments", accessed_at: "2026-09" }]
+    limitations: ["Fusion cannot recover relevant items absent from all input lists."]
+    applicability: "Hybrid lexical/dense retrieval where raw scores are not calibrated to a common scale."
+    curriculum_usage: { lessons: ["9.4"], labs: ["LAB-C"], assessments: ["Mastery-09"] }
+  - id: CLM-006
+    claim: "A cross-encoder reranker jointly scores query-document pairs and can improve top-rank relevance, but it can only reorder its candidate pool and adds cost proportional to candidates and sequence shapes."
+    provenance: DERIVED
+    domain: reranking
+    concepts: [cross_encoder, candidate_recall, rerank_cost]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT / WORKLOAD-DEPENDENT"
+    assumptions: ["The reranker does not fetch new documents and independently scores a finite candidate pool."]
+    derivation: "Reordering preserves the candidate set; a relevant document outside it cannot enter. Pair-scoring work grows with the number and encoded length of evaluated pairs."
+    limitations: ["Batching, truncation, hardware, and model architecture make cost non-linear in practice."]
+    applicability: "Second-stage precision improvement after high-recall candidate generation."
+    curriculum_usage: { lessons: ["9.5"], labs: ["LAB-C"], assessments: ["Mastery-09"] }
+  - id: CLM-007
+    claim: "ColBERT introduces contextual token representations with late interaction, enabling precomputed document representations while retaining finer-grained query-document matching than one-vector dual encoders; storage and retrieval cost remain implementation- and workload-dependent."
+    provenance: VERIFIED_FACT
+    domain: late_interaction
+    concepts: [colbert, late_interaction, multi_vector]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "ColBERT: Efficient and Effective Passage Search via Contextualized Late Interaction over BERT", authors: "Omar Khattab, Matei Zaharia", year: "2020", url: "https://arxiv.org/abs/2004.12832", section: "Architecture and experiments", accessed_at: "2026-09" }]
+    limitations: ["Paper efficiency results are tied to its hardware, index, corpus, and baselines."]
+    applicability: "Retrieval needing token-level matching with offline document encoding."
+    curriculum_usage: { lessons: ["9.5"], labs: ["LAB-C"], assessments: ["Mastery-09"] }
+  - id: CLM-008
+    claim: "BEIR shows substantial zero-shot variation among lexical, sparse, dense, late-interaction, and reranking methods across heterogeneous tasks; retrieval method choice is therefore domain- and workload-dependent."
+    provenance: VERIFIED_FACT
+    domain: evaluation
+    concepts: [beir, zero_shot, domain_shift]
+    confidence: high
+    currentness_status: "REFERENCE / CURRENT CAUTION"
+    evidence: [{ source_type: paper, tier: 1, title: "BEIR: A Heterogenous Benchmark for Zero-shot Evaluation of Information Retrieval Models", authors: "Nandan Thakur, Nils Reimers, Andreas Rücklé, Abhishek Srivastava, Iryna Gurevych", year: "2021", url: "https://arxiv.org/abs/2104.08663", section: "Benchmark design and results", accessed_at: "2026-09" }]
+    limitations: ["Benchmark averages can hide target query types, corpus freshness, and operational constraints."]
+    applicability: "External evidence against selecting a universal retriever from one benchmark."
+    curriculum_usage: { lessons: ["9.6"], labs: ["LAB-D"], assessments: ["Mastery-09"] }
+  - id: CLM-009
+    claim: "Recall@k, MRR, and nDCG@k answer different questions: set coverage, first-relevant rank, and graded discounted ranking; metric choice requires a query-level relevance and user-action contract."
+    provenance: DERIVED
+    domain: evaluation
+    concepts: [recall_at_k, mrr, ndcg]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions: ["Judgments, cutoff, gain, discount, and unjudged-document policy are declared."]
+    derivation: "Recall@k divides retrieved relevant items by known relevant items; reciprocal rank uses the first relevant rank; nDCG normalizes discounted graded gain by the ideal ordering."
+    limitations: ["Incomplete judgments and pooled labels bias all three differently."]
+    applicability: "Offline retrieval evaluation aligned to search and downstream consumption."
+    curriculum_usage: { lessons: ["9.6"], labs: ["LAB-D"], assessments: ["Mastery-09"] }
+  - id: CLM-010
+    claim: "Retrieval latency must be decomposed into parsing/rewriting, embedding, lexical/vector candidate search, fusion, fetch, reranking, network, and queue time; an ANN microbenchmark does not establish end-to-end latency or goodput."
+    provenance: DERIVED
+    domain: performance
+    concepts: [latency_budget, candidate_depth, goodput]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Stage timestamps share a defined clock boundary and parallel branches are represented by their dependency graph."]
+    derivation: "Serial stage times add along the critical path; parallel branches contribute their join maximum plus shared/queue overhead, while total work controls capacity."
+    limitations: ["Caching, batching, fanout, and contention change stage distributions."]
+    applicability: "Capacity and quality-latency tuning for retrieval services."
+    curriculum_usage: { lessons: ["9.6"], labs: ["LAB-B", "LAB-D"], assessments: ["Incident-09.1", "Mastery-09"] }
+  - id: CLM-011
+    claim: "At Apache Lucene commit e357029271b3de560a6ff13c9cab4d4c8103b53b, BM25Similarity exposes idf and scorer construction, KnnFloatVectorQuery implements approximateSearch, and HnswGraphSearcher exposes graph-search entry points including searchLevel."
+    provenance: VERIFIED_FACT
+    domain: runtime_implementation
+    concepts: [lucene, bm25_source, hnsw_source]
+    confidence: high
+    currentness_status: "CURRENT LUCENE SNAPSHOT"
+    evidence:
+      - source_type: source_code
+        tier: 1
+        title: "Apache Lucene BM25 and HNSW search implementation"
+        repository: "https://github.com/apache/lucene"
+        commit: "e357029271b3de560a6ff13c9cab4d4c8103b53b"
+        verification_date: "2026-09-26"
+        file: "lucene/core/src/java/org/apache/lucene/search/similarities/BM25Similarity.java; lucene/core/src/java/org/apache/lucene/search/KnnFloatVectorQuery.java; lucene/core/src/java/org/apache/lucene/util/hnsw/HnswGraphSearcher.java"
+        symbol: "BM25Similarity.idf; BM25Similarity.scorer; KnnFloatVectorQuery.approximateSearch; HnswGraphSearcher.search; HnswGraphSearcher.searchLevel"
+        entry_point: "Lucene query/search execution"
+        execution_path: "query weight/scorer or vector query -> approximate search -> HNSW graph traversal -> TopDocs"
+        url: "https://github.com/apache/lucene/blob/e357029271b3de560a6ff13c9cab4d4c8103b53b/lucene/core/src/java/org/apache/lucene/search/similarities/BM25Similarity.java"
+        accessed_at: "2026-09"
+    limitations: ["Static inspection only; no Lucene workload was executed here.", "Lucene is one implementation, not the general definition of BM25, ANN, or filtered search."]
+    applicability: "Production source-reading and implementation-specific behavior verification."
+    curriculum_usage: { lessons: ["9.1", "9.3"], labs: ["LAB-A", "LAB-B"], assessments: ["Production-Source-Trace"] }
+  - id: CLM-012
+    claim: "Filtered ANN can lose recall or latency predictability when the filter changes reachable/acceptable candidates; whether prefilter, integrated filter, oversampling, or fallback wins depends on selectivity and vector/filter correlation."
+    provenance: HYPOTHESIS
+    domain: filtered_ann
+    concepts: [metadata_filter, selectivity, ann_recall]
+    confidence: high
+    currentness_status: "CURRENT / WORKLOAD-DEPENDENT"
+    hypothesis:
+      prediction: "Recall and tail latency exhibit selectivity-dependent transitions that differ across filter strategies and correlations."
+      measurement_target: "Filter selectivity/correlation, exact filtered ground truth, visited nodes/candidates, fallback rate, recall@k, stage latency, memory, and concurrency."
+      falsifying_observation: "Across preregistered selectivity/correlation regimes, the proposed transition or strategy difference is absent within uncertainty."
+    limitations: ["Results are index/runtime/version specific."]
+    applicability: "Tenant, ACL, date, language, and metadata-constrained vector search."
+    curriculum_usage: { lessons: ["9.3"], labs: ["LAB-B"], assessments: ["Incident-09.1", "Mastery-09"] }
