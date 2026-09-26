@@ -1,0 +1,207 @@
+module: "15-evaluation-engineering"
+registry_version: "1.0.0"
+research_cutoff: "2026-09-26"
+change_reason: "Replace placeholders with a traceable evaluation contract, grader calibration, uncertainty, release gating, contamination, and source-code evidence model."
+claims:
+  - id: CLM-001
+    claim: "An evaluation is decision evidence only when it declares the use case, target population, sampling unit, system boundary, policy, dataset and harness versions, metrics, thresholds, uncertainty procedure, and treatment of missing or failed outcomes."
+    provenance: DERIVED
+    domain: evaluation_contract
+    concepts: [decision_contract, target_population, estimand]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["The evaluation is intended to support a named engineering or release decision rather than exploratory description alone."]
+    derivation: "A score changes with population, unit, implementation, metric, and missingness policy. Without fixing these quantities, two runs need not estimate the same target and cannot support a reproducible decision."
+    limitations: ["A complete contract does not make an unrepresentative sample or invalid grader valid."]
+    applicability: "Offline, shadow, canary, A/B, and post-release evaluations."
+    curriculum_usage: { lessons: ["15.1"], labs: ["LAB-A"], assessments: ["Mastery-15"] }
+  - id: CLM-002
+    claim: "HELM frames language-model evaluation as coverage over scenarios and multiple desiderata, exposing trade-offs and omissions rather than reducing quality to one accuracy number."
+    provenance: VERIFIED_FACT
+    domain: holistic_evaluation
+    concepts: [scenario, metric_portfolio, coverage]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "Holistic Evaluation of Language Models", authors: "Percy Liang et al.", year: "2022", url: "https://arxiv.org/abs/2211.09110", section: "Taxonomy, scenarios, metrics, and limitations", accessed_at: "2026-09" }]
+    limitations: ["HELM's selected scenarios and reported results are a benchmark design, not a universal production workload or current model ranking."]
+    applicability: "Designing a portfolio of task, risk, robustness, fairness, and efficiency evidence."
+    curriculum_usage: { lessons: ["15.1"], labs: ["LAB-A"], assessments: ["Mastery-15"] }
+  - id: CLM-003
+    claim: "Request, turn, conversation, trajectory, user, and session are different experimental units; repeated samples from one item are nested observations and must not be counted as independent population examples."
+    provenance: DERIVED
+    domain: experimental_design
+    concepts: [experimental_unit, clustering, repeated_generation]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Outputs sharing an input, user, session, or environment can be statistically dependent."]
+    derivation: "Treating correlated repeats as independent inflates the nominal sample size and can understate uncertainty. The resampling or model unit must match the independent sampling process and decision target."
+    limitations: ["The correct hierarchy is workload-specific and may require multilevel modeling rather than a single cluster key."]
+    applicability: "Repeated decoding, multi-turn assistants, agents, and user studies."
+    curriculum_usage: { lessons: ["15.1", "15.4"], labs: ["LAB-A", "LAB-C"], assessments: ["Mastery-15"] }
+  - id: CLM-004
+    claim: "A useful evaluation dataset records immutable identity and lineage, sampling frame, prevalence or weights, split and freshness policy, slice metadata, expected outputs or rubric provenance, and exclusions."
+    provenance: DERIVED
+    domain: dataset_design
+    concepts: [dataset_lineage, slice, sampling_frame]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["The target workload can be represented by observable examples and metadata, at least approximately."]
+    derivation: "Aggregate estimates cannot be interpreted or reproduced when item origin, inclusion probability, version, or subgroup membership is unknown. Explicit metadata permits weighted estimates and slice-level failure detection."
+    limitations: ["Recorded slices cannot reveal unmeasured subpopulations; privacy may constrain metadata retention."]
+    applicability: "Golden sets, replay samples, fresh holdouts, and production samples."
+    curriculum_usage: { lessons: ["15.2"], labs: ["LAB-A"], assessments: ["Mastery-15"] }
+  - id: CLM-005
+    claim: "Deterministic executable graders are strong evidence when their oracle matches the requirement, but exact match, unit tests, and reference answers can reject semantically valid variants or accept incorrect outputs outside test coverage."
+    provenance: DERIVED
+    domain: grading
+    concepts: [executable_oracle, exact_match, test_coverage]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT / WHEN APPLICABLE"
+    assumptions: ["The task exposes a machine-checkable property or expected result."]
+    derivation: "A deterministic grader proves only its implemented predicate. Equivalence classes omitted by exact match create false negatives; behaviors omitted by tests create false positives."
+    limitations: ["Some open-ended qualities lack a complete executable oracle."]
+    applicability: "Code, math, schemas, retrieval citations, tool effects, and constrained outputs."
+    curriculum_usage: { lessons: ["15.3"], labs: ["LAB-B"], assessments: ["Mastery-15"] }
+  - id: CLM-006
+    claim: "The MT-Bench/Chatbot Arena study reports that LLM judges can approximate human preferences in its settings while also exhibiting position, verbosity, self-enhancement, and reasoning limitations."
+    provenance: VERIFIED_FACT
+    domain: llm_judging
+    concepts: [llm_judge, preference, judge_bias]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena", authors: "Lianmin Zheng et al.", year: "2023", url: "https://arxiv.org/abs/2306.05685", section: "LLM judge agreement and limitations", accessed_at: "2026-09" }]
+    limitations: ["Reported agreement and bias behavior depend on judges, prompts, tasks, candidate quality, and human protocol; they do not validate an arbitrary judge deployment."]
+    applicability: "Open-ended response and pairwise preference grading."
+    curriculum_usage: { lessons: ["15.3"], labs: ["LAB-B"], assessments: ["Incident-15.1"] }
+  - id: CLM-007
+    claim: "A systematic 2024 study finds position bias varies across LLM judges and tasks and introduces repetition stability, position consistency, and preference fairness as separate measurements."
+    provenance: VERIFIED_FACT
+    domain: llm_judging
+    concepts: [position_bias, order_balance, judge_stability]
+    confidence: high
+    currentness_status: "CURRENT EVIDENCE"
+    evidence: [{ source_type: paper, tier: 1, title: "Judging the Judges: A Systematic Study of Position Bias in LLM-as-a-Judge", authors: "Lin Shi, Chiyu Ma, Wenhua Liang, Weicheng Ma, Soroush Vosoughi", year: "2024", url: "https://arxiv.org/abs/2406.07791", section: "Framework and experiments", accessed_at: "2026-09" }]
+    limitations: ["Order reversal diagnoses sensitivity but does not by itself recover ground truth or remove every bias."]
+    applicability: "Pairwise judge protocols."
+    curriculum_usage: { lessons: ["15.3"], labs: ["LAB-B"], assessments: ["Incident-15.1"] }
+  - id: CLM-008
+    claim: "An LLM judge must be evaluated as a measurement instrument against blinded, independently adjudicated labels, with prompt/model/version fixed and error, tie, abstention, order consistency, and slice behavior reported."
+    provenance: DERIVED
+    domain: grader_validation
+    concepts: [meta_evaluation, calibration_set, adjudication]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["A human or executable reference protocol with acceptable validity can be sampled for calibration."]
+    derivation: "A judge output is another fallible observation. Estimating its error against an independent reference and across relevant slices is necessary before using it as a proxy for the target judgment."
+    limitations: ["Human labels can be noisy or norm-dependent; agreement with humans does not establish objective truth."]
+    applicability: "LLM-based scoring, classification, critique, and pairwise comparison."
+    curriculum_usage: { lessons: ["15.3"], labs: ["LAB-B"], assessments: ["Mastery-15"] }
+  - id: CLM-009
+    claim: "Human evaluation requires an operational rubric, rater training and qualification, randomized/blinded presentation where feasible, tie/abstain paths, repeated labels, disagreement analysis, adjudication, and worker privacy and well-being controls."
+    provenance: DERIVED
+    domain: human_evaluation
+    concepts: [rubric, inter_rater_disagreement, adjudication]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["The target construct requires human judgment and qualified raters can apply an explicit protocol."]
+    derivation: "Without a shared operational definition and controlled presentation, labels confound target quality with rater interpretation, ordering, identity cues, and exposure conditions. Disagreement is evidence about ambiguity, not merely noise to delete."
+    limitations: ["Blinding may be impossible when outputs reveal model identity; consensus can hide legitimate plural values."]
+    applicability: "Helpfulness, style, safety, preference, and domain-expert review."
+    curriculum_usage: { lessons: ["15.3"], labs: ["LAB-B"], assessments: ["Mastery-15"] }
+  - id: CLM-010
+    claim: "Model comparisons should prefer paired item-level differences when both systems see the same examples and should estimate uncertainty by a procedure whose resampling unit preserves user, session, task, or other dependence."
+    provenance: DERIVED
+    domain: statistics
+    concepts: [paired_comparison, bootstrap, confidence_interval]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["The sampled independent blocks represent the target population and the comparison policy is fixed before inspecting outcomes."]
+    derivation: "Pairing subtracts item difficulty shared by systems. Resampling independent blocks approximates repeated sampling; resampling dependent rows as independent produces the wrong sampling distribution."
+    limitations: ["Bootstrap intervals are approximations and can fail with few clusters, severe shift, adaptive sampling, or nonregular statistics."]
+    applicability: "Offline regressions and controlled online comparisons."
+    curriculum_usage: { lessons: ["15.4"], labs: ["LAB-C"], assessments: ["Mastery-15"] }
+  - id: CLM-011
+    claim: "A release gate should predeclare metric direction, practical tolerance, confidence procedure, critical slice constraints, and multiple-comparison policy; one weighted aggregate cannot expose every unacceptable regression."
+    provenance: DERIVED
+    domain: release_gating
+    concepts: [regression_gate, practical_significance, multiple_testing]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Metrics and tolerances reflect product and risk decisions made before the release result is known."]
+    derivation: "Searching many metrics or slices raises false-discovery probability, while aggregation allows gains to compensate for critical harms. Predeclared constraints and uncertainty make the decision rule auditable."
+    limitations: ["Thresholds encode value and risk judgments; statistics cannot choose them automatically."]
+    applicability: "Model, prompt, retrieval, tool, policy, and runtime releases."
+    curriculum_usage: { lessons: ["15.4", "15.6"], labs: ["LAB-C"], assessments: ["Mastery-15"] }
+  - id: CLM-012
+    claim: "LiveBench uses frequently refreshed questions, recent sources, objective ground-truth grading, and diverse tasks to limit contamination; its design reduces a known risk but does not prove zero leakage or production validity."
+    provenance: VERIFIED_FACT
+    domain: benchmark_freshness
+    concepts: [contamination, dynamic_benchmark, objective_grader]
+    confidence: high
+    currentness_status: "CURRENT / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "LiveBench: A Challenging, Contamination-Limited LLM Benchmark", authors: "Colin White et al.", year: "2025", url: "https://proceedings.iclr.cc/paper_files/paper/2025/hash/e4a46394ba5378b3f9a186a5b4c650d1-Abstract-Conference.html", section: "Abstract and benchmark design", accessed_at: "2026-09" }]
+    limitations: ["Freshness cannot exclude private leakage, task adaptation, or mismatch with a product population; the title deliberately says contamination-limited, not contamination-free."]
+    applicability: "Benchmark refresh and contamination-risk design."
+    curriculum_usage: { lessons: ["15.2"], labs: ["LAB-A"], assessments: ["Mastery-15"] }
+  - id: CLM-013
+    claim: "Offline task scores are proxies for online user and business outcomes; establishing decision validity requires linking them to shadow, canary, randomized experiment, or other causally credible online evidence with safety and cost guardrails."
+    provenance: DERIVED
+    domain: offline_online_validity
+    concepts: [proxy_metric, online_experiment, external_validity]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["The deployed population, interaction policy, and downstream effects can differ from the offline sample."]
+    derivation: "Offline datasets omit selection, adaptation, latency, abandonment, tool effects, and feedback loops. Correlation under one release does not establish that optimizing the proxy causes the desired online outcome."
+    limitations: ["Online experiments may be infeasible or unethical for high-risk changes and can themselves suffer interference or novelty effects."]
+    applicability: "Production release and metric validation."
+    curriculum_usage: { lessons: ["15.5"], labs: ["LAB-D"], assessments: ["Incident-15.1"] }
+  - id: CLM-014
+    claim: "Evaluation denominators must include or separately account for timeouts, refusals, invalid outputs, retrieval/tool failures, retries, abandonment, and unfinished trajectories; success-only scoring creates survivorship bias."
+    provenance: DERIVED
+    domain: outcome_accounting
+    concepts: [denominator, missingness, survivorship_bias]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Non-completion can affect user utility and may depend on system, input, or load."]
+    derivation: "Dropping failures conditions the estimate on a post-treatment event. A system can appear better by failing on difficult items, so offered-item and completed-item outcomes must remain distinguishable."
+    limitations: ["Different product decisions may require multiple denominators, all explicitly named."]
+    applicability: "Model and end-to-end system evaluation."
+    curriculum_usage: { lessons: ["15.5"], labs: ["LAB-C", "LAB-D"], assessments: ["Incident-15.1"] }
+  - id: CLM-015
+    claim: "At lm-evaluation-harness commit d6de81643928d653435c431bae19945d41d32520, simple_evaluate loads tasks and delegates to evaluate; evaluation builds requests, executes model request types, calls task.process_results, and aggregates configured metrics."
+    provenance: VERIFIED_FACT
+    domain: evaluation_runtime
+    concepts: [evaluation_harness, request_construction, metric_aggregation]
+    confidence: high
+    currentness_status: "CURRENT SOURCE SNAPSHOT"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "lm-evaluation-harness evaluator", repository: "https://github.com/EleutherAI/lm-evaluation-harness", commit: "d6de81643928d653435c431bae19945d41d32520", verification_date: "2026-09-26", file: "lm_eval/evaluator.py", symbol: "simple_evaluate; evaluate", entry_point: "simple_evaluate(model, tasks, ...)", execution_path: "TaskManager/load -> evaluate -> build_all_requests -> model request dispatch -> process_results -> aggregation", url: "https://github.com/EleutherAI/lm-evaluation-harness/blob/d6de81643928d653435c431bae19945d41d32520/lm_eval/evaluator.py", accessed_at: "2026-09" }
+      - { source_type: source_code, tier: 1, title: "lm-evaluation-harness task API", repository: "https://github.com/EleutherAI/lm-evaluation-harness", commit: "d6de81643928d653435c431bae19945d41d32520", verification_date: "2026-09-26", file: "lm_eval/api/task.py", symbol: "Task.build_all_requests; Task.construct_requests; Task.process_results; Task.aggregation; Task.higher_is_better", entry_point: "evaluation task lifecycle", execution_path: "documents/config -> instances -> request execution -> per-document results -> aggregate metrics", url: "https://github.com/EleutherAI/lm-evaluation-harness/blob/d6de81643928d653435c431bae19945d41d32520/lm_eval/api/task.py", accessed_at: "2026-09" }
+    limitations: ["Static source inspection only; tasks, models, caches, distributed behavior, and numerical results were not executed.", "This implementation does not define evaluation engineering generally."]
+    applicability: "Production source-reading example for task-to-request-to-metric lineage."
+    curriculum_usage: { lessons: ["15.6"], labs: ["LAB-D"], assessments: ["Production-Source-Trace"] }
+  - id: CLM-016
+    claim: "A staged evaluation funnel of deterministic unit tests, sampled regression suites, judge/human audits, and online guardrails should reduce evaluation cost and escape rate only if each stage's incremental detection and false-block rates are measured."
+    provenance: HYPOTHESIS
+    domain: evaluation_operations
+    concepts: [evaluation_funnel, escape_rate, false_block]
+    confidence: medium
+    currentness_status: "CURRENT / WORKLOAD-DEPENDENT"
+    hypothesis:
+      prediction: "A cost-ordered staged funnel catches most actionable regressions before expensive or risky stages while preserving fewer false release blocks than a single universal suite."
+      measurement_target: "Cost and latency per stage, unique defects found, overlap, false block, escaped incident, rerun instability, and time to decision."
+      falsifying_observation: "The staged funnel costs no less, misses more consequential regressions, or blocks more good releases than the preregistered baseline."
+    limitations: ["Historical defects can bias the funnel toward known failure families; novel risks still require exploration."]
+    applicability: "Continuous evaluation and release qualification."
+    curriculum_usage: { lessons: ["15.6"], labs: ["LAB-D"], assessments: ["Mastery-15"] }
+  - id: CLM-017
+    claim: "JudgeArena (2026) presents a reproducible framework that makes judge model, benchmark, prompt/protocol, inference backend, and metadata explicit across several judge benchmarks."
+    provenance: VERIFIED_FACT
+    domain: judge_reproducibility
+    concepts: [judge_configuration, reproducibility, metadata]
+    confidence: medium
+    currentness_status: "FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "JudgeArena: A Unified Framework for Reproducible LLM-Judge Evaluation", authors: "Erlis Lushtaku et al.", year: "2026", url: "https://arxiv.org/abs/2608.02620", section: "Framework and metadata logging", accessed_at: "2026-09" }]
+    limitations: ["Recent preprint; framework coverage and reported judge performance require independent reproduction and do not remove judge validity requirements."]
+    applicability: "Controlled comparison of judge configurations."
+    curriculum_usage: { lessons: ["15.3", "15.6"], labs: ["LAB-B"], assessments: ["Mastery-15"] }

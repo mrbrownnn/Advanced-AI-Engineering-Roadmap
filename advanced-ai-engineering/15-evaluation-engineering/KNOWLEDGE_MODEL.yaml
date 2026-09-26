@@ -1,0 +1,174 @@
+module: "15-evaluation-engineering"
+registry_version: "1.0.0"
+
+required_concepts:
+  - "evaluation_contract"
+  - "target_population"
+  - "experimental_unit"
+  - "dataset_lineage"
+  - "slice"
+  - "grader_validity"
+  - "human_evaluation"
+  - "llm_as_judge"
+  - "paired_comparison"
+  - "uncertainty_interval"
+  - "regression_gate"
+  - "multiple_comparisons"
+  - "contamination"
+  - "offline_online_validity"
+  - "denominator_policy"
+  - "quality_cost_latency_frontier"
+
+prerequisite_concepts:
+  - "measurement_validity"
+  - "sampling"
+  - "confidence_interval"
+  - "behavioral_uncertainty"
+  - "data_lineage"
+  - "goodput"
+  - "agent_trajectory"
+  - "attempt_lineage"
+
+first_occurrence_concepts:
+  - "evaluation_contract"
+  - "grader_validity"
+  - "human_evaluation"
+  - "llm_as_judge"
+  - "regression_gate"
+  - "multiple_comparisons"
+  - "contamination"
+  - "offline_online_validity"
+  - "denominator_policy"
+
+concept_dependencies:
+  - { concept: "evaluation_contract", depends_on: ["measurement_validity", "target_population"] }
+  - { concept: "experimental_unit", depends_on: ["sampling"] }
+  - { concept: "dataset_lineage", depends_on: ["data_lineage", "target_population"] }
+  - { concept: "grader_validity", depends_on: ["measurement_validity", "behavioral_uncertainty"] }
+  - { concept: "paired_comparison", depends_on: ["experimental_unit", "confidence_interval"] }
+  - { concept: "regression_gate", depends_on: ["paired_comparison", "multiple_comparisons"] }
+  - { concept: "offline_online_validity", depends_on: ["evaluation_contract", "target_population"] }
+  - { concept: "denominator_policy", depends_on: ["attempt_lineage", "goodput"] }
+
+mechanisms:
+  - id: "MECH-01"
+    description: "An evaluation contract maps a product decision to a population, experimental unit, system boundary, dataset/harness versions, estimands, uncertainty, thresholds, and failure treatment."
+    evidence_ids: ["CLM-001", "CLM-002", "CLM-003"]
+    derived_from: []
+  - id: "MECH-02"
+    description: "Versioned datasets preserve sampling frame, item lineage, freshness, weights, slices, exclusions, and holdout policy so results have a defined population and contamination risk."
+    evidence_ids: ["CLM-004", "CLM-012"]
+    derived_from: ["MECH-01"]
+  - id: "MECH-03"
+    description: "A grader portfolio selects executable oracles, semantic checks, LLM judges, or humans by construct and validates each measurement channel rather than assuming interchangeability."
+    evidence_ids: ["CLM-005", "CLM-006", "CLM-007", "CLM-008", "CLM-009", "CLM-017"]
+    derived_from: ["MECH-01"]
+  - id: "MECH-04"
+    description: "Paired comparisons and dependence-preserving uncertainty estimates quantify change; preregistered tolerances, slice constraints, and multiplicity policy turn estimates into auditable release gates."
+    evidence_ids: ["CLM-003", "CLM-010", "CLM-011"]
+    derived_from: ["MECH-01", "MECH-02", "MECH-03"]
+  - id: "MECH-05"
+    description: "End-to-end evaluation retains every offered outcome and joins quality, safety, latency, cost, completion, and system effects rather than conditioning on successful generations."
+    evidence_ids: ["CLM-013", "CLM-014"]
+    derived_from: ["MECH-01"]
+  - id: "MECH-06"
+    description: "A staged evaluation program orders cheap/high-signal checks before costly human or online evidence, measures incremental detection, and refreshes data, graders, and gates as the workload changes."
+    evidence_ids: ["CLM-015", "CLM-016"]
+    derived_from: ["MECH-02", "MECH-03", "MECH-04", "MECH-05"]
+
+mathematical_models:
+  - id: "MATH-01"
+    description: "For paired item scores, d_i=m_B(i)-m_A(i) and mean change is d_bar=(1/n)sum_i d_i. A confidence interval must resample or model the independent block (item, user, or session); row bootstrap is invalid when rows inside blocks are dependent."
+    evidence_ids: ["CLM-003", "CLM-010"]
+    derived_from: ["MECH-04"]
+  - id: "MATH-02"
+    description: "For n adjudicated pairwise comparisons, tie-adjusted preference p_hat=(wins_B+0.5*ties)/n. This descriptive rate depends on prompt, ordering, judge/rater population, and sampled items; it is not context-free latent quality."
+    evidence_ids: ["CLM-006", "CLM-007", "CLM-008"]
+    derived_from: ["MECH-03"]
+  - id: "MATH-03"
+    description: "A noninferiority gate for a harm metric can require the upper confidence bound of Delta=m_B-m_A to be at most tolerance tau; an improvement gate can require the lower bound to exceed practical effect epsilon. Coverage depends on the interval and multiplicity procedure."
+    evidence_ids: ["CLM-010", "CLM-011"]
+    derived_from: ["MECH-04"]
+  - id: "MATH-04"
+    description: "A scalar score S=sum_k w_k z_k is interpretable only for fixed directions, scales, transformations, and weights. It can hide a critical regression, so retain the metric vector/Pareto frontier and hard constraints."
+    evidence_ids: ["CLM-002", "CLM-011"]
+    derived_from: ["MECH-01", "MECH-04"]
+  - id: "MATH-05"
+    description: "Offered-request goodput at thresholds q*, l*, c* is G=(1/T)sum_i 1[quality_i>=q* and latency_i<=l* and cost_i<=c* and terminal_i=accepted]. Units are useful accepted requests/time; thresholds are product choices, not universal constants."
+    evidence_ids: ["CLM-013", "CLM-014"]
+    derived_from: ["MECH-05"]
+
+implementation_mechanisms:
+  - id: "IMPL-01"
+    description: "An evaluation manifest pins dataset/slice versions, item and root-request IDs, model/system/policy/harness/grader revisions, generation parameters, attempts, raw outputs, grades, costs, timing, and terminal states."
+    evidence_ids: ["CLM-001", "CLM-004", "CLM-014"]
+    derived_from: ["MECH-01", "MECH-02", "MECH-05"]
+  - id: "IMPL-02"
+    description: "Judge meta-evaluation uses blinded reference labels, randomized and swapped order, repeated judgments, ties/abstention, and error matrices by slice before the judge enters a gate."
+    evidence_ids: ["CLM-006", "CLM-007", "CLM-008", "CLM-009"]
+    derived_from: ["MECH-03"]
+  - id: "IMPL-03"
+    description: "Pinned lm-evaluation-harness source demonstrates a concrete task lifecycle from task loading and request construction through model execution, per-document processing, and aggregation."
+    evidence_ids: ["CLM-015"]
+    derived_from: ["MECH-06"]
+
+failure_modes:
+  - id: "FAIL-01"
+    description: "Benchmark theater optimizes an available score whose population, unit, system boundary, or construct does not match the release decision."
+    evidence_ids: ["CLM-001", "CLM-002", "CLM-013"]
+    derived_from: ["MECH-01"]
+  - id: "FAIL-02"
+    description: "Leakage, memorization, benchmark saturation, or repeated tuning turns a nominal holdout into training feedback and inflates apparent generalization."
+    evidence_ids: ["CLM-004", "CLM-012"]
+    derived_from: ["MECH-02"]
+  - id: "FAIL-03"
+    description: "Grader monoculture treats exact match, hidden tests, embeddings, a judge, or a human majority as ground truth outside the predicate and population it actually measures."
+    evidence_ids: ["CLM-005", "CLM-006", "CLM-008", "CLM-009"]
+    derived_from: ["MECH-03"]
+  - id: "FAIL-04"
+    description: "Judge drift or bias changes release decisions when model, prompt, order, rubric, backend, or parsing changes without revalidation."
+    evidence_ids: ["CLM-006", "CLM-007", "CLM-008", "CLM-017"]
+    derived_from: ["MECH-03"]
+  - id: "FAIL-05"
+    description: "Pseudoreplication, unpaired tests, tiny slices, adaptive metric selection, and repeated comparisons produce overconfident regression claims."
+    evidence_ids: ["CLM-003", "CLM-010", "CLM-011"]
+    derived_from: ["MECH-04"]
+  - id: "FAIL-06"
+    description: "Survivorship accounting drops failed, refused, timed-out, or expensive attempts and makes a less useful system appear higher quality."
+    evidence_ids: ["CLM-014"]
+    derived_from: ["MECH-05"]
+  - id: "FAIL-07"
+    description: "Offline proxy inversion improves benchmark or judge scores while online user outcomes regress because traffic, interactions, latency, or incentives differ."
+    evidence_ids: ["CLM-013"]
+    derived_from: ["MECH-05"]
+  - id: "FAIL-08"
+    description: "An evaluation suite becomes too slow, expensive, flaky, or stale to gate releases, while undocumented retries and grader calls hide its true cost and variance."
+    evidence_ids: ["CLM-015", "CLM-016"]
+    derived_from: ["MECH-06"]
+
+production_connections:
+  - id: "PROD-01"
+    description: "Release evidence should include population and slice coverage, paired effects with uncertainty, grader validation, offered-request denominators, quality-latency-cost trade-offs, and an explicit decision record."
+    evidence_ids: ["CLM-001", "CLM-008", "CLM-010", "CLM-011", "CLM-014"]
+    derived_from: ["MECH-01", "MECH-03", "MECH-04", "MECH-05"]
+  - id: "PROD-02"
+    description: "Continuous evaluation needs immutable manifests, fresh protected samples, deterministic replay where possible, judge/rater audits, online validation, and measured suite cost and escape rate."
+    evidence_ids: ["CLM-004", "CLM-012", "CLM-013", "CLM-015", "CLM-016"]
+    derived_from: ["MECH-02", "MECH-05", "MECH-06"]
+
+research_connections:
+  - id: "RESEARCH-01"
+    description: "HELM remains a reference for scenario/metric coverage, while LiveBench demonstrates a current dynamic contamination-limiting design; neither substitutes for a product-specific evaluation contract."
+    evidence_ids: ["CLM-002", "CLM-012"]
+    derived_from: ["MECH-01", "MECH-02"]
+  - id: "RESEARCH-02"
+    description: "LLM judges are scalable measurement instruments with documented biases; current frontier work improves reproducibility and configuration control but still requires independent validation."
+    evidence_ids: ["CLM-006", "CLM-007", "CLM-008", "CLM-017"]
+    derived_from: ["MECH-03"]
+
+candidate_capabilities:
+  - { capability: "Specify an evaluation decision, population, unit, estimands, dataset lineage, slices, and system boundary in a reproducible contract.", mapped_mechanisms: ["MECH-01", "MECH-02", "IMPL-01", "FAIL-01", "FAIL-02"] }
+  - { capability: "Select and validate executable, model-based, and human graders with explicit rubrics, bias tests, disagreement, and adjudication.", mapped_mechanisms: ["MECH-03", "MATH-02", "IMPL-02", "FAIL-03", "FAIL-04"] }
+  - { capability: "Estimate paired changes with dependence-aware uncertainty and enforce practical, slice-aware, multiplicity-aware release gates.", mapped_mechanisms: ["MECH-04", "MATH-01", "MATH-03", "MATH-04", "FAIL-05"] }
+  - { capability: "Evaluate end-to-end quality, safety, completion, latency, and cost without success-only denominators, then test offline-online validity.", mapped_mechanisms: ["MECH-05", "MATH-05", "FAIL-06", "FAIL-07", "PROD-01"] }
+  - { capability: "Operate a versioned, staged evaluation program; trace a pinned harness; measure grader/suite drift, incremental detection, cost, and escaped regressions.", mapped_mechanisms: ["MECH-06", "IMPL-03", "FAIL-08", "PROD-02"] }
