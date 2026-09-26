@@ -1,0 +1,188 @@
+module: "14-durable-agent-runtime"
+registry_version: "1.0.0"
+
+required_concepts:
+  - "durable_execution"
+  - "workflow_history"
+  - "deterministic_replay"
+  - "activity_boundary"
+  - "delivery_semantics"
+  - "unknown_effect_state"
+  - "idempotency_contract"
+  - "transactional_outbox"
+  - "saga"
+  - "compensation"
+  - "lease"
+  - "fencing_token"
+  - "fan_out_join"
+  - "durable_timer"
+  - "durable_human_approval"
+  - "replay_compatibility"
+  - "crash_matrix"
+
+prerequisite_concepts:
+  - "state_transition"
+  - "agent_loop"
+  - "tool_contract"
+  - "action_authorization"
+  - "retry_policy"
+  - "attempt_lineage"
+  - "latency_distribution"
+  - "data_lineage"
+
+first_occurrence_concepts:
+  - "durable_execution"
+  - "workflow_history"
+  - "deterministic_replay"
+  - "activity_boundary"
+  - "delivery_semantics"
+  - "unknown_effect_state"
+  - "idempotency_contract"
+  - "transactional_outbox"
+  - "saga"
+  - "compensation"
+  - "fencing_token"
+  - "durable_timer"
+  - "durable_human_approval"
+  - "replay_compatibility"
+  - "crash_matrix"
+
+concept_dependencies:
+  - { concept: "workflow_history", depends_on: ["state_transition", "data_lineage"] }
+  - { concept: "deterministic_replay", depends_on: ["workflow_history"] }
+  - { concept: "activity_boundary", depends_on: ["deterministic_replay", "tool_contract"] }
+  - { concept: "unknown_effect_state", depends_on: ["activity_boundary", "delivery_semantics"] }
+  - { concept: "idempotency_contract", depends_on: ["unknown_effect_state", "action_authorization"] }
+  - { concept: "transactional_outbox", depends_on: ["idempotency_contract", "data_lineage"] }
+  - { concept: "compensation", depends_on: ["saga", "activity_boundary"] }
+  - { concept: "fencing_token", depends_on: ["lease", "activity_boundary"] }
+  - { concept: "fan_out_join", depends_on: ["workflow_history", "retry_policy"] }
+  - { concept: "durable_human_approval", depends_on: ["durable_timer", "action_authorization"] }
+  - { concept: "replay_compatibility", depends_on: ["deterministic_replay"] }
+
+mechanisms:
+  - id: "MECH-01"
+    description: "A durable orchestrator records transition history/checkpoints and reconstructs workflow state after worker loss; acknowledgement boundaries define the recoverable prefix."
+    evidence_ids: ["CLM-001", "CLM-002"]
+    derived_from: []
+  - id: "MECH-02"
+    description: "Deterministic workflow code emits commands that match recorded history, while clocks, randomness, model/tool calls, and external I/O cross recorded runtime/activity APIs."
+    evidence_ids: ["CLM-002", "CLM-003", "CLM-015"]
+    derived_from: ["MECH-01"]
+  - id: "MECH-03"
+    description: "An activity/effect ledger assigns stable logical-operation and attempt identities, records dispatch/outcome/effect certainty, and reconciles unknown commit before retry."
+    evidence_ids: ["CLM-003", "CLM-004", "CLM-005"]
+    derived_from: ["MECH-01", "MECH-02"]
+  - id: "MECH-04"
+    description: "Idempotency, transactional outbox/inbox, postcondition reads, and deduplication move duplicate/loss handling to the systems that can atomically observe the protected state."
+    evidence_ids: ["CLM-004", "CLM-005", "CLM-006"]
+    derived_from: ["MECH-03"]
+  - id: "MECH-05"
+    description: "A saga registers compensations and executes them as new forward effects in dependency-aware order, preserving partial/failed/irreversible states."
+    evidence_ids: ["CLM-007", "CLM-008"]
+    derived_from: ["MECH-03", "MECH-04"]
+  - id: "MECH-06"
+    description: "Concurrent ownership uses leases plus resource-enforced monotonic fencing tokens so stale workers cannot continue mutating protected state."
+    evidence_ids: ["CLM-009"]
+    derived_from: ["MECH-03"]
+  - id: "MECH-07"
+    description: "Fan-out/join and long waits persist membership, child states, join/cancel policy, timer/event/approval identity, authorization, deadlines, and duplicate/late handling."
+    evidence_ids: ["CLM-010", "CLM-011", "CLM-013"]
+    derived_from: ["MECH-01", "MECH-03"]
+  - id: "MECH-08"
+    description: "Safe deployment replays representative histories under candidate workflow code, versions command-affecting paths, measures history/payload growth, and crash-tests every visible boundary."
+    evidence_ids: ["CLM-012", "CLM-013", "CLM-014", "CLM-015", "CLM-016"]
+    derived_from: ["MECH-01", "MECH-02", "MECH-03", "MECH-07"]
+
+mathematical_models:
+  - id: "MATH-01"
+    description: "For persisted events e_1...e_n and deterministic reducer F, reconstructed state is s_n=fold(F,s_0,[e_1,...,e_n]). This is exact only for state represented by the retained history/schema; external state requires recorded observations/effect receipts."
+    evidence_ids: ["CLM-001", "CLM-002"]
+    derived_from: ["MECH-01", "MECH-02"]
+  - id: "MATH-02"
+    description: "An idempotent logical effect with key k satisfies apply(apply(x,k),k)=apply(x,k) for the protected state and declared outcome. The equation is a contract to test, not proof that an endpoint implements atomic deduplication."
+    evidence_ids: ["CLM-004", "CLM-005"]
+    derived_from: ["MECH-03", "MECH-04"]
+  - id: "MATH-03"
+    description: "For fan-out children with critical-path durations L_i, all-of join latency is at least max_i L_i plus scheduling/join overhead, while total work/cost sums attempts across children. Quorum/any-of policies change success and cancellation predicates, not the recorded membership requirement."
+    evidence_ids: ["CLM-010"]
+    derived_from: ["MECH-07"]
+  - id: "MATH-04"
+    description: "A fencing token epoch q must increase on each ownership grant; the resource accepts a write only when q is not older than its last accepted epoch. Monotonic rejection prevents stale future writes but cannot undo effects already accepted."
+    evidence_ids: ["CLM-009"]
+    derived_from: ["MECH-06"]
+
+implementation_mechanisms:
+  - id: "IMPL-01"
+    description: "A workflow record carries workflow/run/type/version, sequence, state/event schema, causal parent, command/activity IDs, attempt, deadlines, authorization, terminal state, and payload references rather than unbounded opaque payloads."
+    evidence_ids: ["CLM-001", "CLM-013", "CLM-014"]
+    derived_from: ["MECH-01", "MECH-07", "MECH-08"]
+  - id: "IMPL-02"
+    description: "An effect record carries logical-operation key, canonical intent/hash, scope, attempt IDs, dispatch/ack timestamps, effect state, receipt/postcondition, dedup retention, compensation, and reconciliation status."
+    evidence_ids: ["CLM-004", "CLM-005", "CLM-006", "CLM-008"]
+    derived_from: ["MECH-03", "MECH-04", "MECH-05"]
+  - id: "IMPL-03"
+    description: "Pinned Temporal Python SDK source traces workflow activity helpers into runtime scheduling and Replayer histories into replay-failure/nondeterminism results."
+    evidence_ids: ["CLM-015"]
+    derived_from: ["MECH-02", "MECH-08"]
+
+failure_modes:
+  - id: "FAIL-01"
+    description: "False durability acknowledges progress before its state/history is safely persisted, so restart resumes behind the claimed transition."
+    evidence_ids: ["CLM-001"]
+    derived_from: ["MECH-01"]
+  - id: "FAIL-02"
+    description: "Replay divergence changes command order because workflow code reads wall time, random state, environment/config, network, or a changed code path directly."
+    evidence_ids: ["CLM-002", "CLM-012", "CLM-015"]
+    derived_from: ["MECH-02", "MECH-08"]
+  - id: "FAIL-03"
+    description: "Unknown-commit retry duplicates a payment/message/write after the external effect committed but its acknowledgement was lost."
+    evidence_ids: ["CLM-004", "CLM-005"]
+    derived_from: ["MECH-03", "MECH-04"]
+  - id: "FAIL-04"
+    description: "Outbox illusion assumes atomic intent publication gives exactly-once processing and omits relay/consumer deduplication, poison handling, ordering, or lag."
+    evidence_ids: ["CLM-006"]
+    derived_from: ["MECH-04"]
+  - id: "FAIL-05"
+    description: "Compensation theater treats a best-effort forward repair as rollback and hides irreversible, failed, unauthorized, or human-observed effects."
+    evidence_ids: ["CLM-007", "CLM-008"]
+    derived_from: ["MECH-05"]
+  - id: "FAIL-06"
+    description: "Split-brain execution lets an expired owner and new owner both mutate state because the protected resource does not enforce fencing."
+    evidence_ids: ["CLM-009"]
+    derived_from: ["MECH-06"]
+  - id: "FAIL-07"
+    description: "Fan-out or HITL deadlock loses expected membership, waits for an impossible child/event, accepts duplicate/late approval, or lacks timeout/cancellation policy."
+    evidence_ids: ["CLM-010", "CLM-011"]
+    derived_from: ["MECH-07"]
+  - id: "FAIL-08"
+    description: "History/payload exhaustion or untested workflow upgrade causes slow replay, storage pressure, nondeterminism, or stuck in-flight executions."
+    evidence_ids: ["CLM-012", "CLM-013", "CLM-016"]
+    derived_from: ["MECH-08"]
+
+production_connections:
+  - id: "PROD-01"
+    description: "Ship durable workflows with explicit persistence acknowledgements, activity/effect ledgers, idempotency/reconciliation, fencing, durable waits, bounded histories, replay-compatible versions, and manual recovery states."
+    evidence_ids: ["CLM-001", "CLM-004", "CLM-005", "CLM-009", "CLM-011", "CLM-012", "CLM-013"]
+    derived_from: ["MECH-01", "MECH-03", "MECH-04", "MECH-06", "MECH-07", "MECH-08"]
+  - id: "PROD-02"
+    description: "Release validation crashes workers and dependencies before/after each history and effect boundary, replays retained histories, injects duplicate/out-of-order events, and compares final state/effects with a no-failure oracle."
+    evidence_ids: ["CLM-014", "CLM-015", "CLM-016"]
+    derived_from: ["MECH-08"]
+
+research_connections:
+  - id: "RESEARCH-01"
+    description: "The Saga model remains a useful baseline for long-lived distributed work, but AI systems increase irreversible and human-visible effects that make compensation completeness workload-specific."
+    evidence_ids: ["CLM-007", "CLM-008"]
+    derived_from: ["MECH-05"]
+  - id: "RESEARCH-02"
+    description: "Current durable runtimes expose replay, activities, versioning, timers, external events, and workflow partitioning, but their exact semantics and limits remain implementation-specific."
+    evidence_ids: ["CLM-002", "CLM-003", "CLM-012", "CLM-013", "CLM-015"]
+    derived_from: ["MECH-01", "MECH-02", "MECH-07", "MECH-08"]
+
+candidate_capabilities:
+  - { capability: "Model and implement recoverable workflow history/checkpoints with deterministic replay and explicit acknowledgement boundaries.", mapped_mechanisms: ["MECH-01", "MECH-02", "MATH-01", "IMPL-01", "FAIL-01", "FAIL-02"] }
+  - { capability: "Make external effects safe under duplicate delivery and unknown commit using idempotency, reconciliation, outbox/inbox, and effect evidence.", mapped_mechanisms: ["MECH-03", "MECH-04", "MATH-02", "IMPL-02", "FAIL-03", "FAIL-04"] }
+  - { capability: "Design compensations and concurrent ownership without claiming rollback or relying on unfenced leases.", mapped_mechanisms: ["MECH-05", "MECH-06", "MATH-04", "FAIL-05", "FAIL-06"] }
+  - { capability: "Coordinate fan-out/join, durable timers, callbacks, and authorized human decisions with explicit partial and late-event policies.", mapped_mechanisms: ["MECH-07", "MATH-03", "FAIL-07"] }
+  - { capability: "Version, replay-test, capacity-test, crash-test, and diagnose long-running workflows from state, activity, effect, and business-outcome telemetry.", mapped_mechanisms: ["MECH-08", "IMPL-03", "FAIL-08", "PROD-01", "PROD-02"] }
