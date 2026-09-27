@@ -23,9 +23,11 @@ This module owns the evaluation program: contracts, datasets, grader validation,
 
 **Research cutoff:** 2026-09-26.
 
-- **O — source observation:** what a cited paper, specification, or pinned implementation actually reports.
-- **D — derivation:** what follows under stated assumptions.
-- **H — engineering hypothesis:** a causal or operational claim that must survive workload telemetry.
+**Module Orientation**
+- **Engineering Problem**: Produce decision-relevant evidence whose population, measurement instrument, uncertainty, and release rule remain reproducible as the system changes.
+- **What You Will Do**: Specify an evaluation contract, build a versioned sliced dataset, calibrate graders, run paired dependence-aware comparisons, account for all terminal outcomes, trace the evaluation harness, and defend an offline-to-online release gate.
+- **Environment**: Python 3.10+, immutable dataset/run manifests, deterministic and model-based graders, optional blinded human labels, and a statistical notebook or test harness.
+- **Evidence Rule**: **O** is a source observation, **D** is a derivation under stated assumptions, and **H** is an engineering hypothesis requiring telemetry.
 
 ## 01 Baseline Assumptions
 
@@ -45,10 +47,28 @@ depth_contract:
   implementation: REQUIRED
   source_code: REQUIRED
   instrumentation: REQUIRED
+  experimental: REQUIRED
+  statistical: REQUIRED
+  production_reasoning: REQUIRED
+  failure_analysis: REQUIRED
   falsification: REQUIRED
+  security: SELECTIVE
+  economics: REQUIRED
+  architecture_tradeoff: REQUIRED
+  research_connection: REQUIRED
+
+estimated_effort:
+  instruction: 4h
+  guided_practice: 3h
+  labs: 12h
+  assessment: 3h
+  source_trace: 2h
+  total: 24h
 ```
 
 The learner must be able to define an evaluation estimand and population; build versioned datasets and slices; select and validate graders; run paired, dependence-aware comparisons; define release gates before seeing results; include failed and unfinished outcomes; connect offline evidence to online outcomes; trace a pinned harness; and diagnose a disagreement among benchmark, judge, system, and user metrics.
+
+### LAYER 1: KNOWLEDGE / INSTRUCTIONAL LAYER
 
 ## 03 Knowledge Map
 
@@ -65,6 +85,16 @@ A grader observes a proxy. A benchmark samples a population. A confidence interv
 
 ### Lesson 15.1 — Evaluation Contract and Experimental Unit
 
+**Engineering Question:**
+What population quantity is being estimated, at which independent unit, and for which decision?
+
+**Concepts & Definitions:**
+- **Construct**: property the decision cares about.
+- **Estimand**: precisely defined population quantity.
+- **Independent unit**: block at which sampling variability is modeled.
+
+**Quantitative Model / Derivation:**
+
 Start with the decision: what change could the result authorize, block, or investigate? Pin the target population and sampling frame, independent unit, system boundary, policy and model versions, outcomes, thresholds, uncertainty procedure, missingness, and exclusions. Request, turn, conversation, trajectory, user, and session are not interchangeable units.
 
 When A and B run on the same independent blocks, compare paired differences:
@@ -75,9 +105,43 @@ Resample or model the independent block. Ten generations from one prompt increas
 
 HELM is a reference for scenario and metric coverage, not a universal production suite. Its durable lesson is to expose which scenarios and desiderata are measured and which remain absent.
 
-**Outcome:** state exactly what quantity a result estimates and which decision it can support.
+**Mechanism Explanation:**
+Bind the decision, target population, sampling frame, unit, system boundary, versions, outcomes, thresholds, uncertainty, missingness, and exclusions before observing results.
+
+**Worked Example:**
+Two systems run on 100 shared prompts with five generations each. Pair by prompt and resample prompts, not 500 rows; repeats estimate conditional generation variability rather than 500 independent tasks.
+
+**Knowledge Check:**
+1. Why are turns from one conversation not automatically independent?
+2. Which decision changes if the system boundary includes retries and retrieval?
+
+**Guided Practice:**
+Write an evaluation contract for one release decision and identify every unit that could be confused with the independent block.
+
+**Feedback Contract:**
+- *Expected Evidence*: Population, frame, independent unit, boundary, estimand, versions, thresholds, and missingness are explicit.
+- *Common Failure*: Treating repeated samples as new independent prompts.
+- *Diagnostic Hint*: What process generated the independent blocks?
+- *Concept to Revisit*: Evaluation Estimand.
+
+**Learning Outcome:**
+State exactly what quantity a result estimates and which decision it can support.
+
+*(Effort: 35m instruction, 25m practice)*
+
+---
 
 ### Lesson 15.2 — Dataset Lineage, Slices, Freshness, and Contamination
+
+**Engineering Question:**
+How can a dataset support reproducible estimates without becoming an invisible development target or hiding critical slices?
+
+**Concepts & Definitions:**
+- **Lineage**: identity, origin, transformations, labels/rubrics, and exclusions.
+- **Slice**: preregistered subgroup tied to workload structure or risk.
+- **Protected holdout**: data withheld from routine inspection and optimization.
+
+**Quantitative Model / Derivation:**
 
 Every item needs stable identity, origin/license, capture time, sampling probability or intended weight, split, version, deduplication lineage, slice metadata, expected answer or rubric provenance, and exclusion history. Preserve a protected final holdout; routine regression sets become development data once teams inspect and optimize against them.
 
@@ -85,9 +149,46 @@ Choose slices from risks and workload structure before results: task, language, 
 
 LiveBench is a current design example: recent sources, frequent refresh, objective grading, and diverse tasks limit contamination. “Contamination-limited” is the defensible claim. Fresh data does not prove absence of private leakage, tuning feedback, benchmark-specific adaptation, or production relevance.
 
-**Outcome:** reproduce dataset membership and reason about leakage, representativeness, and hidden regressions.
+**Mechanism Explanation:**
+Preserve stable item identity, sampling/weighting, split, deduplication, provenance, and exclusion history. Report prevalence-weighted impact beside critical-slice constraints.
+
+**Quantitative Model / Derivation:**
+For declared slice weights $w_s$ summing to one, a prevalence-weighted estimate is $\hat m=\sum_s w_s\hat m_s$. It does not authorize a severe critical-slice regression to be averaged away.
+
+**Worked Example:**
+Assume slice weights 0.9 and 0.1 with scores 0.90 and 0.40. The weighted score is 0.85, but a predeclared critical-slice floor of 0.70 still fails.
+
+**Knowledge Check:**
+1. Why does frequent refresh limit rather than eliminate contamination?
+2. When does a regression set become development data?
+
+**Guided Practice:**
+Build a manifest, deduplication lineage, freshness policy, weighted estimate, and critical-slice gate for a stratified sample.
+
+**Feedback Contract:**
+- *Expected Evidence*: Reproducible membership, weights, leakage audit, uncertainty by slice, and protected split policy.
+- *Common Failure*: Post-result exclusions or an aggregate that compensates critical harm.
+- *Diagnostic Hint*: Which items were inspected during development?
+- *Concept to Revisit*: Dataset Lineage and Slice Constraints.
+
+**Learning Outcome:**
+Reproduce dataset membership and reason about leakage, representativeness, and hidden regressions.
+
+*(Effort: 35m instruction, 25m practice)*
+
+---
 
 ### Lesson 15.3 — Graders Are Measurement Instruments
+
+**Engineering Question:**
+How should deterministic, model-based, and human graders be calibrated before they influence a release gate?
+
+**Concepts & Definitions:**
+- **Oracle**: observation procedure valid for a declared construct.
+- **Meta-evaluation**: measuring grader error against independent adjudicated evidence.
+- **Order sensitivity**: judgment changes caused by presentation order rather than answer quality.
+
+**Quantitative Model / Derivation:**
 
 Use the strongest valid oracle for each construct:
 
@@ -109,9 +210,43 @@ It is conditional on sampled items, presentation, judge/rater population, and pr
 
 Human protocols require rubric examples and counterexamples, qualification, randomization/blinding where feasible, repeated labels, tie/abstain, disagreement analysis, adjudication, privacy, and worker well-being. Do not erase meaningful plural judgments by forcing consensus.
 
-**Outcome:** quantify what every grader gets wrong before trusting it in a gate.
+**Mechanism Explanation:**
+Choose the strongest valid oracle, blind/randomize where feasible, permit ties/abstention, and report confusion, disagreement, consistency, slice error, drift, and full cost.
+
+**Worked Example:**
+Across 20 order-balanced pairs, suppose B wins 9, A wins 7, and 4 tie. The descriptive tie-adjusted preference for B is $(9+0.5\times4)/20=0.55$; it is not context-free model quality.
+
+**Knowledge Check:**
+1. Why does swapping order detect sensitivity but not create ground truth?
+2. What independent evidence is needed before using a judge in a gate?
+
+**Guided Practice:**
+Calibrate exact/executable, semantic, two judge, and blinded human paths on one stratified sample; report disagreement rather than forcing consensus.
+
+**Feedback Contract:**
+- *Expected Evidence*: Fixed grader versions/protocol, order assignment, ties, reference labels, slice error, uncertainty, latency, and cost.
+- *Common Failure*: Self-judging or forced choice without calibration.
+- *Diagnostic Hint*: Does disagreement track answer position, length, or slice?
+- *Concept to Revisit*: Grader Validity.
+
+**Learning Outcome:**
+Quantify what every grader gets wrong before trusting it in a gate.
+
+*(Effort: 35m instruction, 25m practice)*
+
+---
 
 ### Lesson 15.4 — Uncertainty, Multiple Comparisons, and Release Gates
+
+**Engineering Question:**
+How can paired evidence, dependence, practical thresholds, and repeated looks be combined into an auditable release decision?
+
+**Concepts & Definitions:**
+- **Paired effect**: within-block difference between systems.
+- **Practical threshold**: minimum benefit or maximum tolerated harm.
+- **Multiplicity policy**: control for selecting among many metrics, slices, or repeated analyses.
+
+**Quantitative Model / Derivation:**
 
 Report paired effect sizes and intervals, not only independent score bars. Cluster or block by the actual sampling unit; repeat stochastic generations when conditional variability matters; retain seeds and attempt identity where supported. Bootstrap intervals are approximations, not magic: few clusters, distribution shift, adaptive sampling, or nonregular statistics can break them.
 
@@ -123,9 +258,43 @@ For a benefit metric, an improvement rule can require $LCB(\Delta)\ge\epsilon$. 
 
 A scalar $S=\sum_k w_k z_k$ is meaningful only with fixed directions, scales, transforms, and weights. Preserve the metric vector, Pareto frontier, and hard safety/reliability constraints so a gain cannot compensate for an unacceptable harm.
 
-**Outcome:** make release decisions auditable under practical and statistical uncertainty.
+**Mechanism Explanation:**
+Predeclare metric direction, blocks/clusters, interval procedure, thresholds, critical slices, and repeated-look policy. Plan sample size through detectable-effect or interval-width sensitivity using pilot variance, then re-evaluate assumptions.
+
+**Worked Example:**
+For paired differences $[0.02,0.01,-0.01,0.04]$, the mean is 0.015. A release still depends on the declared block-aware interval and practical threshold; the positive mean alone cannot pass the gate.
+
+**Knowledge Check:**
+1. Why can row bootstrap understate uncertainty for user-clustered data?
+2. What happens to nominal error rates under rerun-until-pass behavior?
+
+**Guided Practice:**
+Run paired block bootstrap and sensitivity planning, then compare improvement, noninferiority, hard-slice, and multiplicity-aware gates.
+
+**Feedback Contract:**
+- *Expected Evidence*: Paired effects, independent blocks, uncertainty procedure, effect/tolerance, sample-planning assumptions, and look policy.
+- *Common Failure*: Independent score bars on paired items or significance without practical effect.
+- *Diagnostic Hint*: Which choices were made after seeing results?
+- *Concept to Revisit*: Dependence-Aware Release Gate.
+
+**Learning Outcome:**
+Make release decisions auditable under practical and statistical uncertainty.
+
+*(Effort: 35m instruction, 25m practice)*
+
+---
 
 ### Lesson 15.5 — End-to-End and Offline-to-Online Validity
+
+**Engineering Question:**
+When does an offline quality gain fail to improve offered-user utility under real latency, failures, effects, and traffic?
+
+**Concepts & Definitions:**
+- **Offered denominator**: every eligible request/session, including failure and unfinished states.
+- **Goodput**: useful accepted outcomes meeting declared constraints per time.
+- **Online validity**: causal evidence that proxy changes transfer to user/business outcomes.
+
+**Quantitative Model / Derivation:**
 
 Score offered work, not only completed successes. Keep timeouts, refusals, invalid output, retrieval/tool failure, retries, abandonment, and unfinished trajectories in explicit terminal classes. Conditioning quality on completion permits a weak system to improve by dropping hard cases.
 
@@ -139,9 +308,43 @@ For agents, preserve turn and trajectory success, attempts, tool effects, recove
 
 Offline scores are proxies. Shadowing, canaries, randomized A/B tests, or other causally credible designs must test whether they predict user and business outcomes under real traffic, latency, interaction, and feedback. Use guardrails and account for interference, novelty, selection, and delayed effects.
 
-**Outcome:** prevent a benchmark improvement from silently reducing production utility.
+**Mechanism Explanation:**
+Join quality, safety, completion, latency, cost, and external effects; validate offline deltas using guarded shadow/canary/randomized designs with explicit assignment and exposure units. Check sample-ratio mismatch, interference, novelty, selection, and delayed outcomes.
+
+**Worked Example:**
+In 100 s, assume 50 offered requests: 30 accepted outcomes satisfy quality/latency/cost thresholds, 8 time out, 4 refuse, 3 fail tools, and 5 remain unfinished. Goodput is $30/100=0.3$ useful requests/s; success-only quality excludes evidence needed for the product decision.
+
+**Knowledge Check:**
+1. How can completion-conditioned quality improve while user utility falls?
+2. Why can user-level assignment be required for an interactive product?
+
+**Guided Practice:**
+Build an offered-outcome ledger and an online validation plan specifying assignment, exposure, guardrails, sample-ratio checks, interference, and delayed effects.
+
+**Feedback Contract:**
+- *Expected Evidence*: All terminal classes, trajectory effects, thresholds, sensitivity, assignment integrity, and offline/online deltas by slice.
+- *Common Failure*: Counting only final successes or treating an offline proxy as causal proof.
+- *Diagnostic Hint*: Which offered users disappeared from the denominator?
+- *Concept to Revisit*: Offline-to-Online Validity.
+
+**Learning Outcome:**
+Prevent a benchmark improvement from silently reducing production utility.
+
+*(Effort: 35m instruction, 25m practice)*
+
+---
 
 ### Lesson 15.6 — Evaluation Operations and Harness Trace
+
+**Engineering Question:**
+How should evaluation run as versioned infrastructure whose cost, coverage, drift, and escaped defects are observable?
+
+**Concepts & Definitions:**
+- **Evaluation funnel**: staged checks from deterministic contracts through controlled online evidence.
+- **Run manifest**: immutable identity and lineage for data, system, grader, attempts, outcomes, and environment.
+- **Unique defect yield**: adjudicated failures found by a stage beyond overlap with other stages.
+
+**Quantitative Model / Derivation:**
 
 Use a staged funnel: deterministic unit/contract checks, sampled regression suites, adversarial and slice suites, grader/human audits, shadow/canary, and controlled online evidence. Measure each stage's cost, latency, rerun variance, unique defects, overlap, false blocks, and escaped incidents. The claim that staging lowers cost and escapes is an **H**, not a guarantee.
 
@@ -151,7 +354,34 @@ An immutable run manifest includes dataset/slice hashes, item/root request IDs, 
 
 JudgeArena (2026) is frontier evidence for making judge, benchmark, prompt/protocol, inference backend, and metadata swappable and reproducible. It does not remove the need to validate the judge or reproduce performance claims.
 
-**Outcome:** operate evaluation as versioned production infrastructure with known cost and failure coverage.
+**Mechanism Explanation:**
+Version every dependency, preserve all attempts and exclusions, measure stage cost/latency/flakiness/unique defects/false blocks/escapes, and trace the pinned harness without universalizing it.
+
+**Quantitative Model / Trade-off Comparison:**
+A stage is not justified by case count alone. Compare unique consequential defect yield and escaped incidents against compute, judge, human, latency, and triage cost under a predeclared decision rule.
+
+**Worked Example:**
+A cheap contract stage catches failures also found downstream, while one slice suite finds two unique severe regressions. Report overlap and severity rather than claiming the largest test count is best.
+
+**Knowledge Check:**
+1. Which manifest fields localize a grader change from a model change?
+2. Why is a pinned source path not the definition of evaluation engineering?
+
+**Independent Practice:**
+Run one immutable manifest through task loading, request construction, dispatch, per-document processing, aggregation, and metadata capture; inject one change at a time.
+
+**Feedback Contract:**
+- *Expected Evidence*: Versioned run, complete attempts, stage costs, unique/overlap defects, false blocks, escapes, and source trace.
+- *Common Failure*: Changing data or graders invisibly between runs.
+- *Diagnostic Hint*: What is the earliest differing manifest field?
+- *Concept to Revisit*: Evaluation Operations.
+
+**Learning Outcome:**
+Operate evaluation as versioned production infrastructure with known cost and failure coverage.
+
+*(Effort: 35m instruction, 25m practice)*
+
+---
 
 ## 05 Literature & Production Source Map
 
@@ -177,63 +407,117 @@ JudgeArena (2026) is frontier evidence for making judge, benchmark, prompt/proto
 - Files/symbols: `lm_eval/evaluator.py::{simple_evaluate,evaluate}` and `lm_eval/api/task.py::Task.{build_all_requests,construct_requests,process_results,aggregation,higher_is_better}`.
 - Path: task loading/configuration → instance construction → request dispatch → per-document results → aggregation and run metadata.
 
+### LAYER 2: ENGINEERING PRACTICE LAYER
+
 ## 06 Engineering Labs
 
 All labs follow `PREDICT → BUILD → MEASURE → EXPLAIN → BREAK → IMPROVE → FALSIFY`.
 
 ### LAB A — Evaluation Contract and Dataset
 
+- **Objective**: Build a reproducible contract and sampled dataset for one production decision.
+- **Pre-Registered Hypothesis**: Preregistered units, weights, slices, and missingness will reveal at least one ranking or uncertainty change hidden by naive row-level scoring.
+- **Independent Variables**: Sampling frame, split/freshness, weighting, slice definition, and deduplication.
+- **Dependent Variables**: Coverage, leakage, weighted/unweighted effects, slice uncertainty, and exclusions.
+
 - Define one production decision, population, independent unit, system boundary, estimands, thresholds, and missingness policy.
 - Build an immutable dataset manifest with provenance, sampling/weights, deduplication, protected split, freshness, and risk slices.
 - Break it with duplicates, near-duplicates, stale questions, slice imbalance, label leakage, repeated user/session rows, and post-result exclusions.
 - Artifact: coverage map, leakage audit, weighted/unweighted estimates, and limitations register.
+- **Break & Falsify**: Inject duplicates, stale items, imbalance, leakage, clustered rows, and post-result exclusion; survival of a biased estimate falsifies the controls.
+- **Alignment**: Lessons 15.1–15.2.
+- **Effort Estimate**: 3h total.
 
 ### LAB B — Grader Meta-Evaluation
+
+- **Objective**: Calibrate executable, semantic, judge, and human paths on the same stratified sample.
+- **Pre-Registered Hypothesis**: Order balancing and independent labels will expose measurable judge error or sensitivity on at least one preregistered stress slice.
+- **Independent Variables**: Grader/protocol, answer order/length/cue, rubric, judge model/prompt, and slice.
+- **Dependent Variables**: Confusion/agreement, ties/abstention, order consistency, slice error, stability, latency, and cost.
 
 - Implement exact/executable, semantic, two LLM-judge, and blinded human/adjudication paths on the same stratified sample.
 - Randomize and swap pairwise order; vary answer length, identity cues, rubric, judge prompt/model, and ambiguous cases.
 - Measure confusion/agreement, ties/abstention, repeat stability, order consistency, slice errors, latency, and full attempt cost.
 - Artifact: grader card and a justified policy for automatic grade, dual grade, abstain, or expert escalation.
+- **Break & Falsify**: Include ambiguous cases and deliberately invalid cues; a judge whose errors cannot be bounded must not control the gate.
+- **Alignment**: Lesson 15.3.
+- **Effort Estimate**: 3h total.
 
 ### LAB C — Paired Regression Gate
+
+- **Objective**: Implement paired dependence-aware improvement/noninferiority gates with protected slice constraints.
+- **Pre-Registered Hypothesis**: Block-aware paired analysis will produce different uncertainty than naive unpaired/row-level analysis on seeded clustered data.
+- **Independent Variables**: System revision, block/repeat structure, gate type, threshold, multiplicity policy, and sample size.
+- **Dependent Variables**: Paired effect, interval width/coverage diagnostics, decision, slice violations, and rerun stability.
 
 - Compare two system revisions on shared independent blocks with paired effects and block bootstrap intervals.
 - Add stochastic repeats without pretending they are new items; exercise noninferiority, improvement, hard slice constraints, and multiplicity control.
 - Break the gate with unpaired analysis, tiny slices, metric shopping, rerun-until-pass, aggregate compensation, and success-only deletion.
 - Artifact: preregistered release rule, sensitivity analysis, and decision record.
+- **Break & Falsify**: Use tiny slices, metric shopping, rerun-until-pass, aggregate compensation, and success-only deletion; any undeclared selection that passes exposes an invalid gate.
+- **Alignment**: Lesson 15.4.
+- **Effort Estimate**: 3h total.
 
 ### LAB D — End-to-End Evaluation Pipeline
+
+- **Objective**: Run a versioned staged evaluation from deterministic checks through simulated/shadow online validation.
+- **Pre-Registered Hypothesis**: Complete offered-outcome accounting will expose at least one regression hidden by accepted-success-only scoring in the injected set.
+- **Independent Variables**: Failure class, trajectory effect, traffic slice, stage, assignment/exposure design, and system version.
+- **Dependent Variables**: Quality, completion, safety, latency, cost, goodput, stage yield, false blocks, escapes, and online outcome.
 
 - Build a staged suite and persist a full manifest through the pinned harness path.
 - Evaluate request, turn, and trajectory outcomes; inject timeout, refusal, invalid output, tool/retrieval failure, retry, duplicate effect, and abandoned session.
 - Shadow or simulate an online validation and compare offline deltas with completion, latency, cost, safety, and user outcome.
 - Measure stage cost, unique defect yield, false blocks, rerun instability, escaped regressions, and detection time.
 - Artifact: evaluation DAG, source trace, offline-online validity report, rollout/rollback gate, and TODO_VERIFY list.
+- **Break & Falsify**: Inject timeout/refusal/invalid output/tool failure/retry/duplicate effect/abandonment and experiment-integrity faults; any invisible offered outcome falsifies completeness.
+- **Alignment**: Lessons 15.5–15.6 and Incident 15.1.
+- **Effort Estimate**: 3h total.
 
 ## 07 Break / Incident Scenarios
 
 ### Incident 15.1 — The Judge Says Better; Users Say Worse
 
-A new release wins the offline pairwise suite and passes an aggregate gate. After rollout, abandonment and support escalations rise while dashboards still show higher “quality.”
+- **Incident Symptoms**: A release wins offline pairwise evaluation and an aggregate gate, yet rollout increases abandonment and support escalation while the quality dashboard remains positive.
+- **Diagnostic Protocol (Task)**:
+  1. *Formulate Competing Hypotheses*: Judge bias/drift, broken randomization, traffic mismatch, contamination, missing terminal outcomes, success-only retries, latency/tool/retrieval regressions, hidden harmful effects, metric selection, or invalid online measurement.
+  2. *Rank Initial Plausibility*: Use timing, slice, and assignment evidence without assuming offline or online metrics are ground truth.
+  3. *Identify Missing Evidence*: Recover manifests, weights, versions, paired outputs, order assignment, calibration labels, all attempts/states, latency/cost/effects, traffic slices, assignment/exposure logs, and preregistered gates.
+  4. *Design Discriminating Tests*: Blind re-grade with independent oracles/humans, swap order, include offered work, replay both systems on identical items, and verify assignment/sample ratios; state falsifiers.
+  5. *Execute Causal Diagnosis*: Decompose offline and online deltas by slice and rank supported interacting explanations.
+  6. *Prescribe Mitigation and Prevention*: Pause/roll back if guardrails require it, then repair the earliest invalid measurement or system boundary.
+  7. *Remeasure*: Offline effect, judge error, completion, latency, cost, safety, user outcomes, and experiment integrity.
 
-Competing explanations include position/verbosity bias, changed judge prompt/model, broken order randomization, evaluation traffic mismatch, stale or contaminated items, unreported timeouts/refusals, retries counted only on final success, latency regression, retrieval/tool failures, harmful effects hidden by final-answer grading, multiple-comparison selection, or a genuinely invalid online metric.
-
-Recover immutable run manifests, item/sample weights, system and grader versions, paired raw outputs, order assignment, human calibration labels, all attempts and terminal states, latency/cost, tool effects, traffic slices, assignment logs, and predeclared gates. Re-grade a blinded stratified sample with executable/domain oracles and humans; swap order; include all offered requests; reproduce old/new systems on identical items; decompose offline and online deltas by slice; and verify experiment integrity. Rank explanations, intervene at the earliest falsified boundary, and remeasure offline effect, judge error, completion, latency, cost, safety, and user outcome.
+### LAYER 3: MASTERY / ASSESSMENT LAYER
 
 ## 08 Mastery Assessment
 
-Design and operate a release evaluation for an LLM system change. Deliver the decision contract; population/unit/boundary; immutable dataset and slices; leakage/freshness controls; executable, judge, and human grader cards; paired dependence-aware statistics; multiplicity-aware release gates; offered-request quality/latency/cost accounting; trajectory/effect evaluation; pinned harness trace; staged cost/coverage telemetry; online-validation plan; and a diagnosis of Incident 15.1.
+### Enterprise Transfer Problem: Evidence-Gated LLM Release
+
+Design and operate the release evaluation for a system change serving heterogeneous interactive and automated workflows.
+
+**Required Deliverables**:
+1. Decision contract, population, independent unit, boundary, estimands, and missingness.
+2. Immutable dataset/slice manifest with leakage, freshness, and weighting controls.
+3. Executable, judge, and human grader cards with meta-evaluation.
+4. Paired dependence-aware statistics, sensitivity planning, and multiplicity-aware gates.
+5. Offered-request quality/latency/cost/effect accounting.
+6. Pinned harness trace and staged cost/coverage/escape telemetry.
+7. Online validation, guardrail, rollout, and rollback plan.
+8. Evidence-backed diagnosis of Incident 15.1.
 
 ## 09 Required Evidence & Rubric
 
-- **Validity:** construct, observation, estimator, and decision rule remain distinct.
-- **Population:** sampling frame, unit, weights, slices, exclusions, and shift are explicit.
-- **Lineage:** data, model, prompt, policy, harness, grader, and environment versions are reproducible.
-- **Graders:** each is calibrated against an independent reference and tested for bias, drift, ties, and disagreement.
-- **Statistics:** comparison is paired where possible; dependence and multiplicity match the design; practical effect accompanies significance.
-- **Accounting:** failures, retries, unfinished work, latency, cost, and effects remain in denominators.
-- **Transfer:** offline metrics are validated against guarded online outcomes, not asserted equivalent.
-- **Operations:** suite cost, flakiness, freshness, unique detection, false blocks, and escape rate are measured.
+### Required Artifact: Production Source Trace
+
+Submit a pinned trace from task loading and request construction through dispatch, per-document processing, aggregation, and run metadata. Separate observed implementation behavior from general evaluation requirements.
+
+### Rubric Dimensions
+
+- **Validity and Population**: *Insufficient* reports a score. *Competent* defines construct, population, unit, estimator, and decision. *Strong* proves lineage, weighting, dependence, slices, and shift limitations.
+- **Graders and Statistics**: *Insufficient* trusts a judge or mean. *Competent* calibrates graders and reports paired uncertainty. *Strong* handles multiplicity, sensitivity planning, disagreement, and practical thresholds.
+- **Accounting and Transfer**: *Insufficient* scores successes only. *Competent* retains failures/cost/latency/effects and plans guarded online validation. *Strong* verifies assignment integrity and explains offline-online divergence.
+- **Operations and Diagnosis**: *Insufficient* changes fixtures invisibly. *Competent* versions the pipeline and source trace. *Strong* measures unique yield, false blocks, escapes, and discriminating remeasurement.
 
 ## 10 Capability Traceability Matrix
 
@@ -247,9 +531,22 @@ Design and operate a release evaluation for an LLM system change. Deliver the de
 
 ## 11 Exit Criteria & Module Wrap-Up
 
-Pass requires the learner to name the decision and independent unit, reproduce dataset/system/grader versions, expose missingness and failure denominators, validate an LLM judge rather than trust it, quantify paired effects with appropriate uncertainty, prevent aggregate compensation of critical regressions, connect offline evidence to online outcomes, and trace a pinned evaluation harness without generalizing it.
+### Exit Criteria
 
-**Final mental model:** evaluation is a versioned measurement-and-decision system. Its credibility comes from population fit, valid observations, dependence-aware inference, explicit value judgments, end-to-end denominators, and falsifiable links to production outcomes—not from benchmark familiarity or a precise-looking score.
+A learner successfully completing Module 15 must be able to:
+1. Name the decision, population, independent unit, boundary, and estimand.
+2. Reproduce dataset, system, harness, and grader versions.
+3. Expose missingness, failures, retries, unfinished work, latency, cost, and effects.
+4. Validate automated/human graders and quantify paired effects with appropriate uncertainty.
+5. Prevent aggregate compensation of critical regressions.
+6. Test rather than assume offline-to-online transfer.
+7. Trace a pinned harness without generalizing it.
+
+### Module Wrap-Up (Final Mental Model Reconstruction)
+
+- **The Core Invariant**: Evaluation is a versioned measurement-and-decision system.
+- **The Evidence Path**: decision/population → sampled observations → graders → dependence-aware estimates → explicit gate → guarded online validation.
+- Credibility comes from population fit, valid observations, explicit value judgments, complete denominators, and falsifiable links to production outcomes—not from a precise-looking score.
 
 ## 12 Competency Targets
 
