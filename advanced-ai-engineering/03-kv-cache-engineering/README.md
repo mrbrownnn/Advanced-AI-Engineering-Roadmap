@@ -5,16 +5,16 @@ KV cache is often one of the dominant sources of dynamic memory consumption in L
 
 **Module Orientation**
 - **Engineering Problem**: Solving memory exhaustion and latency spikes under continuous batching.
-- **What you will do**: Build a paged KV allocator, simulate external vs internal fragmentation, diagnose a latency incident, and design an architecture transfer plan.
+- **What You Will Do**: Build a paged KV allocator, simulate external vs internal fragmentation, diagnose a latency incident, and design an architecture transfer plan.
 - **Environment**: A basic Python environment for the simulator (Labs A-C). Access to a single GPU is optional but recommended for latency bounds testing (Lab D).
 
-## 01 Prerequisites and Scope
+## 01 Baseline Assumptions
 - **Architecture**: You understand how multi-head attention (MHA), grouped-query attention (GQA), multi-query attention (MQA), and multi-head latent attention (MLA) differ in KV footprint (Module 01).
 - **Hardware**: You understand the GPU memory hierarchy, HBM bandwidth constraints, and basic CUDA memory allocation concepts (Module 02).
 
 This module owns KV state geometry, allocation, block tables, sharing, prefix identity, lifecycle/eviction, representation, and tiering. It exposes feasibility and pressure signals to the scheduler, but request queueing, admission objectives, fairness, preemption policy, TTFT/TPOT, and capacity belong to Module 04. General quantization/kernel optimization belongs to Module 05, and distributed placement/transport belongs to Module 20.
 
-Research cutoff: **2026-09-25**. Runtime behavior is claimed only against pinned source revisions.
+Research cutoff: **2026-09-27**. Runtime behavior is claimed only against pinned source revisions.
 
 ## 02 Target Mastery
 
@@ -57,7 +57,7 @@ KV state in autoregressive inference → KV tensor dimensions → analytical KV 
 
 ### Lesson 3.1 — KV State & Quantitative Model
 
-**Engineering question:**
+**Engineering Question:**
 What is the logical KV payload per retained token under explicit architecture assumptions, and why is it not exact process memory?
 
 **Concepts & Definitions:**
@@ -88,7 +88,7 @@ For a screening exercise, assume an 80 GiB device, the standard formula above, e
 - *Diagnostic Hint*: After subtracting weights and buffers, how much memory is actually free for KV?
 - *Concept to Revisit*: Total device memory vs KV-only analytical requirement.
 
-**Learning outcome:**
+**Learning Outcome:**
 Derive KV memory from a model architecture and predict theoretical batch limits.
 
 *(Effort: 30m instruction, 15m practice)*
@@ -97,7 +97,7 @@ Derive KV memory from a model architecture and predict theoretical batch limits.
 
 ### Lesson 3.2 — Memory Allocation & Fragmentation
 
-**Engineering question:**
+**Engineering Question:**
 What are the different types of memory waste in LLM inference, and how do they manifest under continuous batching?
 
 **Concepts & Definitions:**
@@ -127,7 +127,7 @@ Naive continuous contiguous allocation reserves 2048 tokens per request. Total r
 **Independent Practice:**
 Proceed to **LAB A** to build the Allocation Simulator.
 
-**Learning outcome:**
+**Learning Outcome:**
 Distinguish fragmentation/waste mechanisms across the abstraction hierarchy.
 
 *(Effort: 30m instruction, Lab A integration)*
@@ -136,7 +136,7 @@ Distinguish fragmentation/waste mechanisms across the abstraction hierarchy.
 
 ### Lesson 3.3 — Paged KV Memory Management
 
-**Engineering question:**
+**Engineering Question:**
 How can we store growing sequential data in non-contiguous physical memory blocks to mitigate external fragmentation?
 
 **Concepts & Definitions:**
@@ -170,6 +170,10 @@ Sequence grows from 8 tokens to 9 tokens.
 4. Update the free pool.
 5. State the allocator invariant after the transition.
 
+**Knowledge Check:**
+1. When does sequence growth require a new logical block?
+2. Which invariants prevent a physical block from being simultaneously free and allocated?
+
 **Feedback Contract:**
 - *Expected Evidence*: Logical block 2 required. Physical block 4 (or 8/11) allocated. Table gets `logical 2 → 4`. Free pool drops to `[8, 11]`. Physical block 4 is no longer free.
 - *Diagnostic Hint*: 8 tokens filled exactly how many 4-token blocks? What does the 9th token trigger?
@@ -178,7 +182,7 @@ Sequence grows from 8 tokens to 9 tokens.
 **Independent Practice:**
 Proceed to **LAB B** to build the Minimal Paged KV Block Manager.
 
-**Learning outcome:**
+**Learning Outcome:**
 Explain paged KV management precisely, reason about block-size trade-offs, and track logical-to-physical state transitions.
 
 *(Effort: 30m instruction, 15m practice, Lab B integration)*
@@ -187,7 +191,7 @@ Explain paged KV management precisely, reason about block-size trade-offs, and t
 
 ### Lesson 3.4 — Sharing & Lifetime
 
-**Engineering question:**
+**Engineering Question:**
 How do we safely share identical physical KV blocks across multiple distinct logical requests?
 
 **Concepts & Definitions:**
@@ -216,7 +220,7 @@ If the prompt was 14 tokens (a partial block), and Seq A appends token 15, modif
 **Independent Practice:**
 Implement CoW and invariant tests (refcount invariant, no free-and-allocated state overlap) in **LAB B**.
 
-**Learning outcome:**
+**Learning Outcome:**
 Reason about sharing, refcounts, and CoW mechanisms under strict invariants.
 
 *(Effort: 30m instruction)*
@@ -225,7 +229,7 @@ Reason about sharing, refcounts, and CoW mechanisms under strict invariants.
 
 ### Lesson 3.5 — KV-Aware Scheduling & Memory Pressure
 
-**Engineering question:**
+**Engineering Question:**
 How does the KV memory allocator interact with the request scheduler under severe memory pressure?
 
 **Concepts & Definitions:**
@@ -236,6 +240,13 @@ How does the KV memory allocator interact with the request scheduler under sever
 
 **Mechanism Explanation:**
 The scheduler cannot decide feasibility from request count alone; it needs allocator state and projected demand. If active sequences exhaust allocatable blocks, a runtime may delay work, reject/admit differently, evict reusable state, preempt and recompute, swap/offload, or fail allocation. Which policy runs and its TTFT/TPOT effect are runtime- and workload-specific and belong to Module 04; this lesson focuses on the allocator signals and state transitions exposed at that boundary.
+
+**Worked Example:**
+The guided scenario below is a screening example: ten free blocks can admit C's six-block initial demand, but feasibility of subsequent A/B growth remains unknown without completion timing, allocator policy, and demand uncertainty.
+
+**Knowledge Check:**
+1. Why is current free-block count insufficient to prove safe admission?
+2. Which observation distinguishes allocator refusal from a scheduler policy decision?
 
 **Guided Practice:**
 `free_blocks = 10`.
@@ -255,7 +266,7 @@ Predict the TTFT effect, TPOT effect, memory-pressure risk, and recomputation co
 **Independent Practice:**
 Diagnose scheduler thrashing in the **Incident Scenario**.
 
-**Learning outcome:**
+**Learning Outcome:**
 Analyze scheduler-memory interaction and evaluate admission versus preemption trade-offs.
 
 *(Effort: 30m instruction, 15m practice, Incident integration)*
@@ -264,7 +275,7 @@ Analyze scheduler-memory interaction and evaluate admission versus preemption tr
 
 ### Lesson 3.6 — Prefix Cache, Radix & Eviction
 
-**Engineering question:**
+**Engineering Question:**
 How do we persist and match previously computed KV blocks for future, unconnected requests?
 
 **Concepts & Definitions:**
@@ -291,7 +302,7 @@ Request 2 arrives with the same validated execution identity. The index finds `[
 **Independent Practice:**
 Proceed to **LAB C** to simulate Prefix Sharing.
 
-**Learning outcome:**
+**Learning Outcome:**
 Model prefix-cache effectiveness and diagnose caching semantics.
 
 *(Effort: 30m instruction, Lab C integration)*
@@ -300,7 +311,7 @@ Model prefix-cache effectiveness and diagnose caching semantics.
 
 ### Lesson 3.7 — Cache-Aware Routing
 
-**Engineering question:**
+**Engineering Question:**
 How does a multi-node load balancer know which worker holds the KV cache for a specific prompt?
 
 **Concepts & Definitions:**
@@ -309,6 +320,12 @@ How does a multi-node load balancer know which worker holds the KV cache for a s
 
 **Mechanism Explanation:**
 Pure round-robin load balancing often reduces cache locality, while perfect cache-aware routing can create severe load skew. The router tracks a heuristic view of downstream worker cache state to balance these concerns.
+
+**Worked Example:**
+With two workers and a hot prefix resident only on Worker 1, routing every matching request to Worker 1 maximizes immediate locality but can grow its queue while Worker 2 idles. The correct choice depends on measured reuse benefit and queue cost.
+
+**Quantitative Model / Trade-off Comparison:**
+Compare policies using hit rate, per-worker admitted load, queue residence, TTFT, completions, and SLO-goodput. No scalar cache-hit objective captures the full routing trade-off.
 
 **Knowledge Check:**
 1. Why might perfectly cache-aware routing degrade system goodput for a highly skewed workload?
@@ -321,7 +338,7 @@ Pure round-robin load balancing often reduces cache locality, while perfect cach
 **Independent Practice:**
 Implement multi-worker routing simulation in **LAB C**.
 
-**Learning outcome:**
+**Learning Outcome:**
 Reason about routing/locality trade-offs.
 
 *(Effort: 20m instruction, Lab C integration)*
@@ -330,7 +347,7 @@ Reason about routing/locality trade-offs.
 
 ### Lesson 3.8 — KV Quantization and Lossy Retention
 
-**Engineering question:**
+**Engineering Question:**
 How does reducing the precision of the KV cache impact memory capacity, bandwidth, and generation quality?
 
 **Concepts & Definitions:**
@@ -341,6 +358,9 @@ How does reducing the precision of the KV cache impact memory capacity, bandwidt
 FP16 → FP8 approximately halves the NOMINAL KV PAYLOAD BYTES PER ELEMENT. This provides an analytical upper bound of ~2× KV capacity. It does NOT automatically imply 2× total throughput or exactly half measured HBM traffic, as this depends on metadata layout, kernel dequantization overhead, and model quality regressions.
 
 Token-selective eviction is a different mechanism: it changes which positions attention can use and is therefore lossy unless the model/attention semantics already specify that window. Policies such as H2O provide important research evidence, but their quality and speed results remain model-, task-, kernel-, and workload-specific.
+
+**Worked Example:**
+For a declared logical payload $P$, an 8-bit representation screens as $P/2$ relative to a 16-bit payload before scales, metadata, alignment, duplicated buffers, and fallback work. Measure those additions before predicting capacity.
 
 **Knowledge Check:**
 1. Why doesn't INT8 quantization automatically double request concurrency?
@@ -353,7 +373,7 @@ Token-selective eviction is a different mechanism: it changes which positions at
 **Independent Practice:**
 Quantization trade-offs are evaluated in **LAB D**.
 
-**Learning outcome:**
+**Learning Outcome:**
 Evaluate quantization trade-offs explicitly based on empirical validation.
 
 *(Effort: 30m instruction, Lab D integration)*
@@ -362,7 +382,7 @@ Evaluate quantization trade-offs explicitly based on empirical validation.
 
 ### Lesson 3.9 — KV Offloading & Memory Tiering
 
-**Engineering question:**
+**Engineering Question:**
 When is it viable to move KV blocks off the GPU and into host memory?
 
 **Concepts & Definitions:**
@@ -390,7 +410,7 @@ If restore is required before the first resumed computation, it adds at least 40
 **Independent Practice:**
 Tiering latency is modeled in **LAB D**.
 
-**Learning outcome:**
+**Learning Outcome:**
 Evaluate offloading viability by quantitatively reasoning about host↔device transfer bandwidth.
 
 *(Effort: 30m instruction, Lab D integration)*
@@ -399,8 +419,13 @@ Evaluate offloading viability by quantitatively reasoning about host↔device tr
 
 ### Lesson 3.10 — Production Source Trace and Cross-Instance KV
 
-**Engineering question:**
+**Engineering Question:**
 How does a current runtime connect scheduler feasibility, physical blocks, and prefix-cache lifecycle, and what changes when KV crosses an instance boundary?
+
+**Concepts & Definitions:**
+The source trace distinguishes allocator feasibility, physical ownership, reusable residency, cache identity, release order, and cross-instance transfer boundaries.
+
+**Mechanism Explanation:**
 
 At vLLM commit `25b0add7b8a1c944d5c4e364f2de6aa82497a2ad`, the verified V1 path is:
 
@@ -426,6 +451,9 @@ request completion / release
 
 The same revision hashes only full blocks for prefix reuse. The chain includes parent-block hash, token IDs, and optional extra keys for LoRA, multimodal inputs, cache salt, and prompt embeddings. This is a current implementation contract, not a universal proof that token equality alone implies KV equivalence.
 
+**Worked Example:**
+A zero-reference cached block can remain indexed and reclaimable while appearing in an eviction/free queue under the pinned implementation; active ownership and reusable residency are different states.
+
 For cross-instance reuse or prefill/decode disaggregation, add ownership/validity metadata and a transfer path. The screening lower bound is
 
 `T_transfer >= KV_payload_bytes / measured_effective_interconnect_bandwidth`.
@@ -444,7 +472,7 @@ Actual critical-path cost includes setup, contention, synchronization, layout co
 **Independent Practice:**
 Prefill→decode transfer latency modeled in **LAB D**.
 
-**Learning outcome:**
+**Learning Outcome:**
 Trace a current allocator/cache implementation without generalizing its objects or policies to every runtime.
 
 *(Effort: 30m instruction, Lab D integration)*
@@ -486,61 +514,79 @@ Trace a current allocator/cache implementation without generalizing its objects 
 
 ## 06 Engineering Labs
 
-For every major experiment, follow the strict PREDICT → MEASURE loop:
-1. Analytical prediction
-2. Assumptions
-3. Expected result
-4. Instrumentation
-5. Actual observation
-6. Discrepancy analysis
+For every major experiment, follow:
+$$\text{PREDICT}\to\text{BUILD}\to\text{MEASURE}\to\text{EXPLAIN}\to\text{BREAK}\to\text{IMPROVE}\to\text{FALSIFY}.$$
 
 ### LAB A — KV Analytical Model + Allocation Simulator
 - **Objective**: Implement a contiguous allocator simulator and expose fragmentation effects.
+- **Pre-Registered Hypothesis**: Heterogeneous growth and completion will separate reservation waste, internal fragmentation, and contiguous-allocation failure in the declared model.
+- **Independent Variables**: Block/reservation size, prompt/output-length trace, allocation policy, completion order, and fixed non-KV memory.
+- **Dependent Variables**: Logical payload, allocated capacity, each waste category, admission failures, and optimistic concurrency bound.
+- **Break & Falsify**: Use equal fixed-length sequences and sufficient contiguous space; if fragmentation remains, inspect the simulator invariant or definition.
 - **Alignment**: Explicitly exercises Lessons 3.1 and 3.2.
 - **Effort Estimate**: 2h implementation, 1h experiments (3h total).
 
 ### LAB B — Minimal Paged KV Block Manager
 - **Objective**: Implement a physical block pool and logical block table.
+- **Pre-Registered Hypothesis**: Paged assignment will avoid contiguous logical-placement requirements while block rounding and lifecycle metadata remain measurable costs.
+- **Independent Variables**: Block size, growth/completion order, sharing, partial-tail policy, and injected lifecycle fault.
+- **Dependent Variables**: Allocations, free blocks, internal waste, refcounts, CoW events, stale references, and invariant violations.
 - **Action**: Implement allocation, growth, reference counting, and a CoW variant for shared partial blocks. Treat CoW as a reference mechanism from PagedAttention, not a claim that every current runtime shares partial blocks this way. Add invariant tests for ownership, free-pool membership, isolation, and stale metadata.
+- **Break & Falsify**: Double-free, append through a shared mutable tail, or retain a stale block-table entry; each must fail an invariant rather than silently corrupt another sequence.
 - **Alignment**: Explicitly exercises Lessons 3.3 and 3.4.
 - **Effort Estimate**: 3h implementation, 1h analysis (4h total).
 
 ### LAB C — Prefix Sharing & Multi-Worker Routing
 - **Objective**: Simulate Prefix tree lifecycles, cache identity policies, LRU eviction, and cache-aware routing.
+- **Pre-Registered Hypothesis**: Prefix affinity will improve reuse only where saved work exceeds added queue/load-skew cost.
+- **Independent Variables**: Prefix popularity/locality, identity policy, cache capacity, eviction policy, routing policy, and worker load.
+- **Dependent Variables**: Hit rate, saved prompt work, per-worker queue/load, latency quantiles, completions, and SLO-goodput.
 - **Action**: Compare policies (round-robin vs prefix-affinity). Measure hit rate, load skew, and queue latency. Require repeated runs, p50/p95/p99 latency analysis, and variance measurement to avoid single-run conclusions (Statistical exercise).
+- **Break & Falsify**: Use a hot-prefix workload that overloads its resident worker; a policy that improves hits but harms declared utility falsifies hit-rate-only selection.
 - **Alignment**: Explicitly exercises Lessons 3.6 and 3.7.
 - **Effort Estimate**: 2h simulation, 1h analysis (3h total).
 
 ### LAB D — Compression, Tiering, & Disaggregation Bounds
 - **Objective**: Model latency constraints of tiering, quantization, and disaggregated transfers.
+- **Pre-Registered Hypothesis**: Nominal payload reduction predicts only a lower-bound capacity/transfer change; metadata, quality, conversion, overlap, and contention can reverse deployment utility.
+- **Independent Variables**: Representation bits/granularity, retained tokens, tier, transfer size/bandwidth, overlap fraction, and workload shape.
+- **Dependent Variables**: Payload/metadata, quality result, transfer lower bound, critical-path time, concurrency, and goodput.
 - **Action**: Compare exact paging, representation quantization, lossy token retention, and offload as distinct mechanisms. Extend analytical models to include simplified prefill→decode KV transfers. Reason about payload, metadata, quality, overlap, and critical-path impact without inventing a transport.
+- **Break & Falsify**: Include a small transfer dominated by setup and a lossy policy that fails the quality gate; do not preserve a capacity claim after either violation.
 - **Alignment**: Explicitly exercises Lessons 3.8, 3.9, and 3.10.
 - **Effort Estimate**: 2h modeling, 1h report (3h total).
 
 ### LAB E — Pinned vLLM V1 Lifecycle Trace
 - **Objective**: Connect scheduler feasibility, prefix lookup, block allocation, release, and cached eviction candidates in a current source revision.
+- **Pre-Registered Hypothesis**: The pinned runtime will differ from the minimal simulator in at least one lifecycle or cache-residency state.
+- **Independent Variables**: Prefix caching on/off, cache identity, prompt reuse, completion order, and allocation pressure.
+- **Dependent Variables**: Cache groups, block IDs, reusable tokens, allocatable/evictable blocks, allocation refusals, and trace coverage.
 - **Action**: Trace the exact files and symbols in Lesson 3.10, then run a small workload with prefix caching enabled and disabled. Record cache groups/coordinator, block IDs, allocatable versus cached-evictable blocks, hits in reusable tokens, and any allocation refusal. Mark unexecuted branches `TODO_VERIFY`.
-- **Falsification**: Find one behavior in the minimal simulator that is not valid for the pinned runtime, such as treating every free-queue block as semantically empty.
+- **Break & Falsify**: Find one behavior in the minimal simulator that is not valid for the pinned runtime, such as treating every free-queue block as semantically empty.
+- **Alignment**: Explicitly exercises Lesson 3.10.
 - **Effort Estimate**: 2h source trace, 1h instrumented comparison (3h total).
 
 ## 07 Break / Incident Scenarios
 
-### Scenario A: The Undiagnosed Latency Collapse
+### Incident 03.1: The Undiagnosed Latency Collapse
 - **Incident Symptoms**: Traffic patterns shift. Admission failures rise significantly. The reported "free capacity" metrics appear high, yet the system refuses to admit new requests. The TPOT latency distribution heavily tails. (Exercises Lesson 3.5: Scheduling / Memory Pressure).
-- **Task**:
+- **Diagnostic Protocol (Task)**:
   - Formulate >= 3 plausible hypotheses for the failure.
   - Rank hypotheses based on system constraints.
   - Identify missing evidence/metrics.
   - Design a discriminating experiment.
   - Diagnose the root cause.
-  - Intervene and re-measure.
+  - Separate immediate mitigation from long-term intervention.
+  - Re-measure with declared admission, allocation, TPOT, completion, and goodput recovery criteria.
 
 ---
 
 ### LAYER 3: MASTERY / ASSESSMENT LAYER
 
 ## 08 Mastery Assessment
-**Architecture Transfer Problem**:
+
+### Architecture Transfer Problem — Constrained MoE KV Capacity
+
 You are serving a massive Mixture-of-Experts (MoE) model where KV cache footprint matches dense models, but parameter weights consume 80% of your HBM. You have strict Time-Per-Output-Token (TPOT) latency SLOs. The workload is highly concurrent, conversational, with little prefix locality.
 
 You must design an architecture that maximizes concurrency while meeting SLOs.
@@ -588,9 +634,12 @@ Evidence must include: repository, commit `25b0add7b8a1c944d5c4e364f2de6aa82497a
 *(Key: KC = Knowledge Check, GP = Guided Practice)*
 
 ## 11 Exit Criteria & Module Wrap-Up
+
+### Exit Criteria
+
 A learner completing Module 03 should be able to derive KV memory footprint, explain paged block tables, diagnose scheduler memory thrashing, evaluate quantization/offloading mathematically, trace production code, and defend an architecture design.
 
-**Module Wrap-Up (Final Mental Model Reconstruction):**
+### Module Wrap-Up (Final Mental Model Reconstruction)
 - MODEL ARCHITECTURE → KV BYTES PER TOKEN → REQUEST LENGTH / CONCURRENCY → LOGICAL KV DEMAND → PHYSICAL KV MANAGEMENT → ALLOCATOR / SHARING / CACHE → SCHEDULER → ROUTING / LOCALITY → HARDWARE CAPACITY & BANDWIDTH → LATENCY / GOODPUT / COST.
 - When KV becomes limiting, possible interventions may include: admission/scheduling changes, block-size/allocation policy changes, prefix reuse, eviction changes, routing/locality, KV representation/quantization, tiering/offloading, or placement/disaggregation.
 - The correct intervention depends entirely on evidence. The final mental model is: PREDICT → OBSERVE → DIAGNOSE → INTERVENE → FALSIFY.
