@@ -1,0 +1,191 @@
+module: "17-harness-evolution"
+registry_version: "1.0.0"
+research_cutoff: "2026-09-27"
+change_reason: "Replace generated placeholders with a versioned harness-change, migration-evaluation, prompt-optimization, and controlled-rollout evidence model."
+claims:
+  - id: CLM-001
+    claim: "A production harness is a versioned composite of model identifier, provider/runtime, request parameters, prompt templates, tool and output schemas, parsers, validators, retries, and routing; a change to any component can change behavior even when application code is unchanged."
+    provenance: DERIVED
+    domain: harness_versioning
+    concepts: [harness_manifest, change_surface, effective_request]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["The harness boundary and effective request are defined as in Module 13."]
+    derivation: "Model output is a function of the effective request and the serving model. Each listed component alters either the effective request, the model that receives it, or the interpretation of its output, so each is a behavior-bearing version."
+    limitations: ["Provider-side changes behind a stable identifier may be unobservable except through behavior."]
+    applicability: "Hosted APIs, self-hosted runtimes, and multi-provider routers."
+    curriculum_usage: { lessons: ["17.1"], labs: ["LAB-A"], assessments: ["Mastery-17"] }
+  - id: CLM-002
+    claim: "Anthropic's model lifecycle defines Active, Legacy, Deprecated, and Retired states; requests to retired models fail, deprecated models receive an announced retirement date and recommended replacement, and publicly released models receive at least 60 days' retirement notice on Anthropic-operated platforms."
+    provenance: VERIFIED_FACT
+    domain: provider_lifecycle
+    concepts: [model_deprecation, retirement, migration_deadline]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT / PROVIDER-SPECIFIC"
+    evidence: [{ source_type: official_docs, tier: 2, title: "Model deprecations", authors: "Anthropic", year: "2026", url: "https://platform.claude.com/docs/en/about-claude/model-deprecations", section: "Overview; Notifications; Model status", accessed_at: "2026-09-27" }]
+    limitations: ["Lifecycle terms, notice periods, and partner-platform schedules differ by provider and platform."]
+    applicability: "Forced-migration planning for hosted model dependencies."
+    curriculum_usage: { lessons: ["17.1", "17.6"], labs: ["LAB-A"], assessments: ["Incident-17.1"] }
+  - id: CLM-003
+    claim: "Anthropic documents that temperature, top_p, and top_k return a 400 error when set to non-default values on Claude Opus 4.7 and later models, and that the Python SDK v1.0+ removes those parameters, so a request valid for an older model can be rejected after a model-only upgrade."
+    provenance: VERIFIED_FACT
+    domain: parameter_compatibility
+    concepts: [parameter_deprecation, capability_negotiation, request_validity]
+    confidence: high
+    currentness_status: "CURRENT / PROVIDER-SPECIFIC"
+    evidence: [{ source_type: official_docs, tier: 2, title: "Model deprecations — API parameter deprecations", authors: "Anthropic", year: "2026", url: "https://platform.claude.com/docs/en/about-claude/model-deprecations", section: "API parameter deprecations", accessed_at: "2026-09-27" }]
+    limitations: ["A single provider's parameter policy; it demonstrates the failure class rather than a cross-provider rule."]
+    applicability: "Model-upgrade compatibility checks in harness adapters."
+    curriculum_usage: { lessons: ["17.1"], labs: ["LAB-A"], assessments: ["Incident-17.1"] }
+  - id: CLM-004
+    claim: "Chen, Zaharia, and Zou compared March and June 2023 versions of GPT-3.5 and GPT-4 and reported substantial task-dependent behavior changes, including changed chain-of-thought responsiveness, refusal behavior, and code-formatting errors."
+    provenance: VERIFIED_FACT
+    domain: model_drift
+    concepts: [behavior_drift, snapshot_change, longitudinal_monitoring]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "How is ChatGPT's behavior changing over time?", authors: "Lingjiao Chen, Matei Zaharia, James Zou", year: "2023", url: "https://arxiv.org/abs/2307.09009", section: "Abstract and task-level comparisons", accessed_at: "2026-09-27" }]
+    limitations: ["The specific rates concern 2023 service versions and selected tasks; they do not predict the direction or magnitude of any later model change."]
+    applicability: "Motivation for version pinning and longitudinal behavior regression."
+    curriculum_usage: { lessons: ["17.2"], labs: ["LAB-B"], assessments: ["Mastery-17"] }
+  - id: CLM-005
+    claim: "Sclar et al. show that meaning-preserving few-shot prompt-format changes can produce large accuracy differences, reporting up to 76 points for LLaMA-2-13B, and that format performance only weakly correlates across models."
+    provenance: VERIFIED_FACT
+    domain: prompt_sensitivity
+    concepts: [format_sensitivity, prompt_transfer, performance_interval]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "Quantifying Language Models' Sensitivity to Spurious Features in Prompt Design or: How I learned to start worrying about prompt formatting", authors: "Melanie Sclar, Yejin Choi, Yulia Tsvetkov, Alane Suhr", year: "2024", url: "https://arxiv.org/abs/2310.11324", section: "Abstract; FormatSpread", accessed_at: "2026-09-27" }]
+    limitations: ["Measured on evaluated tasks, models, and format grammar; the spread for a new model/task must be measured."]
+    applicability: "Why a prompt tuned for one model cannot be assumed optimal or safe for its replacement."
+    curriculum_usage: { lessons: ["17.2", "17.3"], labs: ["LAB-B"], assessments: ["Mastery-17"] }
+  - id: CLM-006
+    claim: "For a migration evaluated on the same n items, paired outcomes separate improvements c (old fail, new pass) from regressions b (old pass, new fail); net change (c-b)/n can be near zero while b is large, so aggregate score equality does not imply behavioral compatibility."
+    provenance: DERIVED
+    domain: migration_evaluation
+    concepts: [paired_evaluation, regression_flip, net_change]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Binary per-item outcome under a fixed grader; both versions evaluated on the same frozen items."]
+    derivation: "Accuracy difference equals (c-b)/n because concordant items cancel. Equal accuracies imply only c=b; users of the b items still experience regressions."
+    limitations: ["Stochastic outputs require repeated samples per item; grader changes confound flips."]
+    applicability: "Model, prompt, parser, and provider migrations."
+    curriculum_usage: { lessons: ["17.2"], labs: ["LAB-B"], assessments: ["Mastery-17", "Incident-17.1"] }
+  - id: CLM-007
+    claim: "DSPy represents LM pipelines as declarative modules and compiles them with optimizers that bootstrap demonstrations and tune prompts to maximize a supplied metric."
+    provenance: VERIFIED_FACT
+    domain: prompt_optimization
+    concepts: [lm_program, optimizer, metric]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "DSPy: Compiling Declarative Language Model Calls into Self-Improving Pipelines", authors: "Omar Khattab, Arnav Singhvi, Paridhi Maheshwari, Zhiyuan Zhang, Keshav Santhanam, Sri Vardhamanan, Saiful Haq, Ashutosh Sharma, Thomas T. Joshi, Hanna Moazam, Heather Miller, Matei Zaharia, Christopher Potts", year: "2023", url: "https://arxiv.org/abs/2310.03714", section: "Abstract; programming model and compiler", accessed_at: "2026-09-27" }]
+    limitations: ["Optimizes the supplied metric on the supplied data; metric validity and holdout discipline are the user's responsibility."]
+    applicability: "Automated prompt and demonstration search."
+    curriculum_usage: { lessons: ["17.3"], labs: ["LAB-C"], assessments: ["Mastery-17"] }
+  - id: CLM-008
+    claim: "MIPRO optimizes free-form instructions and few-shot demonstrations per module of a multi-stage LM program without module-level labels, using program- and data-aware proposals and a surrogate model learned from stochastic minibatch evaluations."
+    provenance: VERIFIED_FACT
+    domain: prompt_optimization
+    concepts: [instruction_search, demonstration_search, surrogate_model, minibatch_evaluation]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "Optimizing Instructions and Demonstrations for Multi-Stage Language Model Programs", authors: "Krista Opsahl-Ong, Michael J Ryan, Josh Purtell, David Broman, Christopher Potts, Matei Zaharia, Omar Khattab", year: "2024", url: "https://arxiv.org/abs/2406.11695", section: "Abstract; EMNLP 2024", accessed_at: "2026-09-27" }]
+    limitations: ["Author-reported gains are for evaluated programs, models, and benchmarks and do not transfer as a fixed improvement."]
+    applicability: "Search-based prompt optimization with noisy evaluation."
+    curriculum_usage: { lessons: ["17.3"], labs: ["LAB-C"], assessments: ["Mastery-17"] }
+  - id: CLM-009
+    claim: "GEPA (ICLR 2026) evolves prompts by reflecting in natural language on sampled trajectories and maintaining a Pareto set of candidates; its authors report gains over GRPO and MIPROv2 with fewer rollouts on evaluated tasks."
+    provenance: VERIFIED_FACT
+    domain: prompt_optimization
+    concepts: [reflective_optimization, pareto_candidates, rollout_budget]
+    confidence: medium
+    currentness_status: "FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "GEPA: Reflective Prompt Evolution Can Outperform Reinforcement Learning", authors: "Lakshya A Agrawal, Shangyin Tan, Dilara Soylu, Noah Ziems, Rishi Khare, Krista Opsahl-Ong, Arnav Singhvi, Herumb Shandilya, Michael J Ryan, Meng Jiang, Christopher Potts, Koushik Sen, Alexandros G. Dimakis, Ion Stoica, Dan Klein, Matei Zaharia, Omar Khattab", year: "2025", url: "https://arxiv.org/abs/2507.19457", section: "Abstract (v2, February 2026)", accessed_at: "2026-09-27" }]
+    limitations: ["Author-reported comparisons on selected tasks and budgets; not independently reproduced here and not a production default."]
+    applicability: "Frontier comparison point for optimizer selection."
+    curriculum_usage: { lessons: ["17.3"], labs: ["LAB-C"], assessments: ["Mastery-17"] }
+  - id: CLM-010
+    claim: "Selecting the best of K candidates by a noisy validation score biases the winner's validation score upward; with K candidates of equal true quality and independent Gaussian estimation noise sigma, the expected selected score exceeds the true score by sigma times the expected maximum of K standard normals."
+    provenance: DERIVED
+    domain: selection_bias
+    concepts: [winners_curse, validation_reuse, optimizer_overfitting]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT / WHEN ASSUMPTIONS HOLD"
+    assumptions: ["Equal true quality, independent Gaussian noise of equal variance; a stylized model for the direction and scale of bias."]
+    derivation: "Observed score = true + sigma*Z_k. The selected score is true + sigma*max_k Z_k, whose expectation is sigma*E[max of K standard normals] > 0 for K>=2 (about 1.54 sigma for K=10)."
+    limitations: ["Correlated candidates and unequal true quality change the magnitude; the direction of optimistic bias remains for selection on the same data."]
+    applicability: "Prompt search, model selection, and repeated evaluation on one validation set."
+    curriculum_usage: { lessons: ["17.4"], labs: ["LAB-C"], assessments: ["Mastery-17"] }
+  - id: CLM-011
+    claim: "Dwork et al. show that adaptively reusing a holdout set can invalidate its statistical guarantees and propose a reusable-holdout mechanism, based on differential-privacy ideas, that preserves validity for adaptively chosen analyses under stated conditions."
+    provenance: VERIFIED_FACT
+    domain: adaptive_data_analysis
+    concepts: [holdout_reuse, adaptive_analysis, reusable_holdout]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "The reusable holdout: Preserving validity in adaptive data analysis", authors: "Cynthia Dwork, Vitaly Feldman, Moritz Hardt, Toniann Pitassi, Omer Reingold, Aaron Roth", year: "2015", url: "https://www.science.org/doi/10.1126/science.aaa9375", section: "Science 349(6248); abstract", accessed_at: "2026-09-27" }]
+    limitations: ["Guarantees depend on query budget and mechanism assumptions; the simplest operational control remains a sealed final test set used once per decision."]
+    applicability: "Governance of validation/test splits under repeated prompt optimization."
+    curriculum_usage: { lessons: ["17.4"], labs: ["LAB-C"], assessments: ["Mastery-17"] }
+  - id: CLM-012
+    claim: "At DSPy commit 9c900c7de0a3cc3114c23fe8202ebe48e2206ce1, MIPROv2.compile splits a validation set from the trainset when valset is omitted, BootstrapFewShot.compile keeps metric-passing traces as demonstrations, and Evaluate records errored examples with failure_score (default 0.0)."
+    provenance: VERIFIED_FACT
+    domain: optimizer_runtime
+    concepts: [dspy, valset_split, failure_score, bootstrapped_demos]
+    confidence: high
+    currentness_status: "CURRENT SOURCE SNAPSHOT"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "DSPy MIPROv2 optimizer", repository: "https://github.com/stanfordnlp/dspy", commit: "9c900c7de0a3cc3114c23fe8202ebe48e2206ce1", verification_date: "2026-09-27", file: "dspy/teleprompt/mipro_optimizer_v2.py", symbol: "MIPROv2.compile; MIPROv2._set_and_validate_datasets", entry_point: "MIPROv2(...).compile(student, trainset=..., valset=None)", execution_path: "compile -> _set_and_validate_datasets (valset = last min(1000, int(0.8*len(trainset))) examples) -> candidate proposal -> _optimize_prompt_parameters selects best_program by validation score", url: "https://github.com/stanfordnlp/dspy/blob/9c900c7de0a3cc3114c23fe8202ebe48e2206ce1/dspy/teleprompt/mipro_optimizer_v2.py", accessed_at: "2026-09-27" }
+      - { source_type: source_code, tier: 1, title: "DSPy BootstrapFewShot and Evaluate", repository: "https://github.com/stanfordnlp/dspy", commit: "9c900c7de0a3cc3114c23fe8202ebe48e2206ce1", verification_date: "2026-09-27", file: "dspy/teleprompt/bootstrap.py; dspy/evaluate/evaluate.py", symbol: "BootstrapFewShot.compile; BootstrapFewShot._bootstrap; Evaluate.__init__; Evaluate.__call__", entry_point: "BootstrapFewShot(metric=...).compile(student, trainset=...); Evaluate(devset=..., metric=...)(program)", execution_path: "_bootstrap iterates trainset for max_rounds -> _bootstrap_one_example keeps traces passing metric/metric_threshold -> demos attached; Evaluate runs program over devset with failure_score for errors", url: "https://github.com/stanfordnlp/dspy/tree/9c900c7de0a3cc3114c23fe8202ebe48e2206ce1/dspy", accessed_at: "2026-09-27" }
+    limitations: ["Static source inspection only; defaults may change across releases and optimizer results were not executed."]
+    applicability: "Production source-reading example for optimizer data splits and scoring."
+    curriculum_usage: { lessons: ["17.4"], labs: ["LAB-C"], assessments: ["Production-Source-Trace"] }
+  - id: CLM-013
+    claim: "Google's SRE Workbook defines canarying as a partial, time-limited deployment evaluated against a control population, recommends starting canary metrics from SLIs and keeping them few, and cautions that before/after comparison is confounded by time."
+    provenance: VERIFIED_FACT
+    domain: progressive_delivery
+    concepts: [canary, control_population, guardrail_metric]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    evidence: [{ source_type: official_docs, tier: 2, title: "Canarying Releases (The Site Reliability Workbook)", authors: "Google SRE", year: "2018", url: "https://sre.google/workbook/canarying-releases/", section: "Canary definition; metric selection; before/after evaluation", accessed_at: "2026-09-27" }]
+    limitations: ["Written for general service releases; LLM quality metrics are delayed, sparse, and often require graders."]
+    applicability: "Model, prompt, and harness rollout."
+    curriculum_usage: { lessons: ["17.5"], labs: ["LAB-D"], assessments: ["Mastery-17"] }
+  - id: CLM-014
+    claim: "To detect an absolute drop delta between canary and control success proportions with two-sided level alpha and power 1-beta, a normal-approximation per-arm sample size is n ≈ (z_{1-alpha/2}+z_{1-beta})^2 (p1(1-p1)+p2(1-p2)) / delta^2."
+    provenance: DERIVED
+    domain: rollout_statistics
+    concepts: [sample_size, statistical_power, canary_duration]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT / WHEN ASSUMPTIONS HOLD"
+    assumptions: ["Independent request-level Bernoulli outcomes, randomized assignment, stable traffic mix, normal approximation."]
+    derivation: "Standard two-proportion z-test sizing; e.g., p1=0.95, p2=0.93, delta=0.02, alpha=0.05, power 0.8 gives about 2,210 graded requests per arm."
+    limitations: ["Clustered users/sessions, sequential peeking, and delayed or noisy graders increase the required sample."]
+    applicability: "Choosing canary size and duration for quality guardrails."
+    curriculum_usage: { lessons: ["17.5"], labs: ["LAB-D"], assessments: ["Mastery-17"] }
+  - id: CLM-015
+    claim: "A harness rollback is complete only if in-flight sessions, cached prompts/prefixes, stored structured outputs, tool-call schemas, and downstream consumers remain valid under the restored version; routing traffic back does not undo state written under the new version."
+    provenance: DERIVED
+    domain: rollback
+    concepts: [rollback_state, schema_compatibility, dual_read]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["The new version can persist state or emit artifacts consumed by other systems."]
+    derivation: "Traffic routing controls future requests only. Artifacts already produced under the new schema or behavior persist and must be readable, migrated, or quarantined by the restored version."
+    limitations: ["Stateless single-turn endpoints with no persisted outputs have a much smaller rollback surface."]
+    applicability: "Multi-turn assistants, agents, and pipelines with persisted model outputs."
+    curriculum_usage: { lessons: ["17.6"], labs: ["LAB-D"], assessments: ["Incident-17.1"] }
+  - id: CLM-016
+    claim: "Automatically re-optimizing prompts for each new model snapshot and shipping the best validation candidate will reduce migration regressions relative to reusing the old prompt, only when a sealed test set and paired regression gate are enforced."
+    provenance: HYPOTHESIS
+    domain: migration_strategy
+    concepts: [reoptimization, sealed_test, regression_gate]
+    confidence: medium
+    currentness_status: "WORKLOAD-DEPENDENT"
+    hypothesis:
+      prediction: "Re-optimized prompts evaluated on a sealed test show lower paired regression rate b/n than the carried-over prompt at equal or better net accuracy."
+      measurement_target: "Paired flips b and c on a sealed test, optimizer validation-to-test gap, cost, latency, and online canary guardrails."
+      falsifying_observation: "Sealed-test regressions or online guardrail violations are equal or worse than the carried-over prompt, or the validation gain disappears on the sealed test."
+    limitations: ["Depends on metric validity, data size, model family, and optimizer budget."]
+    applicability: "Migration playbook design."
+    curriculum_usage: { lessons: ["17.3", "17.4"], labs: ["LAB-C"], assessments: ["Mastery-17"] }
