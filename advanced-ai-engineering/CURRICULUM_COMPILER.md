@@ -4,7 +4,7 @@
 1. Module specification
 2. Frozen evidence registry
 3. Knowledge compilation output
-4. Golden structural schema (`INSTRUCTIONAL_SCHEMA.md` & `03-kv-cache-engineering/README.md`)
+4. Golden structural schema (`INSTRUCTIONAL_SCHEMA.md` & `04-serving-scheduling-capacity/README.md`)
 5. Prerequisite/module dependency information
 
 ## Responsibilities
