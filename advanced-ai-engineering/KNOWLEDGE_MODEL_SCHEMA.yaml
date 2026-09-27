@@ -1,0 +1,48 @@
+$schema: "http://json-schema.org/draft-07/schema#"
+title: Knowledge Model Schema
+type: object
+required: [module, registry_version]
+
+definitions:
+  traceable_entry: &traceable_entry
+    type: array
+    items:
+      type: object
+      required: [id, description]
+      properties:
+        id: { type: string }
+        description: { type: string }
+        evidence_ids: { type: array, items: { type: string } }
+        derived_from: { type: array, items: { type: string } }
+
+properties:
+  module: { type: string }
+  registry_version: { type: string }
+
+  required_concepts: { type: array, items: { type: string } }
+  prerequisite_concepts: { type: array, items: { type: string } }
+  first_occurrence_concepts: { type: array, items: { type: string } }
+  concept_dependencies:
+    type: array
+    items:
+      type: object
+      properties:
+        concept: { type: string }
+        depends_on: { type: array, items: { type: string } }
+
+  mechanisms: *traceable_entry
+  mathematical_models: *traceable_entry
+  implementation_mechanisms: *traceable_entry
+  failure_modes: *traceable_entry
+  production_connections: *traceable_entry
+  research_connections: *traceable_entry
+  todo_verify: *traceable_entry
+
+  candidate_capabilities:
+    type: array
+    items:
+      type: object
+      required: [capability, mapped_mechanisms]
+      properties:
+        capability: { type: string }
+        mapped_mechanisms: { type: array, items: { type: string } }
