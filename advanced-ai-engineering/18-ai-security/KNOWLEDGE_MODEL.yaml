@@ -1,0 +1,57 @@
+module: "18-ai-security"
+registry_version: "1.0.0"
+
+required_concepts: [threat_model, trust_boundary, source_sink_graph, direct_prompt_injection, indirect_prompt_injection, retrieval_poisoning, jailbreak, prompt_level_defense, detector, adaptive_attack, confused_deputy, excessive_agency, capability, control_data_separation, improper_output_handling, sandbox, egress_control, unbounded_consumption, security_evaluation, audit_trail]
+prerequisite_concepts: [tool_contract, authorization_policy, retrieval_pipeline, structured_output, validation_ladder, durable_effect, falsification_contract, adaptive_search]
+first_occurrence_concepts: [threat_model, source_sink_graph, indirect_prompt_injection, retrieval_poisoning, adaptive_attack, confused_deputy, control_data_separation, egress_control]
+
+concept_dependencies:
+  - { concept: source_sink_graph, depends_on: [threat_model, trust_boundary] }
+  - { concept: indirect_prompt_injection, depends_on: [retrieval_pipeline, source_sink_graph] }
+  - { concept: retrieval_poisoning, depends_on: [retrieval_pipeline] }
+  - { concept: adaptive_attack, depends_on: [adaptive_search, detector] }
+  - { concept: confused_deputy, depends_on: [authorization_policy, tool_contract] }
+  - { concept: control_data_separation, depends_on: [confused_deputy, capability] }
+  - { concept: improper_output_handling, depends_on: [structured_output, validation_ladder] }
+  - { concept: security_evaluation, depends_on: [falsification_contract, adaptive_attack] }
+
+mechanisms:
+  - { id: "MECH-01", description: "Threat modeling enumerates assets, principals, trust boundaries, untrusted sources, privileged sinks, and authority, then derives source-to-sink attack paths using a taxonomy such as OWASP LLM Top 10 as a prompt for completeness.", evidence_ids: ["CLM-001", "CLM-002"], derived_from: [] }
+  - { id: "MECH-02", description: "Injection and poisoning place attacker-controlled instructions or facts into model context through user input, retrieved documents, tool outputs, or corpora; alignment bypasses transfer across models.", evidence_ids: ["CLM-003", "CLM-004", "CLM-005"], derived_from: ["MECH-01"] }
+  - { id: "MECH-03", description: "Probabilistic defenses—provenance marking, classifiers, filters—reduce opportunistic attack success but must be evaluated against adaptive attackers who optimize against the composed pipeline.", evidence_ids: ["CLM-006", "CLM-007", "CLM-008"], derived_from: ["MECH-02"] }
+  - { id: "MECH-04", description: "Authority controls bind each tool action to the originating principal, user intent, and data provenance; control/data separation and capability policies prevent untrusted data from choosing privileged actions.", evidence_ids: ["CLM-009", "CLM-010", "CLM-011"], derived_from: ["MECH-01"] }
+  - { id: "MECH-05", description: "Output handling treats model output as untrusted input to renderers, interpreters, and fetchers, enforced by encoding, parameterization, sandboxing, egress allowlists, and resource limits.", evidence_ids: ["CLM-002", "CLM-012"], derived_from: ["MECH-01"] }
+  - { id: "MECH-06", description: "Security evaluation measures benign utility, utility under attack, and targeted attack success per (task, injection) pair with adaptive attacks, and records audit trails linking effects to provenance.", evidence_ids: ["CLM-007", "CLM-013", "CLM-014", "CLM-015"], derived_from: ["MECH-03", "MECH-04"] }
+
+mathematical_models:
+  - { id: "MATH-01", description: "Attack-path count: paths = |untrusted sources reaching context| × |privileged sinks callable after that context|, filtered by authorization; removing a source class or sink class removes all paths through it.", evidence_ids: ["CLM-001", "CLM-015"], derived_from: ["MECH-01"] }
+  - { id: "MATH-02", description: "Layered detectors: P(miss all)=Π(1-d_i) only under independence; adaptive attackers induce correlated misses so residual ASR must be measured on the composition.", evidence_ids: ["CLM-008", "CLM-007"], derived_from: ["MECH-03"] }
+  - { id: "MATH-03", description: "Security–utility frontier: report (benign utility, utility under attack, ASR) triples per configuration; e.g., CaMeL reports 77% vs 84% task success for provable-security vs undefended on AgentDojo.", evidence_ids: ["CLM-011", "CLM-013"], derived_from: ["MECH-06"] }
+
+implementation_mechanisms:
+  - { id: "IMPL-01", description: "A tool-gateway enforces per-call authorization (principal, scope, provenance of arguments), confirmation for high-risk actions, egress allowlists, rate/cost limits, and immutable audit records.", evidence_ids: ["CLM-010", "CLM-012"], derived_from: ["MECH-04", "MECH-05"] }
+  - { id: "IMPL-02", description: "Pinned AgentDojo source separates utility and security per task pair, places a prompt-injection detector on tool outputs with redact-or-abort modes, and bounds tool loops.", evidence_ids: ["CLM-014"], derived_from: ["MECH-06"] }
+
+failure_modes:
+  - { id: "FAIL-01", description: "Boundary blindness: retrieved documents, emails, web pages, or tool outputs are treated as trusted instructions.", evidence_ids: ["CLM-001", "CLM-003"], derived_from: ["MECH-01", "MECH-02"] }
+  - { id: "FAIL-02", description: "Corpus poisoning: a few crafted documents dominate retrieval for target queries and steer answers.", evidence_ids: ["CLM-004"], derived_from: ["MECH-02"] }
+  - { id: "FAIL-03", description: "Static-benchmark security: defenses evaluated only on fixed attack strings report near-zero ASR that collapses under adaptive attack.", evidence_ids: ["CLM-007", "CLM-008"], derived_from: ["MECH-03"] }
+  - { id: "FAIL-04", description: "Confused deputy: an agent with ambient credentials performs attacker-directed actions after reading injected content.", evidence_ids: ["CLM-009", "CLM-010"], derived_from: ["MECH-04"] }
+  - { id: "FAIL-05", description: "Output-channel exfiltration or execution: rendered links/images, fetched URLs, generated SQL/shell/code carry data out or execute attacker intent.", evidence_ids: ["CLM-012"], derived_from: ["MECH-05"] }
+  - { id: "FAIL-06", description: "Unbounded consumption: attacker-induced loops, huge contexts, or tool storms exhaust cost or capacity.", evidence_ids: ["CLM-002", "CLM-014"], derived_from: ["MECH-05"] }
+  - { id: "FAIL-07", description: "Security theater metrics: reporting ASR without benign utility or utility under attack hides defenses that simply refuse work.", evidence_ids: ["CLM-011", "CLM-013"], derived_from: ["MECH-06"] }
+
+production_connections:
+  - { id: "PROD-01", description: "Production agents combine source-sink minimization, per-action authorization, control/data separation where feasible, output sandboxing and egress control, probabilistic detectors as depth, and audited effects.", evidence_ids: ["CLM-010", "CLM-011", "CLM-012", "CLM-015"], derived_from: ["MECH-04", "MECH-05"] }
+  - { id: "PROD-02", description: "Security release gates report benign utility, utility under attack, and adaptive ASR per path class, with regression suites seeded from incidents and red-team finds.", evidence_ids: ["CLM-007", "CLM-013", "CLM-014"], derived_from: ["MECH-06"] }
+
+research_connections:
+  - { id: "RESEARCH-01", description: "Indirect injection, knowledge poisoning, and transferable jailbreaks establish that alignment and prompt design are not security boundaries.", evidence_ids: ["CLM-003", "CLM-004", "CLM-005"], derived_from: ["MECH-02"] }
+  - { id: "RESEARCH-02", description: "Adaptive-attack evaluation and design-level defenses such as CaMeL shift the frontier from detection toward architectural isolation.", evidence_ids: ["CLM-007", "CLM-011"], derived_from: ["MECH-03", "MECH-04"] }
+
+candidate_capabilities:
+  - { capability: "Build a source–sink threat model with trust boundaries and authority for an LLM system.", mapped_mechanisms: ["MECH-01", "MATH-01", "FAIL-01"] }
+  - { capability: "Execute and explain direct, indirect, and retrieval-poisoning attacks in a sandbox.", mapped_mechanisms: ["MECH-02", "FAIL-02"] }
+  - { capability: "Evaluate probabilistic defenses against adaptive attackers without assuming independent layers.", mapped_mechanisms: ["MECH-03", "MATH-02", "FAIL-03"] }
+  - { capability: "Design per-action authorization, control/data separation, and output sandboxing for agents.", mapped_mechanisms: ["MECH-04", "MECH-05", "IMPL-01", "FAIL-04", "FAIL-05", "FAIL-06"] }
+  - { capability: "Run security evaluations reporting utility, utility under attack, and ASR with audit evidence.", mapped_mechanisms: ["MECH-06", "MATH-03", "IMPL-02", "FAIL-07"] }

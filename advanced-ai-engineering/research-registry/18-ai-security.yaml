@@ -1,0 +1,179 @@
+module: "18-ai-security"
+registry_version: "1.0.0"
+research_cutoff: "2026-09-27"
+change_reason: "Replace generated placeholders with a trust-boundary threat model, prompt-injection and poisoning mechanisms, adaptive-attack evaluation, capability-based controls, output handling, and security evaluation evidence."
+claims:
+  - id: CLM-001
+    claim: "An LLM application threat model must enumerate assets, principals, trust boundaries, untrusted input sources, privileged sinks (tools, data stores, renderers, code execution), and the authority each component exercises, because the model processes instructions and data in one token stream."
+    provenance: DERIVED
+    domain: threat_modeling
+    concepts: [trust_boundary, source_sink, authority]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["The application passes some externally controlled text to the model and grants the model's outputs influence over actions or rendering."]
+    derivation: "Without an architectural separation between instruction and data channels, any text reaching the context can influence output; risk is therefore determined by which untrusted sources reach which privileged sinks."
+    limitations: ["Enumeration does not prove completeness; new tools or sources change the model."]
+    applicability: "Chat, RAG, agents, and multi-agent systems."
+    curriculum_usage: { lessons: ["18.1"], labs: ["LAB-A"], assessments: ["Mastery-18"] }
+  - id: CLM-002
+    claim: "The OWASP Top 10 for LLM Applications 2025 lists Prompt Injection, Sensitive Information Disclosure, Supply Chain, Data and Model Poisoning, Improper Output Handling, Excessive Agency, System Prompt Leakage, Vector and Embedding Weaknesses, Misinformation, and Unbounded Consumption."
+    provenance: VERIFIED_FACT
+    domain: threat_taxonomy
+    concepts: [owasp_llm_top10, risk_taxonomy]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    evidence: [{ source_type: official_docs, tier: 2, title: "OWASP Top 10 for LLM Applications 2025", authors: "OWASP GenAI Security Project", year: "2025", url: "https://genai.owasp.org/llm-top-10/", section: "LLM01–LLM10:2025", accessed_at: "2026-09-27" }]
+    limitations: ["A community taxonomy for ideation and communication; not a complete threat model or ranking for a specific system."]
+    applicability: "Threat enumeration checklist."
+    curriculum_usage: { lessons: ["18.1"], labs: ["LAB-A"], assessments: ["Mastery-18"] }
+  - id: CLM-003
+    claim: "Greshake et al. introduced indirect prompt injection, in which adversaries place instructions in data likely to be retrieved by an LLM-integrated application, and demonstrated impacts including data theft, worming, information-ecosystem contamination, and manipulated API use against real systems."
+    provenance: VERIFIED_FACT
+    domain: prompt_injection
+    concepts: [indirect_prompt_injection, retrieved_instruction, exfiltration]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection", authors: "Kai Greshake, Sahar Abdelnabi, Shailesh Mishra, Christoph Endres, Thorsten Holz, Mario Fritz", year: "2023", url: "https://arxiv.org/abs/2302.12173", section: "Abstract; threat taxonomy", accessed_at: "2026-09-27" }]
+    limitations: ["Demonstrations target 2023 systems; specific exploits may no longer work, while the attack class remains."]
+    applicability: "Any system that places untrusted retrieved, browsed, emailed, or tool-returned text in model context."
+    curriculum_usage: { lessons: ["18.2"], labs: ["LAB-B"], assessments: ["Incident-18.1"] }
+  - id: CLM-004
+    claim: "PoisonedRAG reports a 90% attack success rate on targeted questions when injecting five malicious texts per target question into a knowledge database with millions of texts, and found evaluated defenses insufficient."
+    provenance: VERIFIED_FACT
+    domain: retrieval_poisoning
+    concepts: [knowledge_corruption, retrieval_poisoning, targeted_attack]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "PoisonedRAG: Knowledge Corruption Attacks to Retrieval-Augmented Generation of Large Language Models", authors: "Wei Zou, Runpeng Geng, Binghui Wang, Jinyuan Jia", year: "2025", url: "https://arxiv.org/abs/2402.07867", section: "Abstract; USENIX Security 2025", accessed_at: "2026-09-27" }]
+    limitations: ["Rates are for evaluated datasets, retrievers, models, and attacker knowledge; they are not a universal prevalence."]
+    applicability: "Write access to corpora, user-generated content, web-crawled indexes."
+    curriculum_usage: { lessons: ["18.2"], labs: ["LAB-B"], assessments: ["Mastery-18"] }
+  - id: CLM-005
+    claim: "Zou et al. showed that adversarial suffixes found by greedy and gradient-based search on open models can transfer to other, including black-box, aligned LLMs."
+    provenance: VERIFIED_FACT
+    domain: jailbreak
+    concepts: [adversarial_suffix, transferability, alignment_bypass]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "Universal and Transferable Adversarial Attacks on Aligned Language Models", authors: "Andy Zou, Zifan Wang, Nicholas Carlini, Milad Nasr, J. Zico Kolter, Matt Fredrikson", year: "2023", url: "https://arxiv.org/abs/2307.15043", section: "Abstract; transfer experiments", accessed_at: "2026-09-27" }]
+    limitations: ["Transfer rates vary by target and time; providers update models."]
+    applicability: "Why model alignment alone is not a security boundary."
+    curriculum_usage: { lessons: ["18.2"], labs: ["LAB-B"], assessments: ["Mastery-18"] }
+  - id: CLM-006
+    claim: "Hines et al. propose spotlighting—input transformations that give a continuous provenance signal—and report reducing indirect-injection attack success from above 50% to below 2% in their experiments with minimal task impact."
+    provenance: VERIFIED_FACT
+    domain: injection_mitigation
+    concepts: [spotlighting, provenance_marking, prompt_defense]
+    confidence: medium
+    currentness_status: "WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "Defending Against Indirect Prompt Injection Attacks With Spotlighting", authors: "Keegan Hines, Gary Lopez, Matthew Hall, Federico Zarfati, Yonatan Zunger, Emre Kiciman", year: "2024", url: "https://arxiv.org/abs/2403.14720", section: "Abstract", accessed_at: "2026-09-27" }]
+    limitations: ["Author-reported against the evaluated attacks; prompt-level defenses are probabilistic and not evaluated here against adaptive attackers."]
+    applicability: "Defense-in-depth layer, not an authorization boundary."
+    curriculum_usage: { lessons: ["18.3"], labs: ["LAB-C"], assessments: ["Mastery-18"] }
+  - id: CLM-007
+    claim: "Nasr et al. (2025) report that adaptive attacks using gradient descent, reinforcement learning, random search, and human-guided exploration bypassed 12 recent jailbreak and prompt-injection defenses, most of which originally reported near-zero attack success, with above 90% success for most."
+    provenance: VERIFIED_FACT
+    domain: adaptive_evaluation
+    concepts: [adaptive_attack, defense_evaluation, static_benchmark_bias]
+    confidence: high
+    currentness_status: "FRONTIER / CURRENT EVALUATION STANDARD"
+    evidence: [{ source_type: paper, tier: 1, title: "The Attacker Moves Second: Stronger Adaptive Attacks Bypass Defenses Against LLM Jailbreaks and Prompt Injections", authors: "Milad Nasr, Nicholas Carlini, Chawin Sitawarin, Sander V. Schulhoff, Jamie Hayes, Michael Ilie, Juliette Pluto, Shuang Song, Harsh Chaudhari, Ilia Shumailov, Abhradeep Thakurta, Kai Yuanqing Xiao, Andreas Terzis, Florian Tramèr", year: "2025", url: "https://arxiv.org/abs/2510.09023", section: "Abstract", accessed_at: "2026-09-27" }]
+    limitations: ["Specific defenses and budgets are those evaluated; the result establishes an evaluation standard, not that every future defense fails."]
+    applicability: "Security evaluation of any detector, filter, or prompt defense."
+    curriculum_usage: { lessons: ["18.3", "18.6"], labs: ["LAB-C"], assessments: ["Mastery-18"] }
+  - id: CLM-008
+    claim: "Stacking detectors multiplies miss probabilities only if misses are independent; an adaptive attacker optimizes against the composed pipeline, so residual risk is bounded below by the best joint evasion found, not by the product of individual miss rates."
+    provenance: DERIVED
+    domain: defense_composition
+    concepts: [layered_defense, correlated_miss, adaptive_attacker]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["The attacker can query or approximate the full pipeline."]
+    derivation: "P(all miss)=Π(1-d_i) requires independence. Optimization against the composition selects inputs that evade all layers jointly, making misses positively correlated by construction."
+    limitations: ["Non-adaptive, opportunistic traffic may approximate independence better."]
+    applicability: "Guardrail stacking decisions."
+    curriculum_usage: { lessons: ["18.3"], labs: ["LAB-C"], assessments: ["Mastery-18"] }
+  - id: CLM-009
+    claim: "Hardy's confused deputy describes a privileged program induced to misuse its own authority because it acts on a caller-supplied name using ambient privileges; the lesson motivates capabilities that bind authority to the request."
+    provenance: VERIFIED_FACT
+    domain: authorization
+    concepts: [confused_deputy, ambient_authority, capability]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "The Confused Deputy (or why capabilities might have been invented)", authors: "Norm Hardy", year: "1988", url: "https://dl.acm.org/doi/10.1145/54289.871709", section: "ACM SIGOPS Operating Systems Review 22(4):36–38", accessed_at: "2026-09-27" }]
+    limitations: ["Pre-LLM; mapping to agents is a derivation (see CLM-010)."]
+    applicability: "Agents holding user or service credentials."
+    curriculum_usage: { lessons: ["18.4"], labs: ["LAB-D"], assessments: ["Incident-18.1"] }
+  - id: CLM-010
+    claim: "An agent that executes tool calls with the user's or service's full credentials while reading attacker-controlled content is a confused deputy: injected text can direct legitimate authority toward attacker goals unless authorization is checked per action against the originating principal and data provenance."
+    provenance: DERIVED
+    domain: agent_authorization
+    concepts: [excessive_agency, per_action_authorization, provenance]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Tool calls are chosen by the model after it has read untrusted content."]
+    derivation: "The model is the deputy; its credential is ambient; the injected instruction plays the role of the caller-supplied name. Per-action checks bound to the user's intent and data origin restore the missing binding."
+    limitations: ["Intent is not always formally specifiable; approvals can be fatigued."]
+    applicability: "Email, calendar, banking, code, and browsing agents."
+    curriculum_usage: { lessons: ["18.4"], labs: ["LAB-D"], assessments: ["Incident-18.1", "Mastery-18"] }
+  - id: CLM-011
+    claim: "CaMeL extracts control and data flow from the trusted user query, isolates untrusted data handling, and enforces capability-based policies at tool calls; its authors report solving 77% of AgentDojo tasks with provable security versus 84% for an undefended system."
+    provenance: VERIFIED_FACT
+    domain: secure_agent_design
+    concepts: [control_data_separation, quarantined_llm, capability_policy]
+    confidence: high
+    currentness_status: "FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "Defeating Prompt Injections by Design", authors: "Edoardo Debenedetti, Ilia Shumailov, Tianqi Fan, Jamie Hayes, Nicholas Carlini, Daniel Fabian, Christoph Kern, Chongyang Shi, Andreas Terzis, Florian Tramèr", year: "2025", url: "https://arxiv.org/abs/2503.18813", section: "Abstract (v2)", accessed_at: "2026-09-27" }]
+    limitations: ["Guarantees cover the stated policy model; utility cost and policy authoring burden are workload-dependent."]
+    applicability: "Design pattern for agents with high-authority tools."
+    curriculum_usage: { lessons: ["18.4"], labs: ["LAB-D"], assessments: ["Mastery-18"] }
+  - id: CLM-012
+    claim: "Model output must be treated as untrusted input to every downstream interpreter—HTML/Markdown renderers, SQL, shells, code runners, URL fetchers—so encoding, parameterization, sandboxing, and egress allowlists apply exactly as for user input."
+    provenance: DERIVED
+    domain: output_handling
+    concepts: [improper_output_handling, sandbox, egress_control]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Output content can be influenced by untrusted input (CLM-003)."]
+    derivation: "If an attacker can influence model output, the output inherits the attacker's trust level; standard injection defenses for that interpreter therefore apply."
+    limitations: ["Sandbox strength depends on isolation technology and configuration."]
+    applicability: "Rendering, code execution, database, and fetch tools."
+    curriculum_usage: { lessons: ["18.5"], labs: ["LAB-D"], assessments: ["Mastery-18"] }
+  - id: CLM-013
+    claim: "AgentDojo is an extensible environment with 97 realistic agent tasks and 629 security test cases; its authors report that state-of-the-art LLMs fail many tasks even without attacks and that existing attacks break some but not all security properties."
+    provenance: VERIFIED_FACT
+    domain: security_evaluation
+    concepts: [agentdojo, utility_under_attack, security_test_case]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT / BENCHMARK"
+    evidence: [{ source_type: paper, tier: 1, title: "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents", authors: "Edoardo Debenedetti, Jie Zhang, Mislav Balunović, Luca Beurer-Kellner, Marc Fischer, Florian Tramèr", year: "2024", url: "https://arxiv.org/abs/2406.13352", section: "Abstract", accessed_at: "2026-09-27" }]
+    limitations: ["Benchmark tasks and injections are finite and static unless extended with adaptive attacks."]
+    applicability: "Agent security regression evaluation."
+    curriculum_usage: { lessons: ["18.6"], labs: ["LAB-C"], assessments: ["Mastery-18"] }
+  - id: CLM-014
+    claim: "At AgentDojo commit 089ed468cf3ed0322acc66b0211f26d9d90dbf60, run_task_with_injection_tasks records separate utility and security booleans per (user task, injection task) pair, PromptInjectionDetector replaces flagged tool output with a placeholder or raises AbortAgentError, and ToolsExecutionLoop bounds tool iterations with max_iters (default 15)."
+    provenance: VERIFIED_FACT
+    domain: security_runtime
+    concepts: [agentdojo, pi_detector, tool_loop]
+    confidence: high
+    currentness_status: "CURRENT SOURCE SNAPSHOT"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "AgentDojo benchmark runner", repository: "https://github.com/ethz-spylab/agentdojo", commit: "089ed468cf3ed0322acc66b0211f26d9d90dbf60", verification_date: "2026-09-27", file: "src/agentdojo/benchmark.py", symbol: "run_task_with_injection_tasks; benchmark_suite_with_injections; aggregate_results", entry_point: "benchmark_suite_with_injections(agent_pipeline, suite, attack, ...)", execution_path: "for each user task and injection task -> attack builds injections -> suite.run_task_with_pipeline -> (utility, security) recorded per pair -> aggregate_results averages booleans", url: "https://github.com/ethz-spylab/agentdojo/blob/089ed468cf3ed0322acc66b0211f26d9d90dbf60/src/agentdojo/benchmark.py", accessed_at: "2026-09-27" }
+      - { source_type: source_code, tier: 1, title: "AgentDojo pipeline defenses and tool loop", repository: "https://github.com/ethz-spylab/agentdojo", commit: "089ed468cf3ed0322acc66b0211f26d9d90dbf60", verification_date: "2026-09-27", file: "src/agentdojo/agent_pipeline/pi_detector.py; src/agentdojo/agent_pipeline/tool_execution.py", symbol: "PromptInjectionDetector.query; PromptInjectionDetector.transform; TransformersBasedPIDetector.detect; ToolsExecutionLoop.query", entry_point: "pipeline element query over messages", execution_path: "tool output -> detect (per message or full conversation) -> replace with '<Data omitted because a prompt injection was detected>' or raise AbortAgentError; ToolsExecutionLoop iterates elements until no tool_calls or max_iters", url: "https://github.com/ethz-spylab/agentdojo/tree/089ed468cf3ed0322acc66b0211f26d9d90dbf60/src/agentdojo/agent_pipeline", accessed_at: "2026-09-27" }
+    limitations: ["Static inspection only; benchmark was not executed and detector accuracy was not measured."]
+    applicability: "Source-reading example for utility/security separation and detector placement."
+    curriculum_usage: { lessons: ["18.6"], labs: ["LAB-C"], assessments: ["Production-Source-Trace"] }
+  - id: CLM-015
+    claim: "Removing either untrusted-content ingestion, access to sensitive data, or an exfiltration-capable sink from an agent's reachable graph will eliminate a larger share of successful injection-driven exfiltration than adding another detector layer, at comparable utility cost."
+    provenance: HYPOTHESIS
+    domain: architecture_tradeoff
+    concepts: [attack_path_elimination, source_sink_graph, detector_layer]
+    confidence: medium
+    currentness_status: "WORKLOAD-DEPENDENT"
+    hypothesis:
+      prediction: "On an AgentDojo-style suite with adaptive attacks, cutting one leg of the source–data–sink path lowers exfiltration success more than adding a detector, for a matched utility drop."
+      measurement_target: "Targeted attack success under adaptive attack, benign utility, utility under attack, and latency/cost."
+      falsifying_observation: "An added detector achieves equal or lower adaptive attack success with smaller utility loss than any path cut."
+    limitations: ["Some products require all three legs; then per-action authorization and approvals are the remaining controls."]
+    applicability: "Agent architecture decisions."
+    curriculum_usage: { lessons: ["18.4", "18.6"], labs: ["LAB-D"], assessments: ["Mastery-18"] }
