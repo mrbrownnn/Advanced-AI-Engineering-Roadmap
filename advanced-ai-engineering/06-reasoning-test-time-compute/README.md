@@ -16,12 +16,13 @@ The feedback path matters. A policy that samples more candidates can increase ac
 
 The scope is inference-time reasoning, search, verification, budgeting, and diagnosis. Model-behavior uncertainty is developed in Module 07; training and model adaptation in Module 19; serving scheduling and capacity in Module 04; and inference-kernel optimization in Module 05.
 
-**Research cutoff:** 2026-09-26.
+**Research cutoff:** 2026-09-27.
 
-**Module orientation**
+**Module Orientation**
 
 - **Engineering problem:** choose and operate a reasoning policy that improves declared task utility under quality, cost, latency, capacity, and safety constraints.
 - **What you will do:** instrument chain-of-thought behavior; implement self-consistency and best-of-N; derive and break pass@k assumptions; build verifier-guided search; implement budget and stopping controls; test faithfulness and verifier gaming; and diagnose an offline-to-production regression.
+- **Environment:** Python 3.10+ for sampling, search, scoring, and analysis; access to a model endpoint or local model that can return generation metadata; optional GPU access for loaded latency/capacity experiments. Pin model, runtime, tokenizer, prompt, judge, and pricing revisions.
 - **Evidence rule:** label source observations (**O**), explicit derivations (**D**), and telemetry-dependent hypotheses (**H**). A paper result remains scoped to its model, tasks, decoding, verifier, budget, and evaluation boundary.
 
 ## 01 Baseline Assumptions
@@ -43,7 +44,23 @@ depth_contract:
   implementation: REQUIRED
   source_code: REQUIRED
   instrumentation: REQUIRED
+  experimental: REQUIRED
+  statistical: REQUIRED
+  production_reasoning: REQUIRED
+  failure_analysis: REQUIRED
   falsification: REQUIRED
+  security: SELECTIVE
+  economics: REQUIRED
+  architecture_tradeoff: REQUIRED
+  research_connection: REQUIRED
+
+estimated_effort:
+  instruction: 5h
+  guided_practice: 3h
+  labs: 18h
+  assessment: 3h
+  source_trace: 2h
+  total: 31h
 ```
 
 By the end, the learner must be able to:
@@ -56,6 +73,8 @@ By the end, the learner must be able to:
 6. distinguish total executed work from critical-path latency and production capacity impact;
 7. trace a real generation/stopping implementation at a pinned revision;
 8. diagnose correlated errors, selection gaps, unfaithful rationales, verifier gaming, overthinking, and load-induced regressions.
+
+### LAYER 1: KNOWLEDGE / INSTRUCTIONAL LAYER
 
 ## 03 Knowledge Map
 
@@ -90,16 +109,18 @@ Three measurement boundaries must remain separate:
 
 ---
 
-### LAYER 1: FOUNDATIONS AND MECHANISMS
-
 ## 04 Lessons
 
 ### Lesson 6.1 — Chain-of-Thought Is an Output Protocol, Not a Causal Proof
 
-**Engineering question:** What does an intermediate rationale demonstrate, and what does it not demonstrate?
+**Engineering Question:**
+What does an intermediate rationale demonstrate, and what does it not demonstrate?
+
+**Concepts & Definitions:**
 
 Chain-of-thought prompting elicits intermediate text before a final answer. Wei et al. report improvements on the models and arithmetic, commonsense, and symbolic tasks they evaluated. That observation motivates a workload-specific experiment; it does not prove universal benefit, an emergent capability threshold that transfers unchanged, or faithfulness of the printed rationale.
 
+**Mechanism Explanation:**
 A reasoning-trace contract records:
 
 - model and prompt revision, exemplars, formatting, and decoding parameters;
@@ -112,16 +133,39 @@ Turpin et al. and later work on reasoning models provide counterexamples to univ
 
 **Break cases:** misleading few-shot exemplars, spurious hints, answer-format leakage, persuasive but invalid steps, rationale truncation, and a task where direct answering is already reliable.
 
-**Learning outcome:** use visible reasoning as an instrumented output artifact, not privileged ground truth about internal causation.
+**Worked Example:**
+Run the same item with and without a spurious answer cue. If the answer follows the cue while the rationale omits it, the pair is evidence against faithful reporting for that item and intervention; it is not a measurement of every hidden causal factor.
+
+**Knowledge Check:**
+1. Why does a correct final answer not validate every intermediate step?
+2. What observation would weaken the claim that a displayed rationale faithfully reports the answer-changing cue?
+
+**Guided Practice:**
+Define a paired intervention with an unchanged task and one controlled cue. Specify the answer-change event, acknowledgement rule, sampling unit, and exclusions before generation.
+
+**Feedback Contract:**
+- *Expected Evidence*: Paired raw outputs, exact prompt/model/decoding revisions, answer and acknowledgement labels, and a bounded conclusion.
+- *Common Failure*: Treating fluent rationale text or aggregate accuracy as causal evidence.
+- *Diagnostic Hint*: Which input factor changed, and was it acknowledged before the answer?
+- *Concept to Revisit*: Reasoning-Trace Contract.
+
+**Learning Outcome:**
+Use visible reasoning as an instrumented output artifact, not privileged ground truth about internal causation.
+
+*(Effort: 35m instruction, 20m practice)*
 
 ---
 
 ### Lesson 6.2 — Parallel Sampling, Self-Consistency, and pass@k
 
-**Engineering question:** Does generating more candidates improve opportunity, selection, or both?
+**Engineering Question:**
+Does generating more candidates improve opportunity, selection, or both?
+
+**Concepts & Definitions:**
 
 Self-consistency samples diverse reasoning paths and aggregates their final answers. A production implementation must define answer normalization, invalid parses, abstentions, tie-breaking, duplicate handling, and whether it uses plurality, weighted voting, or a separate verifier.
 
+**Quantitative Model / Derivation:**
 For $k$ independent candidates with identical correctness probability $p$, oracle success is:
 
 $$
@@ -145,14 +189,37 @@ $$
 
 Real self-consistency often uses multi-class plurality: wrong answers may split, one wrong answer may dominate through correlated error, and normalization can merge or fragment answers. Report at least single-sample accuracy, oracle pass@k, selected accuracy, parsing failure, answer entropy, duplicates, cost, and latency.
 
-**Learning outcome:** determine whether extra sampling improves the candidate pool, the selector, or neither.
+**Worked Example:**
+For the analytical IID toy case $p=0.4$ and $k=3$, oracle opportunity is $1-0.6^3=0.784$, while strict-majority correctness is $3(0.4)^2(0.6)+(0.4)^3=0.352$. The gap shows why oracle pass@k cannot be reported as deployed selected accuracy. These values are mathematical examples, not forecasts for correlated model samples.
+
+**Knowledge Check:**
+1. Which assumption permits $1-(1-p)^k$?
+2. Can a verifier improve selected correctness if the fixed candidate set has no correct answer?
+
+**Guided Practice:**
+From a candidate table, compute single-sample accuracy, finite-sample pass@k, plurality-selected accuracy, duplicate rate, and the oracle-selection gap. Compare with the IID curve and inspect correlated errors.
+
+**Feedback Contract:**
+- *Expected Evidence*: Candidate-level labels and seeds, answer normalization, tie policy, all formulas with assumptions, and uncertainty across items.
+- *Common Failure*: Calling oracle opportunity a production selection result.
+- *Diagnostic Hint*: Did the correct answer exist in the set, and if so, why was it not selected?
+- *Concept to Revisit*: Opportunity Versus Selection.
+
+**Learning Outcome:**
+Determine whether extra sampling improves the candidate pool, the selector, or neither.
+
+*(Effort: 50m instruction, 30m practice)*
 
 ---
 
 ### Lesson 6.3 — Search Over Reasoning States
 
-**Engineering question:** When is explicit branching and backtracking better than independent full answers?
+**Engineering Question:**
+When is explicit branching and backtracking better than independent full answers?
 
+**Concepts & Definitions:**
+
+**Mechanism Explanation:**
 Tree of Thoughts provides a reference mechanism: generate candidate thoughts, evaluate states, choose branches, look ahead, and backtrack. The design space includes breadth/depth, proposal count, state representation, value estimates, pruning, terminal tests, duplicate-state detection, and call scheduling.
 
 Search helps only when three conditions approximately hold:
@@ -165,19 +232,42 @@ The paper's results on Game of 24, Creative Writing, and Mini Crosswords establi
 
 **Implementation record per node:** parent, depth, state text or structured state, generator configuration, score and scorer revision, expansion timestamp, token/cost ledger, prune reason, terminal result, and independent correctness if available.
 
-**Learning outcome:** treat search as proposal plus value estimation plus resource control, not as a prompt slogan.
+**Worked Example:**
+A breadth-two, depth-three tree permits at most $1+2+4+8=15$ represented nodes before pruning, but executed generator/verifier calls depend on batching, duplicate elimination, and whether child proposals share a call. Record actual calls and tokens rather than inferring cost from node count.
+
+**Knowledge Check:**
+1. When can a poor state evaluator make wider search worse?
+2. Why are node count, model calls, tokens, and wall-clock latency different budgets?
+
+**Independent Practice:**
+Implement one breadth/depth policy and one best-first policy under the same total-call cap. Log every proposed, pruned, duplicated, and terminal state.
+
+**Feedback Contract:**
+- *Expected Evidence*: Search graph, actual work ledger, evaluator revision, terminal correctness, and a matched independent-sampling baseline.
+- *Common Failure*: Comparing strategies at different budgets or hiding pruned correct branches.
+- *Diagnostic Hint*: Did proposal fail, or did the evaluator prune the useful state?
+- *Concept to Revisit*: Proposal–Evaluation–Budget Separation.
+
+**Learning Outcome:**
+Treat search as proposal plus value estimation plus resource control, not as a prompt slogan.
+
+*(Effort: 40m instruction, 30m practice)*
 
 ---
 
 ### Lesson 6.4 — Outcome, Process, and Selection Verifiers
 
-**Engineering question:** What exactly is being verified, and against which truth?
+**Engineering Question:**
+What exactly is being verified, and against which truth?
+
+**Concepts & Definitions:**
 
 - **Outcome verifier:** scores the final answer or product.
 - **Process verifier/reward model:** scores intermediate steps or transitions.
 - **Objective judge:** executes a test, checks a proof, or compares with ground truth under declared rules.
 - **Learned or model-based judge:** estimates correctness or preference and can be wrong, shifted, or exploited.
 
+**Mechanism Explanation:**
 Lightman et al. compare outcome and process supervision and report a process-supervision advantage in their MATH setup while releasing PRM800K. This supports studying step-level feedback; it does not establish universal verifier superiority or transfer.
 
 Separate:
@@ -190,14 +280,37 @@ when both operate on the same candidate set and ground-truth correctness is well
 
 Verifier validation includes score semantics, calibration, ranking/discrimination, false positives and negatives, abstention, subgroup performance, temporal and domain shift, adversarial candidates, and score-quality behavior as search pressure grows. A rising verifier score without rising independent correctness is evidence consistent with gaming, but evaluator noise and distribution shift remain competing explanations.
 
-**Learning outcome:** build verification as a measured subsystem rather than equating its score with truth.
+**Worked Example:**
+If 60 of 100 candidate sets contain a correct answer but the verifier selects a correct answer in 45, fixed-set oracle opportunity is 0.60 and selected success is 0.45. The 0.15 absolute gap localizes lost opportunity to selection only if labels, set membership, and evaluation rules are identical.
+
+**Knowledge Check:**
+1. What additional evidence distinguishes verifier gaming from a noisy independent judge?
+2. Why can process scores fail even when final-answer scoring is reliable?
+
+**Guided Practice:**
+Create a confusion table for verifier accept/reject versus independent correctness, stratified by candidate source and search depth. Audit the highest-scoring false positives.
+
+**Feedback Contract:**
+- *Expected Evidence*: Frozen verifier and independent-label revisions, calibration/ranking results, adversarial false positives, and abstention handling.
+- *Common Failure*: Validating a verifier against its own labels or score.
+- *Diagnostic Hint*: What truth source is independent of the selection mechanism?
+- *Concept to Revisit*: Verifier Meta-Evaluation.
+
+**Learning Outcome:**
+Build verification as a measured subsystem rather than equating its score with truth.
+
+*(Effort: 45m instruction, 30m practice)*
 
 ---
 
 ### Lesson 6.5 — Compute Ledgers, Budgets, and Stopping
 
-**Engineering question:** How much work was executed, how long did the user wait, and was another unit of work worth doing?
+**Engineering Question:**
+How much work was executed, how long did the user wait, and was another unit of work worth doing?
 
+**Concepts & Definitions:**
+
+**Quantitative Model / Derivation:**
 Let every executed generator, verifier, tool, and orchestration action be converted to a declared unit:
 
 $$
@@ -218,14 +331,37 @@ Snell et al. provide evidence that effective allocation varies with prompt diffi
 
 **Stopping policy requirements:** global and per-branch limits, clock definition, cancellation semantics, completed-work accounting, minimum answer reserve, fallback, timeout behavior, and post-stop parsing. Test both premature stopping and excess continuation.
 
-**Learning outcome:** optimize measured utility across a full compute and critical-path ledger, not rationale length.
+**Worked Example:**
+Four candidates executed in parallel can consume roughly four candidate workloads while adding only the slowest branch plus join/selection work to the critical path when resources are immediately available. Under contention, the same policy can queue and increase wall time. Measure both rather than multiplying or dividing latency by four.
+
+**Knowledge Check:**
+1. Why are tokens from two model classes not automatically additive compute units?
+2. What must be measured before claiming an adaptive stop has positive marginal utility?
+
+**Guided Practice:**
+Build a ledger for one sequential and one parallel policy. Reconcile generator, verifier, tool, cancelled, and orchestration work against billing/runtime counters and a dependency timeline.
+
+**Feedback Contract:**
+- *Expected Evidence*: Compatible cost units, complete executed-work ledger, cancellation semantics, and a critical-path trace.
+- *Common Failure*: Counting only delivered tokens or equating parallel width with latency multiplier.
+- *Diagnostic Hint*: Which work executed, and which work lay on the dependency path?
+- *Concept to Revisit*: Total Work Versus Critical Path.
+
+**Learning Outcome:**
+Optimize measured utility across a full compute and critical-path ledger, not rationale length.
+
+*(Effort: 45m instruction, 25m practice)*
 
 ---
 
 ### Lesson 6.6 — Adaptive Policies and Causal Diagnosis
 
-**Engineering question:** How do we decide which requests deserve which strategy without leaking answers or masking failures?
+**Engineering Question:**
+How do we decide which requests deserve which strategy without leaking answers or masking failures?
 
+**Concepts & Definitions:**
+
+**Mechanism Explanation:**
 A router can choose direct response, bounded sequential reasoning, parallel sampling, or search. Difficulty is latent. A proxy derived from benchmark labels, future verifier outcomes, or target answers creates leakage; one calibrated on one model/domain may fail after a prompt, model, or population change.
 
 Evaluate the policy at equal aggregate resource budget and report:
@@ -248,7 +384,26 @@ $$
 
 Necessary but insufficient signals include longer rationales, higher verifier score, higher oracle pass@k, more answer diversity, and higher accelerator utilization. Each can coexist with worse selected correctness or production utility.
 
-**Learning outcome:** deploy adaptive compute as a falsifiable control policy with quality and operational feedback.
+**Worked Example:**
+Compare an adaptive router and a uniform policy under the same aggregate generator/verifier budget. If adaptive accuracy rises only because it exceeds the budget or uses post-outcome features, the comparison does not establish routing value.
+
+**Knowledge Check:**
+1. Which routing features are unavailable at decision time and therefore leak outcomes?
+2. Why can an offline gain disappear under loaded serving?
+
+**Guided Practice:**
+Predeclare an equal-cost replay, a shifted holdout, and a loaded test. Produce a routing confusion matrix and quality/cost/SLO-goodput by route and subgroup.
+
+**Feedback Contract:**
+- *Expected Evidence*: Decision-time feature manifest, matched budgets, temporal holdout, capacity telemetry, and rollback thresholds.
+- *Common Failure*: Attributing an unequal-budget gain to adaptivity.
+- *Diagnostic Hint*: Freeze aggregate work and remove every feature unavailable before routing.
+- *Concept to Revisit*: Causal Evaluation of Routing Policies.
+
+**Learning Outcome:**
+Deploy adaptive compute as a falsifiable control policy with quality and operational feedback.
+
+*(Effort: 40m instruction, 30m practice)*
 
 ## 05 Literature & Production Source Map
 
@@ -311,45 +466,55 @@ $$
 ### LAB A — Sequential Budget Sweep and Faithfulness Probe
 
 - **Objective:** compare direct answers and elicited reasoning across token/time budgets, then test whether rationales acknowledge controlled answer-changing cues.
-- **Independent variables:** model/prompt revision, task stratum, direct versus chain-of-thought prompt, new-token cap, stop rule, temperature, and benign versus biasing intervention.
-- **Measurements:** parsed correctness, rationale and answer tokens, TTFT/end-to-end latency, cost, finish reason, correctness transitions by prefix, intervention sensitivity, and acknowledgement rate.
-- **Break/falsify:** include tasks where direct answering is strong, misleading exemplars, early truncation, forced continuation, repeated loops, and cues that change answers. Falsify monotone “more tokens means better reasoning” if a preregistered budget interval loses utility.
+- **Pre-Registered Hypothesis:** one bounded reasoning regime will improve declared utility on selected strata, while some direct-answer or excessive-continuation strata will not improve; predeclare the minimum effect and cost ceiling.
+- **Independent Variables:** model/prompt revision, task stratum, direct versus chain-of-thought prompt, new-token cap, stop rule, temperature, and benign versus biasing intervention.
+- **Dependent Variables:** parsed correctness, rationale and answer tokens, TTFT/end-to-end latency, cost, finish reason, correctness transitions by prefix, intervention sensitivity, and acknowledgement rate.
+- **Break & Falsify:** include tasks where direct answering is strong, misleading exemplars, early truncation, forced continuation, repeated loops, and cues that change answers. Falsify monotone “more tokens means better reasoning” if a preregistered budget interval loses utility.
 - **Required artifact:** raw generations, parser specification/tests, budget-quality-cost curves with uncertainty, intervention pairs, and a statement of what the faithfulness probe cannot establish.
-- **Effort:** 4h.
+- **Alignment:** Lessons 6.1 and 6.5.
+- **Effort Estimate:** 4h.
 
 ### LAB B — Self-Consistency, pass@k, and Correlated Error
 
 - **Objective:** implement repeated sampling, oracle pass@k, plurality/majority selection, and a dependence audit.
-- **Independent variables:** $k$, temperature/top-p, prompt variant, answer normalizer, tie rule, and task difficulty stratum.
-- **Measurements:** single-sample accuracy, finite-sample pass@k, selected accuracy, oracle-selection gap, duplicates, answer entropy, pairwise agreement/error correlation, invalid parses, total work, and critical-path latency at controlled parallelism.
-- **Break/falsify:** construct or locate a stratum where candidates confidently repeat one wrong answer; perturb normalization to expose merge/split errors; compare empirical gains with the IID analytical baseline.
+- **Pre-Registered Hypothesis:** increasing $k$ will raise oracle opportunity on the chosen population, but selected utility will depend on candidate dependence and the declared selection rule.
+- **Independent Variables:** $k$, temperature/top-p, prompt variant, answer normalizer, tie rule, and task difficulty stratum.
+- **Dependent Variables:** single-sample accuracy, finite-sample pass@k, selected accuracy, oracle-selection gap, duplicates, answer entropy, pairwise agreement/error correlation, invalid parses, total work, and critical-path latency at controlled parallelism.
+- **Break & Falsify:** construct or locate a stratum where candidates confidently repeat one wrong answer; perturb normalization to expose merge/split errors; compare empirical gains with the IID analytical baseline.
 - **Required artifact:** derivations with assumptions, tested implementation, candidate table, dependence diagnostics, and a cost-normalized comparison against direct answering.
-- **Effort:** 4h.
+- **Alignment:** Lesson 6.2.
+- **Effort Estimate:** 4h.
 
 ### LAB C — Verifier-Guided Search Under Adversarial Candidates
 
 - **Objective:** build bounded best-of-N or tree search using an outcome or process verifier and separate candidate opportunity from selection.
-- **Independent variables:** candidate count, search breadth/depth, verifier revision, threshold/ranking rule, pruning, domain, and adversarial perturbation strength.
-- **Measurements:** oracle set success, selected success, verifier calibration and ranking, false positives/negatives, abstention, score-quality gap, branches expanded/pruned, independent correctness, total work, and critical path.
-- **Break/falsify:** inject persuasive wrong solutions, invalid but high-scoring steps, paraphrases, out-of-domain items, and increasing search pressure. Reject the verifier-gaming explanation if independent utility and calibration remain stable under the preregistered stress set.
+- **Pre-Registered Hypothesis:** verifier-guided search will improve selected success over an equal-work unguided baseline only where verifier discrimination remains adequate under search pressure.
+- **Independent Variables:** candidate count, search breadth/depth, verifier revision, threshold/ranking rule, pruning, domain, and adversarial perturbation strength.
+- **Dependent Variables:** oracle set success, selected success, verifier calibration and ranking, false positives/negatives, abstention, score-quality gap, branches expanded/pruned, independent correctness, total work, and critical path.
+- **Break & Falsify:** inject persuasive wrong solutions, invalid but high-scoring steps, paraphrases, out-of-domain items, and increasing search pressure. Reject the verifier-gaming explanation if independent utility and calibration remain stable under the preregistered stress set.
 - **Required artifact:** node/candidate records, verifier card, held-out and adversarial results, source/revision manifest, failure taxonomy, and rollback threshold.
-- **Effort:** 5h.
+- **Alignment:** Lessons 6.3 and 6.4.
+- **Effort Estimate:** 5h.
 
 ### LAB D — Adaptive Budget Controller Under Cost and SLO
 
 - **Objective:** route requests among direct, sequential, parallel, and search strategies using features available before target outcomes are known.
-- **Independent variables:** router features, budget levels, strategy set, load, latency deadline, and aggregate resource envelope.
-- **Measurements:** difficulty/value calibration, routing confusion, allocated work, utility, subgroup effects, cost, critical-path latency, cancellation waste, serving queue/capacity signals, and SLO-goodput.
-- **Break/falsify:** remove leakage-prone features, apply temporal/domain shift, introduce traffic bursts, and compare against equal-cost uniform policies. Falsify adaptive advantage if it disappears at equal aggregate cost or violates a protected constraint.
+- **Pre-Registered Hypothesis:** a leakage-free adaptive policy will improve declared utility over uniform policies at equal aggregate cost on a heterogeneous workload without violating protected SLO/subgroup constraints.
+- **Independent Variables:** router features, budget levels, strategy set, load, latency deadline, and aggregate resource envelope.
+- **Dependent Variables:** difficulty/value calibration, routing confusion, allocated work, utility, subgroup effects, cost, critical-path latency, cancellation waste, serving queue/capacity signals, and SLO-goodput.
+- **Break & Falsify:** remove leakage-prone features, apply temporal/domain shift, introduce traffic bursts, and compare against equal-cost uniform policies. Falsify adaptive advantage if it disappears at equal aggregate cost or violates a protected constraint.
 - **Required artifact:** controller and manifest, offline replay plus controlled loaded test, leakage audit, policy frontier, operational limits, and canary/rollback design.
-- **Effort:** 5h.
+- **Alignment:** Lessons 6.5 and 6.6.
+- **Effort Estimate:** 5h.
 
 ## 07 Break / Incident Scenarios
 
 ### Incident 06.1 — Offline Reasoning Gain, Production Utility Loss
 
+**Incident Symptoms:**
 A release replaces direct decoding with an adaptive policy. It sends difficult-looking requests to parallel candidates and a process verifier, while allowing longer sequential continuation when confidence is low. Offline benchmark selected accuracy improves. In production, tail latency and cost rise, SLO-goodput falls, one user subgroup regresses, and verifier scores keep increasing with search depth even though sampled human audits do not.
 
+**Diagnostic Protocol (Task):**
 The incident does not prescribe one root cause. The learner must:
 
 1. **Form competing hypotheses:** traffic or task shift; correlated candidates; answer-normalization bugs; verifier miscalibration or gaming; difficulty-label leakage; continuation-induced answer reversal; cancellation waste; serving saturation; subgroup routing skew; or an unrelated deployment change.
@@ -369,7 +534,7 @@ The incident does not prescribe one root cause. The learner must:
 
 Design a production reasoning policy for a mixed workload containing objectively checkable problems, open-ended analytical tasks, and latency-sensitive requests. You may use direct decoding, bounded sequential reasoning, self-consistency, best-of-N, tree search, outcome verification, or process verification.
 
-Deliver:
+**Required Deliverables:**
 
 1. a pinned task population, model/runtime configuration, serving envelope, cost unit, quality criteria, and subgroup/SLO constraints;
 2. a mechanism choice per workload class with evidence classification and explicit non-goals;
@@ -401,6 +566,8 @@ Sensitive reasoning traces require an explicit retention and access policy; obse
 
 ### Rubric Dimensions
 
+For every dimension, **Insufficient** reports a result without mechanism, assumptions, or complete cost; **Competent** satisfies the stated dimension with reproducible evidence; **Strong** adds counterexamples, matched falsification, scoped source reasoning, and operational remeasurement.
+
 - **Mechanistic reasoning:** separates elicitation, sampling, search, verification, selection, stopping, and delivery.
 - **Mathematical discipline:** states IID, subset, majority, and fixed-candidate-set assumptions; does not convert oracle or mean metrics into deployed guarantees.
 - **Measurement:** reports opportunity, selection, task utility, total work, critical path, and production impact at declared boundaries.
@@ -421,6 +588,8 @@ Sensitive reasoning traces require an explicit retention and access policy; obse
 
 ## 11 Exit Criteria & Module Wrap-Up
 
+### Exit Criteria
+
 A learner passes when they can:
 
 1. explain why a visible rationale is neither automatic proof of correctness nor faithful causal explanation;
@@ -433,7 +602,9 @@ A learner passes when they can:
 8. trace a pinned runtime implementation without treating it as the definition of reasoning control;
 9. diagnose and remediate an offline-to-production regression, then remeasure at the same boundaries.
 
-**Final mental model:** test-time reasoning is controlled generation plus selection under resource constraints. Extra work creates opportunities, not guaranteed value. The engineering task is to expose where opportunity becomes quality, measure what selection loses, charge every executed branch, and stop only when evidence supports the utility trade.
+### Module Wrap-Up (Final Mental Model Reconstruction)
+
+Test-time reasoning is controlled generation plus selection under resource constraints. Extra work creates opportunities, not guaranteed value. The engineering task is to expose where opportunity becomes quality, measure what selection loses, charge every executed branch, and stop only when evidence supports the utility trade.
 
 ## 12 Competency Targets
 
