@@ -6,13 +6,14 @@ An LLM forward pass is a graph of asynchronous host submissions, device kernels,
 
 This module builds the hardware/software measurement model needed before KV-cache engineering, serving, or optimization. It teaches the learner to define the measured boundary, calculate a scoped upper bound, collect timeline and kernel evidence, break one assumption at a time, and reject a clean bottleneck story when the telemetry does not discriminate it.
 
-**Module orientation**
+**Module Orientation**
 
-- **Engineering problem**: connect tensor shapes and operations to GPU execution, memory traffic, time, profiler observations, and falsifiable performance explanations.
-- **What you will do**: implement reference kernels, induce coalescing and divergence failures, prove why unsynchronized timing is invalid, construct qualified Roofline bounds, profile at system and kernel scope, trace a pinned benchmark implementation, and defend a diagnosis against alternatives.
-- **Research cutoff**: 2026-09-25. Current implementation claims are pinned to exact source revisions where source behavior is asserted.
+- **Engineering Problem**: Connect tensor shapes and operations to GPU execution, memory traffic, time, profiler observations, and falsifiable performance explanations.
+- **What You Will Do**: Implement reference kernels, induce coalescing and divergence failures, prove why unsynchronized timing is invalid, construct qualified Roofline bounds, profile at system and kernel scope, trace a pinned benchmark implementation, and defend a diagnosis against alternatives.
+- **Environment**: Python 3.10+ plus CUDA C++ or a GPU kernel DSL; an NVIDIA GPU and current profiling tools are required for device-counter labs, while analytical exercises can run without them.
+- **Research Cutoff**: 2026-09-27. Current implementation claims remain pinned to the verified revisions below.
 
-## 01 Prerequisites and Scope
+## 01 Baseline Assumptions
 
 Prerequisites: Module 00 measurement discipline; Module 01 tensor shapes, matrix multiplication, parameter/FLOP conventions, and numerical invariants; basic Python and either CUDA C++ or a GPU kernel DSL.
 
@@ -38,36 +39,38 @@ It cross-references but does not replace:
 ## 02 Target Mastery
 
 ```yaml
-module: 02-inference-gpu-fundamentals
-mastery:
-  understand:
-    - execution hierarchy and memory hierarchy
-    - asynchronous timing and synchronization boundaries
-    - Roofline assumptions and resource-residency limits
-  model:
-    - work, bytes, time, throughput, intensity, and attainable ceilings
-    - shape-dependent compute, memory, and latency regimes
-  measure:
-    - synchronized device and wall time
-    - useful versus measured traffic and achieved throughput
-    - timelines, launch geometry, occupancy limits, stalls, clocks, and variance
-  implement:
-    - explicit reference kernels with correctness and shape assertions
-    - a reproducible benchmark and profiler manifest
-  break:
-    - coalescing, alignment, divergence, synchronization, occupancy, and numerical assumptions
-    - profiler representativeness through replay-sensitive or concurrent workloads
-  diagnose:
-    - launch, latency, compute, memory, resource, throttling, and measurement hypotheses
-  defend:
-    - a scoped performance intervention with falsifying evidence and remeasurement
+depth_contract:
+  conceptual: REQUIRED
+  mechanistic: REQUIRED
+  mathematical: REQUIRED
+  quantitative: REQUIRED
+  implementation: REQUIRED
+  source_code: REQUIRED
+  instrumentation: REQUIRED
+  experimental: REQUIRED
+  statistical: REQUIRED
+  production_reasoning: REQUIRED
+  failure_analysis: REQUIRED
+  falsification: REQUIRED
+  security: NOT_APPLICABLE
+  economics: SELECTIVE
+  architecture_tradeoff: REQUIRED
+  research_connection: SELECTIVE
+
+estimated_effort:
+  instruction: 6h
+  guided_practice: 3h
+  labs: 15h
+  assessment: 3h
+  source_trace: 2h
+  total: 29h
 ```
 
 ---
 
 ### LAYER 1: KNOWLEDGE / INSTRUCTIONAL LAYER
 
-## 03 Core Mental Model
+## 03 Knowledge Map
 
 ```text
 host code / framework
@@ -103,7 +106,9 @@ Keep three knowledge types separate:
 
 ### Lesson 2.1 — Execution Hierarchy, SIMT, and Resource Residency
 
-**Engineering question:** What can the program control, and what is only observed after the device schedules work?
+**Engineering Question:** What can the program control, and what is only observed after the device schedules work?
+
+**Concepts & Definitions:**
 
 A kernel launch defines a grid of thread blocks. Blocks are scheduled onto streaming multiprocessors (SMs); correctness cannot depend on the order in which blocks run. Threads within an SM execute in groups of 32 called warps on current CUDA devices. Threads have individual state, but a warp is most efficient when active lanes follow the same instruction path.
 
@@ -118,13 +123,25 @@ Do not collapse these concepts:
 
 Residency is jointly constrained by architectural block/thread limits and per-block registers and shared memory. More occupancy can help hide latency, but maximum occupancy is not a theorem of maximum performance. Reducing registers to increase occupancy can spill data; shrinking tiles can lower reuse; changing blocks can reduce instruction-level parallelism.
 
-**Break test:** sweep block size and artificial register/shared-memory use. Record theoretical occupancy, achieved active warps, spills, stall mix, and kernel time. The intended falsification is a case where higher occupancy is slower.
+**Worked Example:** Two kernels may launch the same grid while different register or shared-memory footprints permit different resident blocks per SM; occupancy alone does not predict which finishes first.
+
+**Knowledge Check:** Which launch quantities are chosen by the program, and which residency/utilization quantities must be observed?
+
+**Guided Practice:** Sweep block size and artificial register/shared-memory use. Record theoretical occupancy, achieved active warps, spills, stall mix, and kernel time. Seek a case where higher occupancy is slower.
+
+**Feedback Contract:** Require launch geometry, resource limits, achieved activity, time, and a falsifier; reject “maximize occupancy” as an objective without workload evidence.
+
+**Learning Outcome:** Connect execution hierarchy and resource residency to measured performance without treating occupancy as a universal target.
+
+*(Effort: 45m instruction, 25m practice)*
 
 ---
 
 ### Lesson 2.2 — Memory Hierarchy, Transactions, and Coalescing
 
-**Engineering question:** How many bytes did the program need, and how many bytes did the hardware move at each boundary?
+**Engineering Question:** How many bytes did the program need, and how many bytes did the hardware move at each boundary?
+
+**Concepts & Definitions:**
 
 A useful simplified path is registers and shared memory/L1, then L2, then device memory. The exact topology, capacities, cache behavior, and instructions vary by architecture. Never substitute an unqualified “GPU memory” byte count for all levels.
 
@@ -143,11 +160,25 @@ Use $10^9$ for decimal GB/s and $2^{30}$ for GiB/s; do not mix the label and div
 - high L2 hit rate does not reveal whether L1/shared/register use is optimal;
 - many transactions do not prove they are on the critical path.
 
+**Worked Example:** A kernel requesting 4 MiB and taking 1 ms has 4 GiB/s useful bandwidth under binary units; profiler-reported DRAM bytes may be larger or smaller depending on reuse and the named boundary.
+
+**Knowledge Check:** Why are useful bytes, L2 traffic, and DRAM traffic different, and what does coalescing change?
+
+**Guided Practice:** Sweep aligned contiguous, offset, and strided accesses while preserving arithmetic; compare useful bandwidth with hierarchy-specific traffic.
+
+**Feedback Contract:** Require byte equations, units, boundary names, timing synchronization, transaction evidence, and competing explanations.
+
+**Learning Outcome:** Distinguish requested work from measured traffic and diagnose layout-dependent transaction waste.
+
+*(Effort: 45m instruction, 25m practice)*
+
 ---
 
 ### Lesson 2.3 — Asynchrony and Honest Timing
 
-**Engineering question:** What exactly starts and stops the clock?
+**Engineering Question:** What exactly starts and stops the clock?
+
+**Concepts & Definitions:**
 
 Kernel launches normally return before device completion. A host timer around a launch can therefore measure submission time, not execution time. Three common boundaries are different measurements:
 
@@ -166,10 +197,25 @@ Warmup can include context creation, library initialization, memory-pool growth,
 - selecting the minimum of many runs without documenting the intended estimator;
 - timing under a heavy profiler and treating the host duration as uninstrumented latency.
 
+**Worked Example:** A host launch returning in 20 microseconds while a synchronized boundary completes at 200 microseconds shows submission time and completed-work time, not conflicting measurements.
+
+**Knowledge Check:** Why can an event on one stream fail to bound work on another, and when is per-operator synchronization unrepresentative?
+
+**Guided Practice:** Time identical work using unsynchronized wall time, synchronized wall time, device events, and an application boundary; then add a second stream.
+
+**Feedback Contract:** Report clocks, streams, synchronization, warmup, repetitions, inclusion rules, raw samples, and profiler status.
+
+**Learning Outcome:** Measure asynchronous execution at an explicit boundary without destroying the concurrency being studied.
+
+*(Effort: 45m instruction, 25m practice)*
+
 ---
 
 ### Lesson 2.4 — Roofline as a Qualified Bound
 
+**Engineering Question:** Under which work, byte, hierarchy, precision, and ceiling assumptions does a Roofline bound discriminate a regime?
+
+**Concepts & Definitions:**
 Define:
 
 - $W$: executed or modeled work in operations;
@@ -206,10 +252,25 @@ This is an analytical bound, not a latency guarantee. State all assumptions:
 
 A point below both ceilings is not automatically “neither compute nor memory.” It may reflect a lower unmodeled ceiling, poor instruction mix, dependencies, divergence, occupancy/resource limits, insufficient waves, frequency/power state, or invalid counts. Hierarchical Roofline and profiler evidence refine the hypothesis.
 
+**Worked Example:** For declared $P_{peak}$ and $\beta$, compute $I^*=P_{peak}/\beta$, then compare a modeled intensity with that ridge. The result is a screening bound, not a latency guarantee.
+
+**Knowledge Check:** Which byte boundary defines $I$, and why can a point below both ceilings have an unmodeled limiter?
+
+**Guided Practice:** Derive bounds using specification peaks and then measured sustainable ceilings; explain how the conclusion changes.
+
+**Feedback Contract:** Require units, FMA convention, selected instruction path, hierarchy boundary, attainable ceilings, exclusions, and profiler validation.
+
+**Learning Outcome:** Build and qualify a Roofline model without promoting it to a measured bottleneck or latency guarantee.
+
+*(Effort: 55m instruction, 30m practice)*
+
 ---
 
 ### Lesson 2.5 — Shape-Dependent Regime Transitions
 
+**Engineering Question:** Which shape and backend changes move execution among launch-, latency-, bandwidth-, and compute-limited regimes?
+
+**Concepts & Definitions:**
 For $C_{M\times N}=A_{M\times K}B_{K\times N}$ and FMA counted as two operations:
 
 $$W_{GEMM}\approx2MNK.$$
@@ -232,10 +293,25 @@ Therefore “prefill is compute-bound” and “decode is memory-bound” are us
 
 Numerical behavior remains part of the experiment. Floating-point addition is not generally associative, and fused or reordered reductions may differ. Define tolerances and downstream quality checks before declaring a faster path correct.
 
+**Worked Example:** A tiny high-intensity GEMM can underfill the GPU, whereas a larger shape can expose enough parallelism to approach another ceiling; arithmetic intensity alone does not encode grid size.
+
+**Knowledge Check:** Why is the one-pass GEMM intensity not measured intensity, and how can padding both add work and improve execution?
+
+**Guided Practice:** Sweep GEMV-like and GEMM-like shapes, dtype, alignment, and backend; record selected kernels, traffic, grid size, time, and numerical error.
+
+**Feedback Contract:** Identify transitions from aligned evidence rather than assigning one universal regime to prefill or decode.
+
+**Learning Outcome:** Explain and measure shape-dependent bottleneck transitions while preserving numerical validity.
+
+*(Effort: 50m instruction, 30m practice)*
+
 ---
 
 ### Lesson 2.6 — Profiler Ladder and Diagnostic Reasoning
 
+**Engineering Question:** What is the least intrusive evidence needed to distinguish competing GPU-performance explanations?
+
+**Concepts & Definitions:**
 Use the least intrusive evidence that can answer the current question:
 
 1. establish a synchronized unprofiled baseline with distributions;
@@ -263,9 +339,25 @@ SYMPTOM
 
 Example: “GPU utilization fell” can be explained by host launch gaps, smaller grids, dependency stalls, a faster kernel, throttling, memory faults, synchronization, or another process. Utilization alone cannot rank them.
 
+**Worked Example:** A Systems trace showing a CPU gap before an unchanged kernel weakens an internal-kernel bottleneck claim; targeted kernel counters are unnecessary until the changed interval is localized.
+
+**Knowledge Check:** When should a timeline precede kernel metrics, and how can replay invalidate a concurrency-sensitive capture?
+
+**Guided Practice:** Diagnose the same latency symptom after separately injecting a host gap, strided access, and register pressure.
+
+**Feedback Contract:** Require an unprofiled baseline, minimal discriminating capture, capture settings, alternatives, intervention, and unprofiled remeasurement.
+
+**Learning Outcome:** Select profiler scope from a hypothesis and account for the profiler as an intervention.
+
+*(Effort: 50m instruction, 30m practice)*
+
 ---
 
 ### Lesson 2.7 — Pinned Runtime Source Trace
+
+**Engineering Question:** What timing semantics does the pinned benchmark utility implement, and what does it exclude?
+
+**Concepts & Definitions:** A source trace distinguishes implementation-specific synchronization, warmup, repetition, aggregation, and returned raw measurements from general benchmarking principles.
 
 At PyTorch commit `7ee5406f6686d190efc6571475f074ba1bc9a8c0`, inspect:
 
@@ -289,7 +381,19 @@ Observed behavior at that revision:
 
 Generalizable? **PARTIAL.** Synchronization, warmup, and replicates are general measurement concerns. The exact thresholds, call graph, and accelerator abstraction are PyTorch-revision-specific. This path does not measure an end-to-end serving request and its synchronization suppresses overlap outside the timed statement.
 
-## 05 Literature and Source Map
+**Worked Example:** `blocked_autorange` returning raw block times and repetitions supports operator timing at this boundary; it does not include request queueing or prove production overlap.
+
+**Knowledge Check:** Where does synchronization occur, and which surrounding asynchronous work falls outside the statement?
+
+**Independent Practice:** Execute the pinned trace on one operator, compare it with device events and manual synchronized wall time, and mark unexecuted paths `TODO_VERIFY`.
+
+**Feedback Contract:** Require revision, path, symbols, call path, configuration, static-versus-executed status, exact commands, and generalizability limits.
+
+**Learning Outcome:** Verify benchmark timing behavior from source without turning utility-specific semantics into a universal definition.
+
+*(Effort: 35m instruction, 30m source trace)*
+
+## 05 Literature & Production Source Map
 
 **REFERENCE / BASELINE**
 
@@ -322,50 +426,80 @@ Generalizable? **PARTIAL.** Synchronization, warmup, and replicates are general 
 
 ## 06 Engineering Labs
 
+All labs follow $\text{PREDICT}\to\text{BUILD}\to\text{MEASURE}\to\text{EXPLAIN}\to\text{BREAK}\to\text{IMPROVE}\to\text{FALSIFY}$.
+
 ### LAB A — Transactions, Layout, and Useful Bandwidth
 
+- **Objective**: Determine when layout changes alter useful and physical traffic at named memory boundaries.
+- **Pre-Registered Hypothesis**: Strided lane access will increase transferred traffic or reduce useful bandwidth on the selected path relative to aligned contiguous access.
+- **Independent Variables**: Layout, offset, stride, problem size, and launch geometry.
+- **Dependent Variables**: Correctness, useful bandwidth, hierarchy traffic, transactions, stalls, and kernel time.
 - **Build**: implement copy/add and a tiled matrix multiply with shape and bounds assertions.
 - **Measure**: sweep contiguous, offset, and strided accesses; calculate useful bytes/time and collect targeted L1/L2/DRAM traffic.
-- **Break**: preserve element count and arithmetic while permuting layout so adjacent lanes access a large stride.
+- **Break & Falsify**: Preserve element count and arithmetic while permuting layout so adjacent lanes access a large stride; if traffic efficiency and time do not respond on the same path, weaken the coalescing explanation.
 - **Competing hypotheses**: transaction waste, cache reuse, insufficient grid size, alignment, compiler vectorization, or timing error.
-- **Falsification**: if measured transaction/traffic efficiency and kernel time do not respond to layout while the same path executes, the coalescing explanation weakens.
 - **Artifact**: source, correctness oracle, hardware/software manifest, byte equations, raw timings, targeted profile, and a boundary-labeled conclusion.
+- **Alignment**: Lessons 2.1–2.2.
+- **Effort Estimate**: 3h implementation, 1h analysis.
 
 ### LAB B — Asynchronous Timing Trap
 
+- **Objective**: Establish which timing boundaries include queued device work and which perturb production overlap.
+- **Pre-Registered Hypothesis**: Unsynchronized host timing will measure submission rather than completion for asynchronous work.
+- **Independent Variables**: Timer, synchronization boundary, stream count, cold/warm state, and workload size.
+- **Dependent Variables**: Submission, device, synchronized-wall, and application durations plus overlap visible in the timeline.
 - **Build**: time identical GPU work with an unsynchronized host timer, synchronized host timer, device events, and `torch.utils.benchmark`.
-- **Break**: add work on a second stream and move synchronization boundaries.
+- **Break & Falsify**: Add work on a second stream, move synchronization boundaries, and demonstrate which timer excludes queued work or destroys overlap.
 - **Measure**: submission time, device interval, application interval, warm/cold distributions, and timeline.
-- **Falsification**: demonstrate which timer excludes queued work and which synchronization destroys overlap.
 - **Artifact**: a timing contract that makes start/end, streams, setup, and aggregation explicit.
+- **Alignment**: Lesson 2.3.
+- **Effort Estimate**: 2h implementation, 1h analysis.
 
 ### LAB C — Qualified Roofline Matrix
 
+- **Objective**: Compare analytical bounds with measured execution across shape and arithmetic-intensity regimes.
+- **Pre-Registered Hypothesis**: Regime classification will change for at least one shape when measured traffic and sustainable ceilings replace optimistic one-pass/specification values.
+- **Independent Variables**: Operation family, shape, dtype, layout, backend, and hierarchy boundary.
+- **Dependent Variables**: Work, traffic, intensity, selected path, grid size, throughput, duration, and numerical error.
 - **Build**: create elementwise, reduction, GEMV-like, and GEMM-like cases across shapes and dtypes.
 - **Derive**: $W$, algorithmic $Q$, $I$, attainable ceilings, ridge, and time lower bounds with units.
 - **Measure**: selected instruction path, executed work where available, traffic at multiple hierarchy levels, throughput, grid size, and duration.
-- **Break**: choose a tiny high-intensity problem that underfills the GPU and a large low-intensity problem with high bandwidth.
-- **Falsification**: revise any classification whose selected precision/path or traffic boundary does not match the model.
+- **Break & Falsify**: Choose a tiny high-intensity problem that underfills the GPU and a large low-intensity problem with high bandwidth; revise classifications whose precision/path or traffic boundary does not match.
 - **Artifact**: analytical-versus-measured table with every exclusion and no universal model-phase label.
+- **Alignment**: Lessons 2.4–2.5.
+- **Effort Estimate**: 3h implementation, 1h analysis.
 
 ### LAB D — Competing Bottleneck Diagnosis
 
+- **Objective**: Distinguish multiple causes that present as slower elapsed time or lower aggregate utilization.
+- **Pre-Registered Hypothesis**: Timeline, targeted counters, and a one-variable intervention can rule down at least two alternatives for each injected fault.
+- **Independent Variables**: Injected fault and evidence available to the blinded diagnostician.
+- **Dependent Variables**: Diagnosis rank, evidence requested, time-to-discrimination, correction effect, and false attribution.
 - **Inject separately**: host launch gaps, divergence, strided loads, register pressure, synchronization, small grids, background GPU activity, and a constrained power/clock state where safe.
 - **Blind diagnose**: start from the same symptom—higher elapsed time or lower aggregate utilization.
 - **Required evidence**: unprofiled baseline, Systems timeline, selected Compute metrics, clocks/power, shape/backend, and controlled intervention.
 - **Scoring rule**: no credit for naming a bottleneck without ruling down at least two alternatives.
+- **Break & Falsify**: Include two faults with similar aggregate utilization and reject any diagnosis that cannot distinguish them through aligned evidence and intervention.
 - **Artifact**: symptom → hypotheses → missing evidence → discrimination → ranked cause → intervention → remeasurement.
+- **Alignment**: Lessons 2.1, 2.2, 2.5, and 2.6.
+- **Effort Estimate**: 3h injection and diagnosis, 1h report.
 
 ### LAB E — Pinned Benchmark Source Trace
 
+- **Objective**: Verify timing and synchronization semantics of the pinned benchmark utility.
+- **Pre-Registered Hypothesis**: Different timing boundaries will report different values when asynchronous work exists outside the timed statement.
+- **Independent Variables**: Timing method, external asynchronous work, block size, and warmup state.
+- **Dependent Variables**: Raw times, repetitions, synchronization placement, and disagreement among timing boundaries.
 - **Trace**: PyTorch `Timer.blocked_autorange` at the pinned commit through block-size estimation and synchronization.
 - **Compare**: direct events, manual synchronized wall timing, and the utility on one stable operator.
-- **Break**: add asynchronous work outside the timed statement and explain why each boundary reports a different result.
+- **Break & Falsify**: Add asynchronous work outside the timed statement and explain why each boundary reports a different result.
 - **Artifact**: repository, commit, verification date, file, symbols, entry point, execution path, exact run commands, and `TODO_VERIFY` for any path not executed locally.
+- **Alignment**: Lessons 2.3 and 2.7.
+- **Effort Estimate**: 2h source trace, 1h comparison.
 
-## 07 Break / Incident Scenario
+## 07 Break / Incident Scenarios
 
-### Incident 02.1 — Latency Doubled While “GPU Utilization” Fell
+### Incident 02.1: Latency Doubled While “GPU Utilization” Fell
 
 After a framework upgrade, a fixed-shape inference benchmark is twice as slow and a dashboard GPU-utilization average is lower. A teammate concludes that memory bandwidth is the bottleneck and proposes kernel fusion.
 
@@ -381,6 +515,8 @@ Competing hypotheses:
 8. the benchmark boundary or warmup changed;
 9. another process or profiler perturbed execution.
 
+**Diagnostic Protocol (Task):**
+
 Required response:
 
 - freeze inputs, shape, dtype, seed, correctness tolerance, and software/hardware manifest;
@@ -390,6 +526,7 @@ Required response:
 - verify source/backend selection;
 - run one-variable interventions;
 - remeasure unprofiled latency and numerical parity.
+- separate immediate rollback from the long-term correction and define quantitative recovery criteria.
 
 The aggregate utilization signal is useful for detecting change but insufficient to establish cause.
 
@@ -398,6 +535,8 @@ The aggregate utilization signal is useful for detecting change but insufficient
 ### LAYER 3: MASTERY / ASSESSMENT LAYER
 
 ## 08 Mastery Assessment
+
+### Transfer Problem — Defend a GPU Performance Diagnosis
 
 The learner receives an unfamiliar GPU trace, selected kernel profiles, tensor shapes, and a regression report. They must:
 
@@ -412,7 +551,13 @@ The learner receives an unfamiliar GPU trace, selected kernel profiles, tensor s
 9. state which conclusions are O, D, and H;
 10. refuse unsupported translation from kernel behavior to TTFT/TPOT or capacity.
 
-## 09 Required Evidence and Rubric
+## 09 Required Evidence & Rubric
+
+### Required Artifact: Production Source Trace
+
+Submit the pinned PyTorch benchmark trace from Lesson 2.7/Lab E, including repository, revision, verification date, path, symbols, call path, runtime configuration, static-versus-executed status, commands, and `TODO_VERIFY` markers.
+
+### Rubric Dimensions
 
 | Dimension | Evidence required | Failure condition |
 |---|---|---|
@@ -426,16 +571,18 @@ The learner receives an unfamiliar GPU trace, selected kernel profiles, tensor s
 
 ## 10 Capability Traceability Matrix
 
-| Capability | Lessons | Lab / assessment | Evidence claims |
-|---|---|---|---|
-| Explain GPU execution and residency | 2.1 | LAB A, LAB D | M02-CLM-001, 007 |
-| Diagnose memory transactions | 2.2 | LAB A | M02-CLM-002, 010 |
-| Time asynchronous work correctly | 2.3, 2.7 | LAB B, LAB E | M02-CLM-003, 011 |
-| Build and qualify a Roofline model | 2.4, 2.5 | LAB C | M02-CLM-004, 005, 006 |
-| Select profiler scope and control intrusion | 2.6 | LAB D | M02-CLM-008, 009, 012 |
-| Preserve numerical validity | 2.5, 2.6 | LAB C, LAB D | M02-CLM-013 |
+| Capability | Taught | Practiced | Assessed | Evidence |
+|---|---|---|---|---|
+| Explain GPU execution and residency | Lesson 2.1 | LAB A / LAB D | Incident / Mastery | M02-CLM-001, 007; launch/resource trace |
+| Diagnose memory transactions | Lesson 2.2 | LAB A | Mastery | M02-CLM-002, 010; traffic report |
+| Time asynchronous work correctly | Lessons 2.3, 2.7 | LAB B / LAB E | Mastery | M02-CLM-003, 011; timing/source trace |
+| Build and qualify a Roofline model | Lessons 2.4–2.5 | LAB C | Mastery | M02-CLM-004–006; bound/measurement table |
+| Select profiler scope and control intrusion | Lesson 2.6 | LAB D | Incident | M02-CLM-008, 009, 012; diagnosis matrix |
+| Preserve numerical validity | Lessons 2.5–2.6 | LAB C / LAB D | Mastery | M02-CLM-013; parity report |
 
-## 11 Exit Criteria and Final Mental Model
+## 11 Exit Criteria & Module Wrap-Up
+
+### Exit Criteria
 
 A learner can exit Module 02 when they can:
 
@@ -449,6 +596,8 @@ A learner can exit Module 02 when they can:
 8. account for profiler replay and measurement intrusion;
 9. preserve correctness and numerical tolerance during performance experiments;
 10. hand Module 04 measured device evidence without confusing it with serving metrics.
+
+### Module Wrap-Up (Final Mental Model Reconstruction)
 
 The final invariant: **a GPU bottleneck is a scoped causal claim supported by aligned work, byte, time, timeline, and intervention evidence—not a label read from one counter.**
 
