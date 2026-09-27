@@ -14,13 +14,14 @@ $$
 
 The scope is single-node inference mechanisms: IO-aware attention, kernel fusion and Triton fundamentals, FP8/INT8/INT4 quantization, SmoothQuant/GPTQ/AWQ, and speculative decoding including Medusa and EAGLE. Scheduling policy remains in Module 04, KV allocation internals in Module 03, and distributed inference specialization in Module 20. This module considers those systems only where an optimization changes their inputs or costs.
 
-**Research cutoff:** 2026-09-26.
+**Research Cutoff:** 2026-09-27.
 
 **Module Orientation**
 
-- **Engineering problem:** choose, implement, compose, and defend inference optimizations for a pinned model, runtime, hardware target, workload distribution, and SLO.
-- **What you will do:** compare reference and IO-aware attention; write and profile a fused Triton kernel; build and validate quantized artifacts; instrument speculative cycles; trace a current FlashAttention source path; and diagnose an optimization stack that regresses production goodput.
-- **Evidence rule:** distinguish source observation (**O**), assumption-backed derivation (**D**), and telemetry-dependent engineering hypothesis (**H**). Paper speedups do not transfer without their model, hardware, shapes, configuration, baseline, and measurement boundary.
+- **Engineering Problem**: Choose, implement, compose, and defend inference optimizations for a pinned model, runtime, hardware target, workload distribution, and SLO.
+- **What You Will Do**: Compare reference and IO-aware attention; write and profile a fused Triton kernel; build and validate quantized artifacts; instrument speculative cycles; trace a current FlashAttention source path; and diagnose an optimization stack that regresses production goodput.
+- **Environment**: Python 3.10+, PyTorch, Triton or an equivalent kernel environment, and a supported GPU for execution labs; analytical and artifact-manifest work can proceed without every backend.
+- **Evidence Rule**: Distinguish source observation (**O**), assumption-backed derivation (**D**), and telemetry-dependent engineering hypothesis (**H**). Paper speedups do not transfer without their model, hardware, shapes, configuration, baseline, and measurement boundary.
 
 ## 01 Baseline Assumptions
 
@@ -97,7 +98,9 @@ Every branch consumes resources and can shift the next bottleneck. The optimizat
 
 ### Lesson 5.1 — IO-Aware Exact Attention
 
-**Engineering question:** How can dense attention retain its mathematical semantics while changing the memory traffic that dominates execution?
+**Engineering Question:** How can dense attention retain its mathematical semantics while changing the memory traffic that dominates execution?
+
+**Concepts & Definitions:** Exact dense-attention semantics, IO-aware tiling, online softmax, supported masks/layouts, and backend dispatch are separate contracts.
 
 For one attention head, the reference expression is:
 
@@ -116,15 +119,25 @@ A straightforward implementation can materialize the $N_q\times N_k$ score or pr
 
 **Currentness:** the original IO-aware exact-attention mechanism is **REFERENCE**, while selection of a particular backend is **WORKLOAD-DEPENDENT**. FlashAttention-3 is Hopper-specific; FlashAttention-4 is a 2026 Blackwell-oriented **FRONTIER** design. Neither paper establishes portable speedups across other accelerators.
 
-**Guided practice:** Build a shape matrix over batch, $N_q$, $N_k$, head dimension, causal mode, dtype, and GQA ratio. For each cell, predict the likely traffic advantage, validate outputs against a reference with declared tolerances, and measure warm kernel time, peak allocated memory, and end-to-end share. Identify at least one shape where dispatch or unsupported-path overhead weakens the expected benefit.
+**Worked Example:** Process one score row in two key tiles while carrying its running maximum and normalization term; changing tile order can change floating-point results without changing dense-attention semantics.
 
-**Learning outcome:** explain FlashAttention as a tiled IO transformation, validate semantic coverage, and refuse to infer service speedup from an isolated favorable kernel result.
+**Knowledge Check:** Why does “exact” not imply bitwise identity, and why does a faster attention kernel not establish service speedup?
+
+**Guided Practice:** Build a shape matrix over batch, $N_q$, $N_k$, head dimension, causal mode, dtype, and GQA ratio. For each cell, predict the likely traffic advantage, validate outputs against a reference with declared tolerances, and measure warm kernel time, peak allocated memory, and end-to-end share. Identify at least one shape where dispatch or unsupported-path overhead weakens the expected benefit.
+
+**Feedback Contract:** Require semantic coverage, tolerance, selected backend, traffic/time boundaries, unsupported cases, and an end-to-end denominator.
+
+**Learning Outcome:** Explain FlashAttention as a tiled IO transformation, validate semantic coverage, and refuse to infer service speedup from an isolated favorable kernel result.
+
+*(Effort: 50m instruction, 30m practice)*
 
 ---
 
 ### Lesson 5.2 — Kernel Fusion and Triton Fundamentals
 
-**Engineering question:** Which boundaries should be fused, and how do we know the fused kernel did not exchange one cost for another?
+**Engineering Question:** Which boundaries should be fused, and how do we know the fused kernel did not exchange one cost for another?
+
+**Concepts & Definitions:** Vertical/horizontal fusion, launch amortization, intermediate traffic, resource pressure, compilation, and specialization are separate cost terms.
 
 Vertical fusion can keep producer output on chip for a consumer and avoid intermediate HBM writes/reads. Horizontal fusion can combine independent small operations to amortize launch overhead. Compiler capture, legality, aliases, dynamic shapes, and graph breaks determine what can fuse. Generated code determines what actually fused.
 
@@ -146,15 +159,25 @@ This is an accounting decomposition, not a guarantee that terms add independentl
 - output error versus reference across adversarial sizes and boundary conditions;
 - performance distribution over representative shapes, not one favorable tensor.
 
-**Guided practice:** Fuse a bias-add plus activation or RMSNorm-like chain in Triton. Compare with a strong framework/compiler baseline. Sweep widths that are aligned and misaligned to the chosen block, and include a tiny tensor where launch overhead dominates and a large tensor where resource pressure matters. A slower fused result is valid evidence, not a failed lab.
+**Worked Example:** Eliminating one intermediate write/read can reduce traffic while a wider live range raises register use and spills; measure both before accepting the fusion.
 
-**Learning outcome:** implement and inspect a fused kernel, then attribute its outcome to measured traffic, launch, compilation, or resource effects.
+**Knowledge Check:** Which cost term does fusion target, and which resource changes can reverse the expected gain?
+
+**Guided Practice:** Fuse a bias-add plus activation or RMSNorm-like chain in Triton. Compare with a strong framework/compiler baseline. Sweep widths that are aligned and misaligned to the chosen block, and include a tiny tensor where launch overhead dominates and a large tensor where resource pressure matters. A slower fused result is valid evidence, not a failed lab.
+
+**Feedback Contract:** Require parity, cold/warm separation, launch/generated-code evidence, resource counters, representative shapes, and rollback criteria.
+
+**Learning Outcome:** Implement and inspect a fused kernel, then attribute its outcome to measured traffic, launch, compilation, or resource effects.
+
+*(Effort: 50m instruction, 30m practice)*
 
 ---
 
 ### Lesson 5.3 — Quantization Is a Deployment Contract
 
-**Engineering question:** What exactly has changed when a model is called “FP8,” “INT8,” or “INT4”?
+**Engineering Question:** What exactly has changed when a model is called “FP8,” “INT8,” or “INT4”?
+
+**Concepts & Definitions:** Encoding, scaling, granularity, coverage, accumulator/output dtype, packing, executable kernel, quality, and memory are distinct deployment fields.
 
 For uniform affine quantization:
 
@@ -185,15 +208,25 @@ This is a nominal lower bound. Add scales, zero points, padding, alignment, code
 - quality suite and numerical tolerances;
 - memory, cold/warm latency, throughput, and goodput boundaries.
 
-**Worked exercise (explicit assumption):** Suppose a hypothetical model has $N=8\times10^9$ weights, densely packed at 4 bits. The nominal payload is $4\times10^9$ bytes. This does not establish GB versus GiB reporting, checkpoint size, GPU allocation, or speed. List every additional byte category that must be measured before a deployment claim.
+**Worked Example:** Under the explicit assumption that a hypothetical model has $N=8\times10^9$ weights densely packed at 4 bits, the nominal payload is $4\times10^9$ bytes. This does not establish GB versus GiB reporting, checkpoint size, GPU allocation, or speed. List every additional byte category required before a deployment claim.
 
-**Learning outcome:** specify low precision as a reproducible artifact/runtime contract and separate representation, arithmetic, memory, quality, and performance.
+**Knowledge Check:** Why is bit width insufficient to identify arithmetic, kernel selection, total memory, or quality?
+
+**Guided Practice:** Build a complete quantization manifest for two artifacts and reconcile packed payload, metadata, file bytes, device allocation, selected kernels, and quality gates.
+
+**Feedback Contract:** Reject labels without scale/granularity/coverage and any performance claim inferred from payload ratio alone.
+
+**Learning Outcome:** Specify low precision as a reproducible artifact/runtime contract and separate representation, arithmetic, memory, quality, and performance.
+
+*(Effort: 50m instruction, 30m practice)*
 
 ---
 
 ### Lesson 5.4 — SmoothQuant, GPTQ, and AWQ
 
-**Engineering question:** Which error source does each post-training method address, and which serving path realizes its promised benefit?
+**Engineering Question:** Which error source does each post-training method address, and which serving path realizes its promised benefit?
+
+**Concepts & Definitions:** Calibration distribution, activation outliers, reconstruction objective, salient weights, artifact packing, and runtime kernel support determine different parts of the method contract.
 
 - **SmoothQuant:** uses an equivalent offline rescaling to migrate activation-outlier difficulty into weights, enabling a W8A8 path. The smoothing parameter and calibration distribution influence the resulting ranges.
 - **GPTQ:** performs one-shot weight quantization using approximate second-order information to control reconstruction error. The resulting artifact still needs a packing scheme and executable matrix kernel.
@@ -214,13 +247,25 @@ These methods solve different problems. SmoothQuant is not “GPTQ for activatio
 
 **Break cases:** calibration drift; rare activation outliers; sensitive output heads; unsupported group size; small batches where unpack overhead dominates; long-prefill compute shapes where weight bandwidth is not dominant; and mixed batches that select a fallback path.
 
-**Learning outcome:** select and falsify a quantization method based on error source, runtime support, workload, and quality—not label popularity.
+**Worked Example:** A weight-only artifact can reduce nominal weight bytes yet regress a small-batch workload if its selected path repeatedly converts or unpacks weights.
+
+**Knowledge Check:** Which method targets activation outliers, and why does a compatible checkpoint format not prove an optimized kernel executes?
+
+**Guided Practice:** Compare two methods under a shared calibration/quality/runtime matrix, then shift the prompt domain and force one unsupported shape.
+
+**Feedback Contract:** Require artifact inspection, calibration provenance, selected operators, quality uncertainty, memory breakdown, and loaded-serving metrics.
+
+**Learning Outcome:** Select and falsify a quantization method based on error source, runtime support, workload, and quality—not label popularity.
+
+*(Effort: 50m instruction, 30m practice)*
 
 ---
 
 ### Lesson 5.5 — Exact Speculative Decoding and Its Cost Model
 
-**Engineering question:** When does doing extra draft work reduce time per committed target token?
+**Engineering Question:** When does doing extra draft work reduce time per committed target token?
+
+**Concepts & Definitions:** Proposal length, committed reward, draft cost, verification cost, bookkeeping, exactness/quality contract, and scheduler context form the speculative cycle.
 
 The reference algorithm uses a cheaper approximation model to draft multiple tokens. The target scores the continuation in parallel and applies a modified rejection/resampling procedure that preserves the target distribution under its assumptions. That guarantee belongs to the specified algorithm; relaxed thresholds, greedy variants, tree methods, or auxiliary heads need their own correctness/quality statement.
 
@@ -249,15 +294,25 @@ This is not generally $\mathbb{E}[T_{cycle}/A]$. “Acceptance rate” is insuff
 - extra model/KV/workspace memory reduces serving concurrency;
 - long accepted bursts change streaming event semantics and ITL measurement.
 
-**Guided practice:** With measured cycle records—not a supplied speedup—compute both ratio-of-means and mean-of-ratios, explain the difference, and compare against target-only decoding at identical output distribution, batch/concurrency, and timing boundaries.
+**Worked Example:** Two cycles with different reward and duration show why $\sum T/\sum A$ answers aggregate time per committed token while averaging $T/A$ weights cycles differently.
 
-**Learning outcome:** prove or disprove speculative benefit using total cycle reward/cost and explicit equivalence guarantees.
+**Knowledge Check:** Why is acceptance percentage insufficient, and which assumptions support the renewal-style ratio?
+
+**Guided Practice:** With measured cycle records—not a supplied speedup—compute both ratio-of-means and mean-of-ratios, explain the difference, and compare against target-only decoding at identical output distribution, batch/concurrency, and timing boundaries.
+
+**Feedback Contract:** Require cycle-level reward/cost, denominator semantics, equivalence/quality gate, memory, batching/load context, and target-only baseline.
+
+**Learning Outcome:** Prove or disprove speculative benefit using total cycle reward/cost and explicit equivalence guarantees.
+
+*(Effort: 55m instruction, 30m practice)*
 
 ---
 
 ### Lesson 5.6 — Medusa, EAGLE, and Learned Drafting
 
-**Engineering question:** How do proposal architecture and training change the speculative trade space?
+**Engineering Question:** How do proposal architecture and training change the speculative trade space?
+
+**Concepts & Definitions:** Auxiliary heads, draft models, feature-level prediction, candidate trees, verification shape, retraining, and approximation guarantees distinguish speculative families.
 
 Medusa adds decoding heads that propose multiple future tokens and uses tree-based verification. Its variants differ in whether the backbone remains frozen and in their quality/training trade-offs. EAGLE predicts at the target model's feature level with a shifted token sequence to address feature uncertainty. EAGLE-3 changes the learned-draft design to direct token prediction with multi-layer feature fusion and reports both latency and batched-serving experiments.
 
@@ -273,13 +328,25 @@ The comparison contract is broader than speed:
 
 Treat Medusa, EAGLE, and later variants as **WORKLOAD-DEPENDENT** or **FRONTIER**, not universal defaults. Their paper results motivate experiments but do not select a production method without replication on the target stack.
 
-**Learning outcome:** distinguish speculative families mechanistically and design a fair comparison that includes training, quality, memory, batching, and operations.
+**Worked Example:** A learned draft with higher acceptance can still lose if training/serving memory lowers target concurrency or tree verification becomes expensive at the chosen batch.
+
+**Knowledge Check:** Which comparisons require a distribution-preservation statement, and which costs lie outside acceptance rate?
+
+**Guided Practice:** Build a comparison table covering training, target compatibility, proposal structure, quality contract, memory, verification, batching, and fallback behavior.
+
+**Feedback Contract:** Reject rankings based on one paper speedup or acceptance value without matched workload and full cost ledger.
+
+**Learning Outcome:** Distinguish speculative families mechanistically and design a fair comparison that includes training, quality, memory, batching, and operations.
+
+*(Effort: 45m instruction, 25m practice)*
 
 ---
 
 ### Lesson 5.7 — Bottleneck-Driven Composition and Diagnosis
 
-**Engineering question:** How do we compose optimizations without losing causal attribution?
+**Engineering Question:** How do we compose optimizations without losing causal attribution?
+
+**Concepts & Definitions:** Main effects, interactions, bottleneck shifts, semantic/quality gates, end-to-end boundaries, canaries, and rollback govern composition.
 
 Start with a pinned baseline. Measure the fraction of time and resources attributable to the target. Apply one mechanism. Re-run correctness/quality gates. Then measure at kernel, model, and loaded-serving boundaries. Only after main effects are understood should combinations be tested.
 
@@ -308,7 +375,17 @@ $$
 - lower kernel time does not prove better TTFT, ITL, throughput, or goodput;
 - close perplexity does not prove application-quality equivalence.
 
-**Learning outcome:** construct an optimization evidence chain that survives bottleneck shifts, interactions, and adversarial workloads.
+**Worked Example:** An Amdahl screen can bound the benefit of accelerating attention only while non-attention work stays fixed; quantization or speculation can change kernel shapes, memory headroom, and scheduler behavior, invalidating that fixed-fraction assumption.
+
+**Knowledge Check:** Which observation indicates a bottleneck shift, and why should combined changes follow main-effect measurements?
+
+**Guided Practice:** Design a factorial toggle matrix for attention, fusion, quantization, and speculation with quality gates and a workload that can falsify each local win.
+
+**Feedback Contract:** Require pinned baseline, ablations, interaction analysis, matched boundaries, competing hypotheses, canary metrics, and rollback triggers.
+
+**Learning Outcome:** Construct an optimization evidence chain that survives bottleneck shifts, interactions, and adversarial workloads.
+
+*(Effort: 50m instruction, 30m practice)*
 
 ## 05 Literature & Production Source Map
 
@@ -358,43 +435,51 @@ $$
 
 ### LAB A — Attention Parity and Shape-Regime Map
 
-- **Objective:** compare a trusted reference attention path with an available IO-aware path over a pre-registered shape matrix.
-- **Independent variables:** device, dtype, batch, query/key lengths, head dimension, causal/local mask, MHA/GQA ratio, and packed/variable-length representation.
-- **Measurements:** correctness tolerance, NaN/Inf, warm kernel time, cold dispatch/compile time, peak memory, achieved bandwidth/FLOPs where reliable, and end-to-end attention share.
-- **Break/falsify:** include tiny queries, unsupported or fallback-prone head sizes, ragged sequences, extreme logits, and shapes where attention is a small end-to-end fraction. Falsify “IO-aware always wins” with a reproducible counterexample if one exists.
-- **Required artifact:** pinned environment, raw shape-level results, profiler traces for at least three regimes, and a source trace of the pinned interface.
-- **Effort:** 4h.
+- **Objective**: Compare a trusted reference attention path with an available IO-aware path over a pre-registered shape matrix.
+- **Pre-Registered Hypothesis**: IO-aware attention will reduce measured intermediate traffic for supported large shapes, while dispatch or underfill can erase the latency benefit on other cells.
+- **Independent Variables**: Device, dtype, batch, query/key lengths, head dimension, causal/local mask, MHA/GQA ratio, and packed/variable-length representation.
+- **Dependent Variables**: Correctness tolerance, NaN/Inf, warm kernel time, cold dispatch/compile time, peak memory, achieved bandwidth/FLOPs where reliable, and end-to-end attention share.
+- **Break & Falsify**: Include tiny queries, unsupported or fallback-prone head sizes, ragged sequences, extreme logits, and shapes where attention is a small end-to-end fraction.
+- **Required Artifact**: Pinned environment, raw shape-level results, profiler traces for at least three regimes, and a source trace of the pinned interface.
+- **Alignment**: Lesson 5.1.
+- **Effort Estimate**: 4h.
 
 ### LAB B — Fusion and Triton Resource Trade-Off
 
-- **Objective:** implement one fused inference kernel and compare it with eager and compiler-generated strong baselines.
-- **Independent variables:** block size, warps/stages where applicable, width, batch, aligned/misaligned dimensions, contiguous/strided layout, and cold/warm execution.
-- **Measurements:** numerical error, launch count, compile/recompile events, kernel time, end-to-end time, traffic counters, registers/shared memory, occupancy, and spills where supported.
-- **Break/falsify:** find a shape where fusion regresses; determine whether launch, compilation, fallback, memory access, or resource pressure explains it. If counters do not support the initial mechanism, reject it.
-- **Required artifact:** kernel, tests, generated-code excerpt or trace, benchmark protocol, uncertainty, and rollback criterion.
-- **Effort:** 4h.
+- **Objective**: Implement one fused inference kernel and compare it with eager and compiler-generated strong baselines.
+- **Pre-Registered Hypothesis**: Fusion will help where removed launch/intermediate traffic exceeds added compilation and resource costs, and regress at least one adversarial shape.
+- **Independent Variables**: Block size, warps/stages where applicable, width, batch, aligned/misaligned dimensions, contiguous/strided layout, and cold/warm execution.
+- **Dependent Variables**: Numerical error, launch count, compile/recompile events, kernel/end-to-end time, traffic, registers/shared memory, occupancy, and spills.
+- **Break & Falsify**: Find a shape where fusion regresses and determine whether launch, compilation, fallback, memory access, or resource pressure explains it.
+- **Required Artifact**: Kernel, tests, generated-code excerpt or trace, benchmark protocol, uncertainty, and rollback criterion.
+- **Alignment**: Lesson 5.2.
+- **Effort Estimate**: 4h.
 
 ### LAB C — Quantized Artifact: Memory, Quality, and Kernel Reality
 
-- **Objective:** produce at least two quantized configurations that differ in method or granularity and evaluate them against the same baseline.
-- **Pre-registration:** declare acceptable task-quality loss, memory target, and practically important performance effect before running tests.
-- **Measurements:** actual file and tensor bytes, scale/metadata bytes, peak/steady device memory, selected kernels, conversion/dequant time, numerical error, application-quality suite, TTFT, TPOT, throughput, and SLO-goodput.
-- **Break/falsify:** evaluate calibration-domain shift, outlier prompts, small and large batches, short decode and long prefill, and a shape that triggers fallback. Falsify any claim that nominal bit width predicts proportional latency.
-- **Required artifact:** complete quantization manifest, calibration provenance, quality confidence intervals or justified uncertainty method, profiler trace, and deployment compatibility table.
-- **Effort:** 4h.
+- **Objective**: Produce at least two quantized configurations that differ in method or granularity and evaluate them against the same baseline.
+- **Pre-Registered Hypothesis**: Nominal bit reduction will overpredict at least one of measured memory or serving improvement after metadata, kernels, and quality constraints are included.
+- **Independent Variables**: Method, bit width, granularity, calibration data, batch/load, prompt/output regime, and supported/fallback shape.
+- **Dependent Variables**: File/tensor/metadata bytes, peak/steady memory, selected kernels, conversion time, numerical error, application quality, TTFT, TPOT, throughput, and SLO-goodput.
+- **Break & Falsify**: Evaluate calibration shift, outlier prompts, small/large batches, short decode/long prefill, and a fallback shape.
+- **Required Artifact**: Complete quantization manifest, calibration provenance, quality uncertainty, profiler trace, and compatibility table.
+- **Alignment**: Lessons 5.3–5.4.
+- **Effort Estimate**: 4h.
 
 ### LAB D — Speculative Decoding Reward/Cost Surface
 
-- **Objective:** implement or instrument target-only and one speculative path, then measure full cycle reward/cost across proposal lengths and workloads.
-- **Independent variables:** proposal length, draft family/size, prompt domain, sampling settings, output length, batch/concurrency, and scheduler load.
-- **Measurements:** proposed and committed tokens, first rejection, draft time, verification time, bookkeeping/synchronization, target calls, memory, client-visible token-event timing, throughput, and goodput.
-- **Break/falsify:** use a low-acceptance domain, an expensive draft, and high target batching. Locate regions where speculation loses and explain them using the complete cost ledger, not acceptance alone.
-- **Required artifact:** cycle-level records, ratio-of-means calculation with assumptions, output-distribution or declared quality check, and an adaptive enable/disable policy supported by measurements.
-- **Effort:** 4h.
+- **Objective**: Implement or instrument target-only and one speculative path, then measure full cycle reward/cost across proposal lengths and workloads.
+- **Pre-Registered Hypothesis**: Speculation will improve the declared objective only where committed reward amortizes draft, verification, bookkeeping, and memory/concurrency cost.
+- **Independent Variables**: Proposal length, draft family/size, prompt domain, sampling, output length, batch/concurrency, and scheduler load.
+- **Dependent Variables**: Proposed/committed tokens, first rejection, component time, target calls, memory, client token-event timing, throughput, and goodput.
+- **Break & Falsify**: Use a low-acceptance domain, expensive draft, and high target batching; locate where speculation loses using the full ledger.
+- **Required Artifact**: Cycle records, ratio-of-means calculation, equivalence/quality check, and measured enable/disable policy.
+- **Alignment**: Lessons 5.5–5.7.
+- **Effort Estimate**: 4h.
 
 ## 07 Break / Incident Scenarios
 
-### Incident 05.1 — The “Optimized” Release Loses Goodput
+### Incident 05.1: The “Optimized” Release Loses Goodput
 
 A release simultaneously enables weight-only INT4, compiler fusion, and speculative decoding. Offline model memory falls and a decode microbenchmark improves, yet loaded production shows higher P99 TTFT, intermittent ITL stalls, more out-of-memory restarts, and lower SLO-goodput. Some prompt domains also show a small but disputed quality change.
 
@@ -405,7 +490,8 @@ The incident deliberately does not identify one root cause. The learner must:
 3. **Design discriminating experiments:** reproduce a pinned workload and use a factorial toggle matrix for INT4, fusion, and speculation. Preserve model/runtime/configuration except the declared factor and include interaction terms.
 4. **Rank explanations:** use lead-lag timing and ablation effect sizes. Do not infer causality from occupancy, acceptance, or allocation alone.
 5. **Intervene:** roll back or gate only the unsupported mechanism, constrain shapes/domains, or reserve memory based on evidence.
-6. **Remeasure:** repeat the same correctness, quality, latency, throughput, memory, and goodput protocol; define pass/fail and automatic rollback thresholds before redeployment.
+6. **Separate mitigation and prevention:** define immediate rollback/gating independently from the long-term artifact, capacity, or release-process correction.
+7. **Remeasure:** repeat the same correctness, quality, latency, throughput, memory, and goodput protocol; define pass/fail and automatic rollback thresholds before redeployment.
 
 ---
 
@@ -459,6 +545,8 @@ The reference trace uses FlashAttention commit `e9cf2c1651d2303191eb40a739a3c135
 
 ## 11 Exit Criteria & Module Wrap-Up
 
+### Exit Criteria
+
 A learner passes when they can:
 
 1. explain how IO-aware attention changes traffic while preserving dense-attention semantics within numerical tolerance;
@@ -470,7 +558,9 @@ A learner passes when they can:
 7. trace a current production source path at a pinned revision;
 8. diagnose an interacting optimization regression and defend a rollback with remeasurement.
 
-**Final mental model:** inference optimization is constrained resource transformation. It changes bytes, operations, launch structure, precision, or serial target calls, then hands a new workload to the rest of the system. Validate semantics and quality first; measure the transformed bottleneck at the end-to-end boundary; retain the optimization only where its full cost ledger improves the declared objective.
+### Module Wrap-Up (Final Mental Model Reconstruction)
+
+Inference optimization is constrained resource transformation. It changes bytes, operations, launch structure, precision, or serial target calls, then hands a new workload to the rest of the system. Validate semantics and quality first; measure the transformed bottleneck at the end-to-end boundary; retain the optimization only where its full cost ledger improves the declared objective.
 
 ## 12 Competency Targets
 
