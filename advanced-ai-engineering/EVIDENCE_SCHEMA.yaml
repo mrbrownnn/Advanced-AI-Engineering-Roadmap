@@ -1,0 +1,130 @@
+$schema: "http://json-schema.org/draft-07/schema#"
+title: Evidence Registry Schema
+type: object
+required: [module, registry_version, claims]
+properties:
+  module:
+    type: string
+  registry_version:
+    type: string
+  previous_version:
+    type: string
+  research_cutoff:
+    type: string
+  change_reason:
+    type: string
+  changed_claims:
+    type: array
+    items: { type: string }
+  out_of_scope_candidates:
+    type: array
+    items: { type: string }
+  claims:
+    type: array
+    items:
+      type: object
+      required: [id, claim, provenance, domain, concepts, confidence]
+      properties:
+        id: { type: string }
+        claim: { type: string }
+        provenance:
+          type: string
+          enum: [VERIFIED_FACT, DERIVED, EXERCISE_ASSUMPTION, HYPOTHESIS, TODO_VERIFY]
+        domain: { type: string }
+        concepts:
+          type: array
+          items: { type: string }
+        confidence:
+          type: string
+          enum: [high, medium, low]
+        evidence:
+          type: array
+          items:
+            type: object
+            required: [source_type, tier]
+            properties:
+              source_type:
+                type: string
+                enum: [paper, official_docs, source_code, specification, official_blog]
+              tier:
+                type: integer
+                enum: [1, 2, 3, 4]
+              title: { type: string }
+              authors: { type: string }
+              year: { type: string }
+              url: { type: string }
+              version: { type: string }
+              repository: { type: string }
+              commit: { type: string }
+              verification_date: { type: string }
+              file: { type: string }
+              symbol: { type: string }
+              entry_point: { type: string }
+              execution_path: { type: string }
+              section: { type: string }
+              figure: { type: string }
+              table: { type: string }
+              accessed_at: { type: string }
+        assumptions:
+          type: array
+          items: { type: string }
+        derivation: { type: string }
+        hypothesis:
+          type: object
+          properties:
+            prediction: { type: string }
+            measurement_target: { type: string }
+            falsifying_observation: { type: string }
+          required: [prediction, measurement_target, falsifying_observation]
+        numeric_metadata:
+          type: object
+          properties:
+            numeric_type:
+              type: string
+              enum: [analytical_bound, predicted_behavior, measured_behavior]
+            workload: { type: string }
+            hardware: { type: string }
+            model: { type: string }
+            configuration: { type: string }
+            metric_definition: { type: string }
+            measurement_method: { type: string }
+        limitations: { type: array, items: { type: string } }
+        applicability: { type: string }
+        contradicts: { type: array, items: { type: string } }
+        related_claims: { type: array, items: { type: string } }
+        curriculum_usage:
+          type: object
+          properties:
+            lessons: { type: array, items: { type: string } }
+            labs: { type: array, items: { type: string } }
+            assessments: { type: array, items: { type: string } }
+      allOf:
+        - if:
+            properties:
+              provenance: { const: VERIFIED_FACT }
+          then:
+            properties:
+              evidence:
+                type: array
+                minItems: 1
+                items:
+                  properties:
+                    tier: { enum: [1, 2] }
+        - if:
+            properties:
+              provenance: { const: DERIVED }
+          then:
+            required: [assumptions, derivation]
+            properties:
+              assumptions: { type: array, minItems: 1 }
+        - if:
+            properties:
+              provenance: { const: EXERCISE_ASSUMPTION }
+          then:
+            properties:
+              claim: { pattern: ".*" } # Must be represented hypothetically in text
+        - if:
+            properties:
+              provenance: { const: HYPOTHESIS }
+          then:
+            required: [hypothesis]

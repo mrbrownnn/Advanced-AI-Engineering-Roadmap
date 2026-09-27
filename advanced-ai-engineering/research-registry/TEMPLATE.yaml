@@ -1,0 +1,59 @@
+# Copy to <module-name>.yaml
+# NOTE: EVIDENCE_SCHEMA.yaml is the authoritative JSON schema defining validity. This is an empty instance.
+module: ""
+registry_version: ""
+previous_version: ""
+research_cutoff: ""
+change_reason: ""
+
+changed_claims: []
+out_of_scope_candidates: []
+
+claims:
+  - id: CLM-001
+    claim: ""
+    provenance: "VERIFIED_FACT | DERIVED | EXERCISE_ASSUMPTION | HYPOTHESIS | TODO_VERIFY"
+    domain: ""
+    concepts: []
+    confidence: "high | medium | low"
+    evidence:
+      - source_type: "paper | official_docs | source_code | specification | official_blog"
+        tier: 1 # Must be 1 or 2 for VERIFIED_FACT
+        title: ""
+        authors: ""
+        year: ""
+        url: ""
+        version: ""
+        repository: ""
+        commit: ""
+        verification_date: ""
+        file: ""
+        symbol: ""
+        entry_point: ""
+        execution_path: ""
+        section: ""
+        figure: ""
+        table: ""
+        accessed_at: ""
+    assumptions: []
+    derivation: ""
+    hypothesis:
+      prediction: ""
+      measurement_target: ""
+      falsifying_observation: ""
+    numeric_metadata:
+      numeric_type: "analytical_bound | predicted_behavior | measured_behavior"
+      workload: ""
+      hardware: ""
+      model: ""
+      configuration: ""
+      metric_definition: ""
+      measurement_method: ""
+    limitations: []
+    applicability: ""
+    contradicts: []
+    related_claims: []
+    curriculum_usage:
+      lessons: []
+      labs: []
+      assessments: []
