@@ -1,0 +1,16 @@
+status: "PASS | CONDITIONAL_PASS | FAIL"
+
+issues:
+  - id: QA-001
+    severity: "BLOCKER | MAJOR | MINOR"
+    
+    # Reviewer reports defects only. Reviewer NEVER edits curriculum.
+    failure_category: "static_validation_failure | semantic_technical_failure | provenance_failure | pedagogical_failure | traceability_failure"
+    
+    type: "UNSUPPORTED_CLAIM | SOURCE_NOT_VERIFIED | NUMERIC_INCONSISTENCY | UNIT_ERROR | UNIVERSAL_CLAIM | POLICY_AS_INVARIANT | IMPLEMENTATION_AS_DEFINITION | MISSING_FIRST_OCCURRENCE | ASSESSED_NOT_TAUGHT | TAUGHT_NOT_PRACTICED | FALSE_ASSESSMENT_COVERAGE | DEPTH_CONTRACT_VIOLATION | SOLUTION_LEAKAGE | ROOT_CAUSE_LEAKAGE | EFFORT_INCONSISTENCY | CROSS_MODULE_DUPLICATION | OTHER"
+    
+    location: ""
+    description: ""
+    violated_rule: ""
+    evidence_ids: []
+    required_fix: ""
