@@ -25,8 +25,11 @@ This module owns the observe–decide–act loop, tool and observation contracts
 
 **Research cutoff:** 2026-09-26.
 
-- **Engineering problem:** maximize verified task utility while bounding invalid effects, policy violations, latency, tokens, calls, and cost.
-- **Evidence rule:** label source observations (**O**), explicit derivations (**D**), and telemetry-dependent hypotheses (**H**). Model claims about success, failure, or tool completion are not execution evidence.
+**Module Orientation**
+- **Engineering Problem**: Maximize verified task utility while bounding invalid effects, policy violations, latency, tokens, calls, and cost.
+- **What You Will Do**: Implement and instrument a bounded controller, define tool and observation contracts, inject ambiguous effects and recovery failures, compare progress and reflection mechanisms, trace a pinned LangGraph path, and defend a governed operational-agent design.
+- **Environment**: Python 3.10+ for controller and fault-injection harnesses. Sandboxed mock tools and an append-only trajectory store are required; external side effects are optional and must remain disposable or simulated.
+- **Evidence Rule**: Label source observations (**O**), explicit derivations (**D**), and telemetry-dependent hypotheses (**H**). Model claims about success, failure, or tool completion are not execution evidence.
 
 ## 01 Baseline Assumptions
 
@@ -47,10 +50,30 @@ depth_contract:
   implementation: REQUIRED
   source_code: REQUIRED
   instrumentation: REQUIRED
+  experimental: REQUIRED
+  statistical: SELECTIVE
+  production_reasoning: REQUIRED
+  failure_analysis: REQUIRED
   falsification: REQUIRED
+  security: SELECTIVE
+  economics: SELECTIVE
+  architecture_tradeoff: REQUIRED
+  research_connection: SELECTIVE
+
+estimated_effort:
+  instruction: 4h
+  guided_practice: 3h
+  labs: 12h
+  assessment: 3h
+  source_trace: 2h
+  total: 24h
 ```
 
 The learner must be able to define a loop as an explicit state machine; design typed tool and observation contracts; separate proposal from authorization; enforce independent resource and semantic stops; classify failures before retrying; detect no-progress and oscillation without blocking legitimate iteration; evaluate reflection against grounded feedback; inject tool anomalies; and diagnose complete trajectories rather than final answers alone.
+
+---
+
+### LAYER 1: KNOWLEDGE / INSTRUCTIONAL LAYER
 
 ## 03 Knowledge Map
 
@@ -87,6 +110,15 @@ Keep these distinctions explicit:
 
 ### Lesson 12.1 — Model the Loop as a Bounded Controller
 
+**Engineering Question:**
+Which state and decisions must remain controller-owned so that an agent episode is bounded, inspectable, and replayable?
+
+**Concepts & Definitions:**
+- **Episode**: one bounded attempt to achieve a declared goal.
+- **Controller state**: typed state owned by deterministic orchestration rather than model prose.
+- **Terminal reason**: verified success, explicit failure, abstention, escalation, cancellation, or budget exhaustion.
+
+**Quantitative Model / Derivation:**
 Represent one episode as
 
 $$
@@ -96,14 +128,40 @@ $$
 
 This is exact bookkeeping for a declared state schema. It is not automatically a Markov model: if `s_t` omits relevant history, permissions, hidden environment state, or pending effects, it is not sufficient to predict the next transition.
 
+**Mechanism Explanation:**
 The controller—not the model—owns legal states, action validation, authorization, tool dispatch, budget accounting, terminal outcomes, and the trajectory ledger. The model may emit `call_tool`, `respond`, `abstain`, `ask`, or `escalate`; each is a proposal until the controller validates it.
 
 ReAct is a reference pattern for interleaving reasoning and environment actions on evaluated tasks. It does not prove that an unbounded reasoning/action transcript is safe or generally reliable.
 
-**Outcome:** implement a deterministic loop whose state, transitions, and terminal reason can be replayed and inspected.
+**Worked Example:**
+Trace `READY → PROPOSED → AUTHORIZED → DISPATCHED → OBSERVED → VERIFIED → SUCCEEDED` for a read-only lookup. Then replace the result with a timeout after dispatch: the legal next state is `EFFECT_UNKNOWN`, not automatic success or an assumption that nothing happened.
+
+**Knowledge Check:**
+1. Why is a model-produced “done” message only a proposal?
+2. Which omitted variables would make the displayed state insufficient for replay or diagnosis?
+
+**Guided Practice:**
+Write a transition table with allowed predecessor states, guards, emitted evidence, and terminal reasons. Include malformed proposal, denied authorization, cancellation, and unknown effect.
+
+**Feedback Contract:**
+- *Expected Evidence*: Every transition has one deterministic owner and a recorded guard; no terminal success is reachable from an unverified effect.
+- *Common Failure*: Treating the transcript as the complete state or allowing the model to choose its own authorization result.
+- *Diagnostic Hint*: Can two different external realities produce the same recorded state?
+- *Concept to Revisit*: Controller-Owned State.
+
+**Learning Outcome:**
+Implement a deterministic loop whose state, transitions, and terminal reason can be replayed and inspected.
+
+*(Effort: 35m instruction, 25m practice)*
+
+---
 
 ### Lesson 12.2 — Tool and Observation Contracts
 
+**Engineering Question:**
+How can a controller distinguish a syntactically valid call, an authorized execution, and a verified external effect?
+
+**Concepts & Definitions:**
 A production tool contract includes:
 
 - stable name and version, typed arguments, validation, and error schema;
@@ -112,14 +170,50 @@ A production tool contract includes:
 - deadline, cancellation, retry and idempotency semantics;
 - structured result, effect status, postcondition evidence, and provenance.
 
+**Mechanism Explanation:**
 Natural-language descriptions help model selection but are not an execution contract. Toolformer is evidence that a model can learn decisions about whether, when, and how to invoke scoped APIs; it does not supply runtime permission, transaction, timeout, or retry policy.
 
 Every result becomes an observation envelope containing call ID, tool/version, canonical arguments, timestamps, raw and parsed output, validation result, error class, effect state, truncation, and lineage. Empty, truncated, malformed, stale, or adversarial content must not be observationally equivalent to success.
 
-**Outcome:** reject malformed and unauthorized calls before execution and preserve enough evidence to distinguish output text from real effects.
+**Quantitative Model / Derivation:**
+For validation predicates $V_{schema}$, $V_{policy}$, and $V_{pre}$, dispatch is permitted only when
+$$D=V_{schema}\land V_{policy}\land V_{pre}.$$
+This is an exact controller rule for the declared contract; it says nothing about whether the eventual external effect is correct.
+
+**Worked Example:**
+A proposal requests `transfer(amount=100, account=B)`. The schema passes, but the caller lacks account scope, so policy validation rejects before dispatch. A second authorized attempt times out after dispatch; the envelope records `effect=unknown` and requires a postcondition query before retry.
+
+**Knowledge Check:**
+1. Why does valid JSON not imply authorized execution?
+2. Which envelope field distinguishes “no response” from “no effect”?
+
+**Independent Practice:**
+Define one read-only, one idempotent-write, and one irreversible tool contract. Specify validation, authority, timeout, cancellation, effect evidence, and retry semantics.
+
+**Feedback Contract:**
+- *Expected Evidence*: Contract validation precedes dispatch; the observation preserves raw data, parsed data, effect certainty, and postcondition evidence.
+- *Common Failure*: Trusting a success string or assuming a timeout means the write did not commit.
+- *Diagnostic Hint*: What independent evidence names the external effect?
+- *Concept to Revisit*: Proposal–Authorization–Effect Separation.
+
+**Learning Outcome:**
+Reject malformed and unauthorized calls before execution and preserve enough evidence to distinguish output text from real effects.
+
+*(Effort: 35m instruction, 25m practice)*
+
+---
 
 ### Lesson 12.3 — Budgets, Stops, Retry, and Replanning
 
+**Engineering Question:**
+How should an agent stop or recover when different resources, deadlines, and effect-certainty states conflict?
+
+**Concepts & Definitions:**
+- **Hard budget**: independently enforced maximum consumption of a named resource.
+- **Semantic stop**: a terminal predicate based on verified task state rather than step count alone.
+- **Unknown effect**: dispatch occurred but available evidence cannot establish whether the external commit happened.
+
+**Quantitative Model / Derivation:**
 Let the hard budget vector be
 
 $$
@@ -128,6 +222,7 @@ $$
 
 Continue only while every consumed resource remains inside policy and no semantic terminal predicate has fired. A step cap bounds one dimension; it neither proves success nor prevents a single expensive or harmful step. Semantic outcomes include verified success, explicit failure, safe abstention, escalation, cancellation, and unknown effect.
 
+**Mechanism Explanation:**
 Classify a failed call before choosing a response:
 
 | Failure class | Typical next decision |
@@ -143,22 +238,77 @@ Classify a failed call before choosing a response:
 
 ToolMaze's 2026 benchmark crosses explicit/implicit with transient/permanent perturbations and reports that anomaly recovery remains distinct from happy-path execution in its setup. Treat it as a frontier failure-injection design, not a universal production estimate.
 
-**Outcome:** map error class and effect certainty to retry, repair, verify, replan, alternative, escalation, or stop.
+**Worked Example:**
+Assume a root deadline of 10 s, a maximum of three tool attempts, and observed attempt durations of 2 s, 3 s, and 4 s with 1 s total backoff. The sequential path consumes the full 10 s; a fourth attempt is illegal even if its local SDK timeout would permit it. If attempt two has unknown effect, verification precedes attempt three.
+
+**Knowledge Check:**
+1. Why is retrying a deterministic authorization failure unchanged futile?
+2. Why must nested SDK and controller retries share one root budget?
+
+**Guided Practice:**
+Map each failure-table row to `repair`, `retry`, `verify`, `replan`, `alternative`, `escalate`, or `stop`, including the evidence required to leave `effect=unknown`.
+
+**Feedback Contract:**
+- *Expected Evidence*: The decision uses error class, effect certainty, remaining deadline, and all budget dimensions.
+- *Common Failure*: Resetting deadline or attempt count at each layer.
+- *Diagnostic Hint*: Is the next action reducing uncertainty or merely repeating work?
+- *Concept to Revisit*: Root Budget and Effect Certainty.
+
+**Learning Outcome:**
+Map error class and effect certainty to retry, repair, verify, replan, alternative, escalation, or stop.
+
+*(Effort: 40m instruction, 25m practice)*
+
+---
 
 ### Lesson 12.4 — Progress, Cycles, and Reflection
 
+**Engineering Question:**
+How can a controller stop genuine no-progress without terminating legitimate polling or iterative refinement?
+
+**Concepts & Definitions:**
 Step count is not progress. Instrument verified subgoals, state hashes/deltas, action signatures, repeated error classes, tool-result novelty, plan similarity, and remaining budget. Repeated actions, alternating states, or nearly identical plans are useful stall signals, but legitimate polling and iterative refinement can look similar.
 
+**Mechanism Explanation:**
 Treat online stall detection as a hypothesis. Compare a preregistered detector with a step-cap baseline and report early-stop savings, false stops, recovered success, effect errors, and cost. A detector that merely stops hard tasks sooner may reduce spend while destroying utility.
 
 Reflexion is a reference mechanism that stores verbal feedback for later trials. Reflection is not independent evidence: a fluent explanation can preserve a wrong diagnosis. Admit a reflection into state or memory only with its source, outcome, confidence, validity window, and evidence; compare self-reflection with no-reflection, external-feedback, and oracle-feedback baselines.
 
-**Outcome:** detect genuine no-progress and use feedback without turning self-critique into truth.
+**Quantitative Model / Trade-off Comparison:**
+For a detector, report false-stop rate among episodes that the baseline later solves, saved calls among genuinely stalled episodes, and net verified utility after cost. No single count is sufficient because aggressive stopping can improve cost while reducing success.
+
+**Worked Example:**
+Compare two traces with action signature `poll(job-7)` repeated four times. In one, the observation version and job progress advance; in the other, the same stale observation repeats. A repetition count alone flags both, while state-delta evidence separates them.
+
+**Knowledge Check:**
+1. What evidence distinguishes an oscillation from a valid two-phase protocol?
+2. Why is self-reflection not an independent oracle?
+
+**Guided Practice:**
+Pre-register a stall detector and compare step-cap, detector-only, self-reflection, external-feedback, and oracle-feedback conditions on paired episodes.
+
+**Feedback Contract:**
+- *Expected Evidence*: Report success, false stops, saved work, effect errors, and cost by task/failure slice.
+- *Common Failure*: Calling every repeated action a loop or treating reflective prose as verified state.
+- *Diagnostic Hint*: Did any externally grounded predicate improve?
+- *Concept to Revisit*: Verified Progress.
+
+**Learning Outcome:**
+Detect genuine no-progress and use feedback without turning self-critique into truth.
+
+*(Effort: 35m instruction, 30m practice)*
+
+---
 
 ### Lesson 12.5 — Authority and Effect Verification
 
+**Engineering Question:**
+Where must authorization and postcondition checks sit so that model text cannot widen authority or fabricate completion?
+
+**Concepts & Definitions:**
 The model is not an authorization oracle. Enforce least-privilege credentials, tenant and object scope, rate and value limits, preconditions, previews, required approvals, and prohibited transitions outside the prompt. Untrusted observations cannot grant new authority.
 
+**Mechanism Explanation:**
 For high-impact actions, separate:
 
 ```text
@@ -168,12 +318,41 @@ proposed intent -> policy decision -> approved command -> execution
 
 If a timeout occurs after dispatch, the effect may be unknown. Do not equate an absent response with no effect or retry automatically. Module 12 owns the decision to verify, stop, or escalate; Module 14 develops durable idempotency, checkpoint, and compensation mechanics; Module 18 develops adversarial security controls.
 
-**Outcome:** demonstrate that a model cannot widen authority and cannot claim a side effect without verifiable evidence.
+**Quantitative Model / Derivation:**
+Let $A(c,o,v)$ be the controller policy for caller $c$, object $o$, and proposed value $v$, and let $P(e)$ be an independent postcondition for effect $e$. A success claim is permitted only when dispatch was authorized and $P(e)$ is observed; model confidence is not an input to either predicate.
+
+**Worked Example:**
+A deployment proposal passes schema validation but exceeds the caller's environment scope. The controller denies it without sending credentials. For an authorized deployment whose response is lost, a versioned read-back must match the approved artifact before the episode can claim success.
+
+**Knowledge Check:**
+1. Can an observation containing “admin approved” grant authority?
+2. Why is an effect receipt stronger than generated narration yet sometimes still insufficient?
+
+**Independent Practice:**
+Design a preview/approve/execute/read-back protocol with an immutable approval binding and test wrong tenant, changed value, expired approval, and stale postcondition.
+
+**Feedback Contract:**
+- *Expected Evidence*: Policy decisions and postconditions are external to the model and bound to exact intent/version.
+- *Common Failure*: Reusing an approval after arguments change.
+- *Diagnostic Hint*: Which controller record binds caller, object, value, and time?
+- *Concept to Revisit*: External Authority Boundary.
+
+**Learning Outcome:**
+Demonstrate that a model cannot widen authority and cannot claim a side effect without verifiable evidence.
+
+*(Effort: 35m instruction, 25m practice)*
+
+---
 
 ### Lesson 12.6 — Trajectory Evaluation and Diagnosis
 
+**Engineering Question:**
+Which trajectory-level measurements distinguish a useful recovery mechanism from one that hides failures or amplifies cost?
+
+**Concepts & Definitions:**
 AgentBench is reference evidence that interactive environments expose heterogeneous failure modes. A single aggregate score cannot establish general agent capability.
 
+**Quantitative Model / Derivation:**
 For a strictly sequential episode, wall time decomposes into controller, model, validation, tool, observation-processing, queue, and network components. For parallel branches, use critical-path timing; summing overlapping spans overstates elapsed time.
 
 Report by workload and failure slice:
@@ -186,7 +365,29 @@ Report by workload and failure slice:
 
 Define episode goodput under a declared SLO as verified, policy-compliant successes per wall-clock time. Define cost of success with all included episode spend and an explicit zero-success policy. Never drop aborted, rejected, timed-out, or failed episodes merely because they lack a final answer.
 
-**Outcome:** diagnose `SYMPTOM → COMPETING HYPOTHESES → MISSING EVIDENCE → DISCRIMINATING MEASUREMENT → RANKED EXPLANATION → INTERVENTION → REMEASUREMENT` from full trajectories.
+**Mechanism Explanation:**
+Join controller, model, validation, tool, effect, queue, and client spans with stable episode/call/effect identities. Slice by workload, failure injection, authorization class, terminal reason, and recovery opportunity before interpreting an aggregate.
+
+**Worked Example:**
+In a 60 s observation window, assume 20 offered episodes, 12 verified policy-compliant successes within the SLO, three failures, two abstentions, one rejection, and two unfinished episodes. Declared episode goodput is $12/60=0.2$ successful episodes/s; it is not $12/15$ and unfinished work remains visible.
+
+**Knowledge Check:**
+1. Why can final-answer accuracy hide duplicate effects?
+2. When does summing branch latencies overstate end-to-end time?
+
+**Guided Practice:**
+Build a trajectory report that preserves all terminal classes and compare a retry policy on paired injected-failure episodes.
+
+**Feedback Contract:**
+- *Expected Evidence*: Offered denominator, terminal reason, effect correctness, opportunity-to-recover, critical-path latency, all-attempt tokens/cost, and confidence procedure are explicit.
+- *Common Failure*: Reporting only completed episodes or only the final successful attempt.
+- *Diagnostic Hint*: Which missing class would make the policy look better?
+- *Concept to Revisit*: Trajectory-Level Goodput.
+
+**Learning Outcome:**
+Diagnose `SYMPTOM → COMPETING HYPOTHESES → MISSING EVIDENCE → DISCRIMINATING MEASUREMENT → RANKED EXPLANATION → INTERVENTION → REMEASUREMENT` from full trajectories.
+
+*(Effort: 40m instruction, 30m practice)*
 
 ## 05 Literature & Production Source Map
 
@@ -214,62 +415,97 @@ Define episode goodput under a declared SLO as verified, policy-compliant succes
 - Entry path: compiled graph invocation/stream → model node → `AIMessage.tool_calls` → tool node → `ToolMessage` observations → model until no tool calls or another terminal path; Pregel stream checks a configurable recursion limit and raises `GraphRecursionError` when exhausted without a stop.
 - Scope: an implementation example. `create_react_agent` is explicitly deprecated in the pinned source in favor of `langchain.agents.create_agent`; the recursion limit is a guardrail, not a semantic-success verifier.
 
+### LAYER 2: ENGINEERING PRACTICE LAYER
+
 ## 06 Engineering Labs
 
 All labs follow `PREDICT → BUILD → MEASURE → EXPLAIN → BREAK → IMPROVE → FALSIFY`.
 
 ### LAB A — Deterministic Loop and Budget Guard
 
-- Implement explicit states, legal transitions, semantic terminal predicates, and budgets for steps, calls, tokens, time, cost, repetition, and errors.
-- Record a replayable trajectory and expose the terminal reason.
-- Break with endless tool calls, alternating plans, repeated identical actions, a single expensive step, false “done,” and legitimate polling.
-- Compare a step cap with progress/cycle detection; report false stops and recovered successes.
+- **Objective**: Implement explicit states, legal transitions, semantic terminal predicates, and independent budgets; record a replayable trajectory and terminal reason.
+- **Pre-Registered Hypothesis**: A state-delta/cycle detector will reduce calls on injected no-progress episodes relative to a step-cap baseline without exceeding a declared false-stop tolerance on solvable episodes.
+- **Independent Variables**: Stop policy, task topology, progress signal, polling behavior, and budget vector.
+- **Dependent Variables**: Verified success, false-stop rate, calls/tokens/time/cost, terminal reason, and replay agreement.
+- **Break & Falsify**: Inject endless calls, alternating plans, identical actions, one expensive step, false `done`, and legitimate polling. A detector that saves work only by stopping recoverable episodes falsifies the claimed benefit.
+- **Alignment**: Lessons 12.1, 12.3, and 12.4.
+- **Effort Estimate**: 2.5h implementation, 0.5h analysis (3h total).
 
 ### LAB B — Tool Contract and Observation Chaos
 
-- Define versioned tools spanning read-only, idempotent write, reversible write, and irreversible effects.
-- Inject malformed arguments, permission denial, rate limits, timeout-before-dispatch, timeout-after-dispatch, partial response, corrupted success payload, truncation, stale results, and unknown effect.
-- Verify that authority never comes from model text and that the observation envelope preserves effect uncertainty.
-- Artifact: contract schemas, transition table, chaos matrix, and effect audit.
+- **Objective**: Define versioned read-only, idempotent-write, reversible-write, and irreversible tool contracts with typed observation envelopes.
+- **Pre-Registered Hypothesis**: Contract-first dispatch will block malformed/unauthorized calls and preserve unknown-effect states without converting them into false success.
+- **Independent Variables**: Effect class, authorization, response integrity, dispatch timing, timeout, and postcondition availability.
+- **Dependent Variables**: Pre-dispatch rejection, effect-state classification, unsafe retries, duplicate effects, and evidence completeness.
+- **Break & Falsify**: Inject malformed arguments, permission denial, rate limits, timeout before/after dispatch, partial/corrupt/truncated/stale results, and unknown effects. Any unauthorized dispatch or unverified success falsifies the contract.
+- **Alignment**: Lessons 12.2 and 12.5.
+- **Effort Estimate**: 2.5h implementation, 0.5h analysis (3h total).
 
 ### LAB C — Recovery, Replanning, and Reflection
 
-- Implement bounded retry, argument repair, alternative-tool selection, replanning, postcondition verification, safe escalation, and reflection.
-- Cross explicit/implicit with transient/permanent failures and simple/complex tool topology.
-- Compare no recovery, blind retry, classified recovery, self-reflection, external feedback, and oracle feedback with paired episodes.
-- Falsify “more attempts help” and “reflection corrects errors.”
+- **Objective**: Implement classified retry, repair, verification, replanning, alternatives, escalation, and reflection.
+- **Pre-Registered Hypothesis**: Classified recovery will improve verified success per unit cost over blind retry on recoverable perturbations; self-reflection will not be assumed equivalent to external feedback.
+- **Independent Variables**: Failure explicitness/permanence, tool topology, recovery policy, and feedback source.
+- **Dependent Variables**: Verified recovery, unsafe effects, attempts, latency, cost, false success, and escalation.
+- **Break & Falsify**: Cross explicit/implicit with transient/permanent failures; compare no recovery, blind retry, classified recovery, self-reflection, external feedback, and oracle feedback. Include a workload where extra attempts reduce utility.
+- **Alignment**: Lessons 12.3–12.5.
+- **Effort Estimate**: 2.5h implementation, 0.5h analysis (3h total).
 
 ### LAB D — Trajectory Evaluation Under Load
 
-- Evaluate mixed task lengths, tool latencies, side-effect classes, concurrency, and injected failures.
-- Measure task/effect correctness, violations, intervention, recovery, steps/calls/tokens, latency distributions, cost, goodput, aborts, and unfinished episodes.
-- Separate model, controller, queue, validation, tool, and network spans; use critical paths for overlap.
-- Artifact: slice dashboard, oracle-stage replays, ranked incident diagnosis, canary and rollback policy.
+- **Objective**: Evaluate mixed task lengths, tool latencies, effect classes, concurrency, and injected failures from complete trajectories.
+- **Pre-Registered Hypothesis**: Full offered-episode accounting will expose a different recovery ranking than success-only final-answer scoring on at least one preregistered injected-failure slice.
+- **Independent Variables**: Concurrency, task length, tool latency, effect class, failure injection, and recovery policy.
+- **Dependent Variables**: Task/effect correctness, violations, intervention, recovery, calls/tokens, critical-path latency, cost, goodput, aborts, and unfinished episodes.
+- **Break & Falsify**: Remove failed attempts or sum overlapping spans and measure the induced ranking error; a workload with unchanged ranking limits the claim rather than invalidating the experiment.
+- **Alignment**: Lesson 12.6 and Incident 12.1.
+- **Effort Estimate**: 2.5h implementation, 0.5h analysis (3h total).
 
 ## 07 Break / Incident Scenarios
 
 ### Incident 12.1 — The Agent Repeats a High-Impact Action
 
-After a release, an agent calls a payment/message/deployment tool, times out, retries, alternates between “verify” and “execute,” consumes its budget, and finally reports success. Some external effects are duplicated; other episodes stopped before a recoverable tool became available.
+- **Incident Symptoms**: After a release, an agent calls a payment/message/deployment tool, times out, retries, alternates between `verify` and `execute`, exhausts its budget, and reports success. Some effects are duplicated while some recoverable episodes stop early.
+- **Diagnostic Protocol (Task)**:
+  1. *Formulate Competing Hypotheses*: Include timeout before dispatch, commit before lost acknowledgement, missing idempotency/effect receipt, malformed observation, authorization drift, deterministic error mislabeled transient, stale read-back, progress-detector error, model/planner regression, queue delay, and unavailable alternative path.
+  2. *Rank Initial Plausibility*: Use the duplicate-effect audit and timeout location without treating either as conclusive.
+  3. *Identify Missing Evidence*: Recover call/effect IDs, canonical arguments, authorization decisions, dispatch/receipt times, raw and parsed outputs, postconditions, state deltas, budgets, retries, versions, spans, terminal reasons, and external audit records.
+  4. *Design Discriminating Tests*: Reconcile each effect ID before replay, disable automatic retry, and replay captured observations through old/new controllers. State which result falsifies each leading hypothesis.
+  5. *Execute Causal Diagnosis*: Reconstruct complete trajectories and rank the earliest supported failing boundary, including interacting mechanisms.
+  6. *Prescribe Mitigation and Prevention*: Freeze retries for unknown effects, reconcile affected operations, then add atomic effect identity, postcondition verification, classified recovery, and safe rollout gates as applicable.
+  7. *Remeasure*: Predeclare acceptable duplicate/unknown effects, verified success, false stops, latency, and cost; repeat the same fault injections after the change.
 
-Competing explanations include a client timeout before dispatch, server timeout after commit, missing idempotency/effect receipt, malformed observation, authorization drift, deterministic application error mislabeled transient, stale read-after-write, progress-detector false positive/negative, model/planner regression, queue delay, or an unavailable alternative path.
-
-Collect call IDs and idempotency keys where supported, dispatch/receipt timestamps, canonical arguments, authorization decisions, tool/version, raw and parsed outputs, effect states, postcondition reads, state deltas, action signatures, budgets, retries/backoff, model/prompt versions, spans, terminal reason, and external audit records. Reconstruct the trajectory; determine effect certainty before replay; patch the earliest failing boundary; remeasure duplicate effects, verified success, false stops, latency, and cost.
+### LAYER 3: MASTERY / ASSESSMENT LAYER
 
 ## 08 Mastery Assessment
 
-Design an agent controller for a multi-tool operational assistant that can read state, propose a plan, perform governed writes, recover from changing tool behavior, and stop safely. Deliver the state and transition schemas; tool/observation contracts; authority and approval policy; budget vector and semantic stops; failure-to-recovery table; stall detector; reflection experiment; anomaly matrix; trajectory metrics; current source trace; load test; release/kill/rollback plan; and a diagnosis of Incident 12.1.
+### Enterprise Transfer Problem: Governed Operations Assistant
+
+Design an agent controller that reads operational state, proposes changes, performs approved writes, tolerates changing tool behavior, and stops safely under a shared latency/cost budget. The workload includes read-only investigation, reversible configuration edits, an irreversible notification, concurrent episodes, and injected unknown-effect timeouts.
+
+**Required Deliverables**:
+1. State/transition schemas and explicit owners for proposal, authorization, execution, effect, observation, progress, and termination.
+2. Versioned tool/observation contracts with effect classes, deadlines, cancellation, and postconditions.
+3. Authority/approval policy plus immutable binding from preview to approved command.
+4. Budget vector, semantic stops, and failure-to-recovery decision table.
+5. Stall/cycle detector and paired reflection experiment with false-stop analysis.
+6. Anomaly matrix, complete trajectory metrics, load/fault results, and source trace.
+7. Release, kill, rollback, and reconciliation plan.
+8. Evidence-backed diagnosis and remediation of Incident 12.1.
 
 ## 09 Required Evidence & Rubric
 
-- **Control model:** state, legal transitions, owner of each decision, and terminal reasons are explicit.
-- **Contracts:** schemas, versions, side-effect class, authority, timeouts, errors, retry safety, and completion evidence are machine-checkable.
-- **Bounds:** steps, calls, tokens, time, cost, repetition, and errors are independently enforced.
-- **Recovery:** failure and effect certainty determine retry, repair, verification, replan, alternative, escalation, or stop.
-- **Progress:** stall/cycle signals are evaluated for both savings and false termination.
-- **Authority:** the model cannot expand credentials, bypass approval, or convert untrusted output into permission.
-- **Evaluation:** success, effects, violations, intervention, failures, unfinished episodes, latency, tokens, and cost remain visible by slice.
-- **Diagnosis:** competing hypotheses are discriminated with trajectories and external effect evidence before intervention.
+### Required Artifact: Production Source Trace
+
+Submit a pinned trace of a production agent-loop implementation. For the reference LangGraph revision, map compiled invocation through model and tool nodes, observation return, stop behavior, and recursion-limit failure. Separate static source observation from controller requirements and note the inspected API's deprecation status.
+
+### Rubric Dimensions
+
+- **Control Model**: *Insufficient* relies on transcript/model intent. *Competent* defines legal states, transitions, owners, and terminal reasons. *Strong* proves replay/guard invariants under injected faults.
+- **Contracts and Authority**: *Insufficient* validates syntax only. *Competent* enforces typed contracts and external authorization. *Strong* demonstrates preview binding, unknown-effect handling, and independent postconditions.
+- **Bounds and Recovery**: *Insufficient* uses one step cap or retries every error. *Competent* enforces independent budgets and classified recovery. *Strong* measures attempt amplification, false recovery, and deadline propagation.
+- **Progress and Reflection**: *Insufficient* treats repetition or self-critique as truth. *Competent* evaluates grounded progress and reflection baselines. *Strong* quantifies false stops, saved work, and slice-dependent utility.
+- **Evaluation and Diagnosis**: *Insufficient* scores final answers only. *Competent* preserves complete trajectories and competing hypotheses. *Strong* uses discriminating tests, external effect evidence, and remeasurement.
 
 ## 10 Capability Traceability Matrix
 
@@ -283,9 +519,21 @@ Design an agent controller for a multi-tool operational assistant that can read 
 
 ## 11 Exit Criteria & Module Wrap-Up
 
-Pass requires the learner to keep proposal, authorization, execution, effect, observation, progress, and termination distinct; bound every episode across multiple resources; refuse blind retries after unknown effects; distinguish syntactic from semantic tool success; falsify progress and reflection mechanisms; trace a pinned runtime without universalizing it; and evaluate complete trajectories including harms, failures, abstentions, unfinished work, latency, and cost.
+### Exit Criteria
 
-**Final mental model:** an agent loop is a fallible, resource-bounded control system around a stochastic proposer. Reliability comes from typed transitions, external authority, observable effects, classified recovery, explicit stops, and trajectory-level falsification—not from letting the model continue until its prose sounds complete.
+A learner successfully completing Module 12 must be able to:
+1. Keep proposal, authorization, execution, effect, observation, progress, and termination distinct.
+2. Bound every episode across calls, tokens, time, cost, repetition, errors, and semantic stops.
+3. Refuse blind retry after unknown effects and prove completion with independent evidence.
+4. Falsify a progress detector and reflection mechanism without hiding false stops.
+5. Trace a pinned runtime without generalizing one framework into the agent definition.
+6. Evaluate complete offered trajectories including harms, failures, abstentions, unfinished work, latency, and cost.
+
+### Module Wrap-Up (Final Mental Model Reconstruction)
+
+- **The Core Invariant**: An agent loop is a fallible, resource-bounded control system around a stochastic proposer.
+- **The Control Path**: `state → proposal → validation/authorization → execution → observation/effect verification → progress decision → terminal state or next bounded step`.
+- Reliability comes from typed transitions, external authority, observable effects, classified recovery, explicit stops, and trajectory-level falsification—not from letting the model continue until its prose sounds complete.
 
 ## 12 Competency Targets
 
