@@ -6,13 +6,14 @@ Serving, caching, profiling, quantization, and distributed placement all depend 
 
 This module builds a mechanistic decoder-only model while refusing the common shortcut that every modern model is “basically Llama.” Llama-style pre-norm RMSNorm, RoPE, GQA, and SwiGLU form a useful current reference, not a universal definition. Sparse experts and latent-attention families extend the model and change the accounting.
 
-**Module orientation**
+**Module Orientation**
 
-- **Engineering problem**: Translate a model configuration into correct tensor shapes, equations, parameter counts, leading FLOP terms, numerical behavior, and downstream systems constraints.
-- **What you will do**: Implement a minimal decoder layer, prove its shape invariants, test causal isolation and RoPE, compare MHA/MQA/GQA, reconcile analytical counts with real parameters, profile deviations from the model, and trace a pinned Transformers Llama forward path.
-- **Research cutoff**: 2026-09-25. Current implementation claims are pinned to exact source revisions.
+- **Engineering Problem**: Translate a model configuration into correct tensor shapes, equations, parameter counts, leading FLOP terms, numerical behavior, and downstream systems constraints.
+- **What You Will Do**: Implement a minimal decoder layer, prove its shape invariants, test causal isolation and RoPE, compare MHA/MQA/GQA, reconcile analytical counts with real parameters, profile deviations from the model, and trace a pinned Transformers Llama forward path.
+- **Environment**: Python 3.10+ and PyTorch; a GPU is optional for profiler studies but not for shape, accounting, or invariant tests.
+- **Research Cutoff**: 2026-09-27. Current implementation claims remain pinned to the verified revision below.
 
-## 01 Prerequisites and Scope
+## 01 Baseline Assumptions
 
 Prerequisites: linear algebra, matrix multiplication, softmax, basic PyTorch, and Module 00 claim discipline.
 
@@ -57,7 +58,7 @@ estimated_effort:
 
 ### LAYER 1: KNOWLEDGE / INSTRUCTIONAL LAYER
 
-## 03 Core Mental Model
+## 03 Knowledge Map
 
 ```text
 token IDs [B,S]
@@ -88,7 +89,9 @@ A mismatch between these views is a diagnostic signal, not something to paper ov
 
 ### Lesson 1.1 — Decoder Block and Residual Stream
 
-**Engineering question:** How does information move from input tokens to logits through a pre-normalized decoder?
+**Engineering Question:** How does information move from input tokens to logits through a pre-normalized decoder?
+
+**Concepts & Definitions:** Token, sequence, feature, residual, normalization, attention, MLP, and vocabulary axes form the decoder's executable contract.
 
 Let input token IDs have shape $[B,S]$, model width $d$, and vocabulary size $V$. Embedding lookup produces
 
@@ -111,13 +114,25 @@ This is a reference architecture. Other decoders may use post-norm, parallel att
 - The causal dependency of position $i$ must not change when only tokens at positions $>i$ change.
 - Vocabulary projection and input embedding may be tied or independent; parameter counting must inspect configuration and actual tensors.
 
-**Guided practice:** Install hooks around every layer of a small model. Record shape, dtype, device, contiguity, min/max, finite count, and residual norm. Compare the trace with the equations before profiling speed.
+**Worked Example:** For $B=2$, $S=8$, and $d=64$, every standard residual add consumes logical tensors shaped $[2,8,64]$; an axis permutation can preserve element count while violating semantics.
+
+**Knowledge Check:** Which shapes must match at residual additions, and which perturbation tests causal isolation?
+
+**Guided Practice:** Install hooks around every layer of a small model. Record shape, dtype, device, contiguity, min/max, finite count, and residual norm. Compare the trace with the equations before profiling speed.
+
+**Feedback Contract:** Require a forward graph, named axes, residual boundaries, causal-invariance result, and first-divergence location.
+
+**Learning Outcome:** Reconstruct and instrument a decoder block as an executable tensor contract.
+
+*(Effort: 45m instruction, 25m practice)*
 
 ---
 
 ### Lesson 1.2 — Causal Attention and MHA/MQA/GQA Geometry
 
-**Engineering question:** Which axes are shared, and which remain per query head?
+**Engineering Question:** Which axes are shared, and which remain per query head?
+
+**Concepts & Definitions:** Query heads, KV heads, grouping, causal masks, and logical versus materialized repetition must be distinguished.
 
 For hidden states $X\in\mathbb{R}^{B\times S\times d}$, define query heads $H_q$, key/value heads $H_{kv}$, and head width $d_h$, with $d=H_qd_h$ for the standard case:
 
@@ -141,13 +156,25 @@ With cached prefixes, padding, packed sequences, sliding windows, or special att
 
 Fewer KV heads reduce K/V projection width and logical KV payload. They do not remove query heads, output projection work, softmax, or attention over context. A runtime can map groups without physically repeating K/V; a naive `repeat` may create avoidable memory traffic.
 
-**Break test:** Flip the mask orientation or permute head and sequence axes while preserving the element count. Random-output smoke tests may pass. A prefix-invariance test and comparison against a reference attention implementation should fail.
+**Worked Example:** With $H_q=32$ and $H_{kv}=8$, four query heads map to each KV head; this does not require physically repeating stored K/V.
+
+**Knowledge Check:** Which dimensions shrink under GQA, and why does attention over prior positions remain?
+
+**Guided Practice:** Flip the mask orientation or permute head and sequence axes while preserving the element count. A prefix-invariance test and reference comparison should fail.
+
+**Feedback Contract:** Show named axes, group mapping, mask semantics, parity tolerance, and a counterexample missed by a smoke test.
+
+**Learning Outcome:** Derive MHA/MQA/GQA geometry and detect mask or grouping corruption.
+
+*(Effort: 45m instruction, 25m practice)*
 
 ---
 
 ### Lesson 1.3 — Rotary Position Embedding
 
-**Engineering question:** How can a position transformation alter attention scores without adding a position vector to the residual stream?
+**Engineering Question:** How can a position transformation alter attention scores without adding a position vector to the residual stream?
+
+**Concepts & Definitions:** RoPE rotates paired query/key features using position-dependent angles before attention scoring.
 
 For each paired feature coordinate, RoPE applies a rotation at position $p$:
 
@@ -161,11 +188,25 @@ so the score can depend on relative displacement. Real models choose a frequency
 
 **Do not infer:** “RoPE supports unlimited context.” Mathematical rotations can be evaluated at new positions, but quality and numerical behavior beyond training length are empirical properties of the trained model and scaling scheme.
 
-**Guided practice:** Test norm preservation of rotated vectors, relative-shift behavior, dtype sensitivity at large positions, and parity with the pinned reference. Include an intentionally wrong pairing convention.
+**Worked Example:** Rotating $q$ and $k$ at the same position preserves their dot product under the stated orthogonal rotation; relative displacement changes the composed rotation.
+
+**Knowledge Check:** Why does norm preservation not prove extrapolation quality, and which pairing convention can break parity while preserving shape?
+
+**Guided Practice:** Test norm preservation of rotated vectors, relative-shift behavior, dtype sensitivity at large positions, and parity with the pinned reference. Include an intentionally wrong pairing convention.
+
+**Feedback Contract:** Report frequencies, coordinate pairing, position IDs, dtype/tolerance, and tested position range.
+
+**Learning Outcome:** Test RoPE mechanics without converting a mathematical identity into a quality guarantee.
+
+*(Effort: 40m instruction, 25m practice)*
 
 ---
 
 ### Lesson 1.4 — RMSNorm, SwiGLU, and Numerical Details
+
+**Engineering Question:** Which normalization, gating, accumulation, and casting contracts must match for numerical parity?
+
+**Concepts & Definitions:** RMS reduction axis, epsilon placement, accumulation dtype, gate/up branches, and residual order are separate correctness conditions.
 
 **RMSNorm** over the final feature axis:
 
@@ -188,11 +229,25 @@ Bias and orientation notation depend on the framework. In row-major PyTorch nota
 - applying normalization after rather than before the sublayer;
 - comparing outputs without aligning dtype and tolerance.
 
+**Worked Example:** On $[B,S,d]$, RMSNorm reduces over $d$. Reducing over $S$ can broadcast successfully while incorrectly coupling token positions.
+
+**Knowledge Check:** Where is epsilon applied, which axis is reduced, and why can accumulation dtype matter?
+
+**Guided Practice:** Inject a wrong reduction axis, epsilon placement, and low-precision square path into transparent references.
+
+**Feedback Contract:** Require intermediate statistics, cast boundaries, finite counts, tolerance justification, and first-mismatch localization.
+
+**Learning Outcome:** Implement and diagnose normalization and gated-MLP numerical contracts.
+
+*(Effort: 40m instruction, 25m practice)*
+
 ---
 
 ### Lesson 1.5 — Parameter and FLOP Accounting
 
-**Engineering question:** Which parts are exact logical counts, and which parts are performance hypotheses?
+**Engineering Question:** Which parts are exact logical counts, and which parts are performance hypotheses?
+
+**Concepts & Definitions:** Logical parameter, FLOP, activation, and payload counts are scoped derivations; latency and allocation require measurement.
 
 Assume dense, bias-free projections, $d=H_qd_h$, and no padding or adapters.
 
@@ -208,7 +263,7 @@ $$P_{mlp}=dm+dm+md=3dm.$$
 
 Two RMSNorm weights contribute $2d$ per standard block. Add embeddings, final norm, LM head, biases, adapters, expert/router tensors, and any untied output head separately.
 
-**Worked parameter example**
+**Worked Example:**
 
 For $d=4096$, $H_q=32$, $H_{kv}=8$, $d_h=128$, and $m=11008$:
 
@@ -233,9 +288,23 @@ A causal-aware implementation may avoid part of the nominal square, and a fused 
 
 **OOM discipline:** Logical tensors provide component estimates, not an exact OOM boundary. Measure allocated and reserved peaks across fresh processes and record workspaces, backend, cache state, graph capture, padding, and concurrent allocations.
 
+**Knowledge Check:** Which assumptions yield $3dm$ for SwiGLU, and why do fewer FLOPs not guarantee lower latency?
+
+**Guided Practice:** Reconcile the analytical manifest with named unique tensor storage, profiler shapes, and peak memory after toggling tying or bias.
+
+**Feedback Contract:** State FMA, bias, tying, padding, sparsity, workspace, and allocator conventions; explain every discrepancy.
+
+**Learning Outcome:** Derive scoped architecture counts and reconcile them with execution evidence.
+
+*(Effort: 55m instruction, 30m practice)*
+
 ---
 
 ### Lesson 1.6 — Sparse Experts and Latent Attention
+
+**Engineering Question:** How do sparse experts and latent attention change total, resident, selected, executed, and cached quantities?
+
+**Concepts & Definitions:** Total expert parameters, selected experts, capacity/padding, routing locality, latent state, and decompression are distinct accounting dimensions.
 
 **Sparse MoE** replaces a dense MLP with a router and multiple expert MLPs. For $E$ bias-free SwiGLU experts of width $m$, a simplified total expert count is
 
@@ -260,9 +329,25 @@ Always distinguish:
 - **FRONTIER / ARCHITECTURE-SPECIFIC**: MLA and newer hybrid attention/state-space designs.
 - **REJECT AS A MODEL**: “all current LLMs are Llama with different weights.”
 
+**Worked Example:** For $E$ experts with top-$k$ routing and $k<E$, total and selected expert parameters differ by construction; padding, capacity, and communication determine executed cost.
+
+**Knowledge Check:** Why are total, resident, selected, and executed quantities not interchangeable?
+
+**Guided Practice:** Build an accounting table for dense, top-$k$ expert, and latent-attention configurations; mark architecture-specific formulas `TODO_VERIFY` until source/configuration confirms them.
+
+**Feedback Contract:** Reject any table that equates selected parameters with wall-clock cost or treats MLA as renamed GQA.
+
+**Learning Outcome:** Extend decoder accounting without forcing incompatible architecture families into one formula.
+
+*(Effort: 45m instruction, 25m practice)*
+
 ---
 
 ### Lesson 1.7 — Production Source Trace and Diagnosis
+
+**Engineering Question:** How does a pinned implementation turn the abstract decoder graph into a backend-dispatched execution path?
+
+**Concepts & Definitions:** A source trace records repository, revision, path, symbol, entry point, configuration conditions, execution path, and static-versus-executed status.
 
 At Transformers commit `11c16613d93911300c38ec8c9c2460567be53281`, trace:
 
@@ -310,7 +395,19 @@ Examples of discriminating tests:
 - Analytical parameters differ from named unique storage → tying, sharing, padding, or omitted tensors.
 - OOM boundary shifts across fresh processes with unchanged shapes → allocator/workspace/state hypothesis.
 
-## 05 Literature and Source Map
+**Worked Example:** The verified Python orchestration reaches an attention-backend interface; it does not prove which compiled kernel a particular configuration selected.
+
+**Knowledge Check:** Which configuration selects the backend, and what evidence is required before making a kernel claim?
+
+**Independent Practice:** Execute the pinned path with hooks, record backend selection, and map symbols to equations and invariants. Mark unexecuted branches `TODO_VERIFY`.
+
+**Feedback Contract:** Require exact revision/path/symbols, dynamic configuration, first-divergence evidence, and generalizability limits.
+
+**Learning Outcome:** Trace and diagnose a production forward path without generalizing revision-specific behavior.
+
+*(Effort: 40m instruction, 30m source trace)*
+
+## 05 Literature & Production Source Map
 
 **REFERENCE / BASELINE**
 
@@ -336,36 +433,56 @@ Examples of discriminating tests:
 
 ## 06 Engineering Labs
 
+All labs follow $\text{PREDICT}\to\text{BUILD}\to\text{MEASURE}\to\text{EXPLAIN}\to\text{BREAK}\to\text{IMPROVE}\to\text{FALSIFY}$.
+
 ### LAB A — Minimal Decoder and Numerical Parity
 
 - **Objective**: Implement RMSNorm, RoPE, causal attention, GQA mapping, SwiGLU, residuals, final norm, and logits without using a high-level decoder block.
+- **Pre-Registered Hypothesis**: The transparent implementation will match the reference within declared tolerances until an injected invariant violation reaches the affected layer.
+- **Independent Variables**: Injected defect, dtype, sequence length, and attention family.
+- **Dependent Variables**: Layerwise error, prefix invariance, finite counts, gradients where applicable, and final-logit parity.
 - **Controls**: fixed tiny configuration, deterministic weights/inputs, explicit dtype and tolerance, no dropout.
 - **Required tests**: shape assertions, finite outputs, future-token prefix invariance, norm/rotation properties, gradient check where applicable, and output parity with a transparent reference.
-- **Break**: wrong mask orientation, wrong RMSNorm axis, epsilon outside the root, and a head/sequence transpose that preserves element count.
+- **Break & Falsify**: Inject wrong mask orientation, wrong RMSNorm axis, epsilon outside the root, and a head/sequence transpose that preserves element count; each must fail the relevant invariant.
+- **Alignment**: Lessons 1.1–1.4.
+- **Effort Estimate**: 3h implementation, 1h analysis.
 
 ### LAB B — MHA/MQA/GQA and RoPE Boundary Study
 
 - **Objective**: Compare parameter geometry, logical KV dimensions, output parity at equivalent weights where meaningful, and measured runtime across MHA/MQA/GQA.
-- **Independent variables**: $H_{kv}$, batch, prompt length, decode context, backend, and position range.
-- **Evidence**: projection counts, tensor shapes, backend identity, allocated/reserved memory, kernel timeline, and quality/parity limitations.
-- **Falsify**: find a workload where fewer KV heads do not improve end-to-end latency, or a position range where a naive RoPE extrapolation claim fails.
+- **Pre-Registered Hypothesis**: Fewer KV heads reduce the declared K/V geometry, while latency benefit remains backend- and shape-dependent.
+- **Independent Variables**: $H_{kv}$, batch, prompt length, decode context, backend, and position range.
+- **Dependent Variables**: Projection counts, tensor shapes, backend identity, allocated/reserved memory, kernel timeline, and quality/parity limitations.
+- **Break & Falsify**: Find a workload where fewer KV heads do not improve end-to-end latency, or a position range where a naive RoPE extrapolation claim fails.
+- **Alignment**: Lessons 1.2–1.3.
+- **Effort Estimate**: 2h implementation, 1h analysis.
 
 ### LAB C — Accounting Versus Real Execution
 
 - **Objective**: Generate an analytical manifest for every parameter group and leading matmul, then reconcile it with `named_parameters`, profiler shapes, and peak memory.
+- **Pre-Registered Hypothesis**: Exact logical counts will reconcile only after tying, biases, adapters, experts, padding, and unique storage are represented explicitly.
+- **Independent Variables**: $B$, $S$, $d$, $m$, $H_q$, $H_{kv}$, tying, bias, adapter, backend, and workspace state.
+- **Dependent Variables**: Count deltas, profiler-shape deltas, allocated/reserved peaks, and latency across the sweep.
 - **Design**: sweep $B$, $S$, $d$, $m$, $H_q$, and $H_{kv}$ on configurations small enough to reproduce.
-- **Break**: enable biases, tie/untie embeddings, add an adapter, change backend/workspace, and introduce an MoE layer.
-- **Falsification**: demonstrate at least one case where fewer logical FLOPs or parameters does not yield proportional latency or memory savings.
+- **Break & Falsify**: Enable biases, tie/untie embeddings, add an adapter, change backend/workspace, introduce an MoE layer, and find a case where lower logical work does not yield proportional latency or memory savings.
+- **Alignment**: Lessons 1.5–1.6.
+- **Effort Estimate**: 2h implementation, 1h analysis.
 
 ### LAB D — Pinned Transformers Source Trace
 
 - **Objective**: Execute the pinned Llama path with hooks and map every source symbol to the mathematical operation and tensor contract.
+- **Pre-Registered Hypothesis**: Backend selection and numerical casts visible at runtime will explain at least one difference from a purely abstract decoder graph.
+- **Independent Variables**: Attention backend, dtype, cache use, and short/long position range.
+- **Dependent Variables**: Selected symbols/backend, layerwise parity, finite counts, and trace completeness.
 - **Required trace**: entry point, configuration fields, causal-mask construction, RoPE, layer order, cache call boundary, attention backend dispatch, final norm, and LM head.
 - **Artifact**: repository, commit, verification date, file, symbol, entry point, execution path, selected backend, exact commands, and `TODO_VERIFY` for paths not run.
+- **Break & Falsify**: Force an alternative backend or incompatible configuration and determine which assumed path no longer executes.
+- **Alignment**: Lesson 1.7.
+- **Effort Estimate**: 2h source trace, 1h execution.
 
-## 07 Break / Incident Scenario
+## 07 Break / Incident Scenarios
 
-### Incident 01.1 — Plausible Logits, Corrupt Long Context
+### Incident 01.1: Plausible Logits, Corrupt Long Context
 
 A converted model matches short-prompt top-1 tokens but loses quality beyond 8K tokens and occasionally produces non-finite activations in low precision. Parameter count appears close to the source checkpoint.
 
@@ -379,6 +496,8 @@ Investigate competing explanations:
 6. optimized attention backend discrepancy;
 7. checkpoint/config mismatch unrelated to the suspected mechanism.
 
+**Diagnostic Protocol (Task):**
+
 Required response:
 
 - localize the first layer and position where parity diverges;
@@ -387,12 +506,15 @@ Required response:
 - inspect norms, finite counts, shapes, dtypes, and configuration;
 - rank explanations and state what remains unresolved;
 - fix one mechanism and rerun the same short- and long-context tests.
+- define immediate rollback, long-term prevention, and quantitative parity/quality evidence required before redeployment.
 
 ---
 
 ### LAYER 3: MASTERY / ASSESSMENT LAYER
 
 ## 08 Mastery Assessment
+
+### Transfer Problem — Reconstruct an Unfamiliar Decoder
 
 Given an unfamiliar decoder configuration and a pinned implementation, produce:
 
@@ -407,7 +529,13 @@ Given an unfamiliar decoder configuration and a pinned implementation, produce:
 9. an OOM prediction expressed as a component estimate plus empirical boundary, not fake exactness;
 10. downstream implications for Modules 02–05 and 20 with scope boundaries preserved.
 
-## 09 Required Evidence and Rubric
+## 09 Required Evidence & Rubric
+
+### Required Artifact: Production Source Trace
+
+Submit the pinned Transformers trace from Lesson 1.7/Lab D with exact revision, paths, symbols, runtime configuration, backend selection, static-versus-executed status, commands, and `TODO_VERIFY` markers.
+
+### Rubric Dimensions
 
 - **Mechanistic reasoning**: Strong work explains axes, grouping, residual order, mask semantics, and position transforms without relying on architecture names alone.
 - **Quantitative reasoning**: Strong work derives counts from matrices, states bias/tie/padding/FMA conventions, and reconciles formulas with actual tensors.
@@ -427,7 +555,9 @@ Given an unfamiliar decoder configuration and a pinned implementation, produce:
 | MoE and MLA distinctions | 1.6 | Labs B/C | Mastery 4, 10 | Architecture comparison |
 | Source-based diagnosis | 1.7 | Lab D / Incident | Mastery 7-8 | Pinned source trace |
 
-## 11 Exit Criteria and Final Mental Model
+## 11 Exit Criteria & Module Wrap-Up
+
+### Exit Criteria
 
 A learner can exit Module 01 when they can:
 
@@ -439,6 +569,8 @@ A learner can exit Module 01 when they can:
 6. explain why logical work, active parameters, memory footprint, and latency are different quantities;
 7. localize numerical or backend divergence before proposing a fix;
 8. hand accurate architectural inputs to GPU, KV-cache, serving, optimization, and distributed-inference modules.
+
+### Module Wrap-Up (Final Mental Model Reconstruction)
 
 The final invariant: **model architecture is an executable tensor contract, not a bag of component names.**
 
