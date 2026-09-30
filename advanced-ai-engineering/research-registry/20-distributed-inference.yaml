@@ -1,0 +1,316 @@
+module: "20-distributed-inference"
+registry_version: "1.0.0"
+research_cutoff: "2026-09-30"
+change_reason: "Replace the generated placeholder (mis-titled 'Module 16', training-centric 1F1B framing) with an evidence-backed distributed-inference model covering placement decisions, collective cost, tensor/pipeline/expert/context parallelism, prefill/decode disaggregation and KV transfer, multi-replica routing, and failure domains, pinned to vLLM source and scoped 2025-2026 frontier work."
+claims:
+  - id: CLM-001
+    claim: "A distributed inference plan is a choice of what each GPU holds (replicated versus sharded weights, KV, experts, or sequence) and which communication sits on each token's critical path; data-parallel replicas add throughput and failure isolation without per-token communication, while tensor, pipeline, expert, and context parallelism add capacity or reduce per-request work at the cost of synchronous communication inside a group."
+    provenance: DERIVED
+    domain: placement
+    concepts: [parallelism_taxonomy, replica, model_parallel_group]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Replicas serve independent requests; model-parallel ranks cooperate on the same forward pass."]
+    derivation: "Replicas never exchange activations for a request, so they add no per-token communication. Every model-parallel dimension splits one forward pass, so ranks must exchange partial results (all-reduce, point-to-point activations, all-to-all tokens, or KV/Q blocks) before the pass can proceed."
+    limitations: ["Hybrid dimensions (for example DP attention with EP MoE) blur the replica/group boundary; state the group for each layer type."]
+    applicability: "Choosing and explaining a placement plan."
+    curriculum_usage: { lessons: ["20.1"], labs: ["LAB-A"], assessments: ["Mastery-20"] }
+  - id: CLM-002
+    claim: "Megatron-LM partitions the transformer MLP by splitting the first GEMM by columns and the second by rows so the GeLU needs no communication, partitions attention by heads, and thereby needs only two all-reduces in the forward path and two in the backward path per transformer layer, using conjugate operators f (identity forward, all-reduce backward) and g (all-reduce forward, identity backward)."
+    provenance: VERIFIED_FACT
+    domain: tensor_parallelism
+    concepts: [tensor_parallelism, column_parallel, row_parallel, all_reduce]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "Megatron-LM: Training Multi-Billion Parameter Language Models Using Model Parallelism", authors: "Mohammad Shoeybi, Mostofa Patwary, Raul Puri, Patrick LeGresley, Jared Casper, Bryan Catanzaro", year: "2019", url: "https://arxiv.org/abs/1909.08053", section: "Section 3 Model Parallel Transformers; Figures 3-4; Code 1", accessed_at: "2026-09-30" }]
+    limitations: ["Training paper; inference uses the forward half only. Sequence-parallel variants replace all-reduce with reduce-scatter/all-gather pairs."]
+    applicability: "Communication count per layer for tensor-parallel inference."
+    curriculum_usage: { lessons: ["20.3"], labs: ["LAB-B"], assessments: ["Mastery-20"] }
+  - id: CLM-003
+    claim: "At vLLM commit 863475eb9cd78ae6a4a22f1b90df7fe85e0af438, RowParallelLinear.forward all-reduces its partial output across the tensor-parallel group only when reduce_results is true and tp_size > 1, ColumnParallelLinear.forward all-gathers only when gather_output is true, GroupCoordinator.all_reduce returns the input unchanged when the group world size is 1, and initialize_model_parallel lays ranks out as ExternalDP x DP x PP x PCP x TP with TP innermost and builds an expert-parallel group spanning DP x PCP x TP ranks only for MoE models."
+    provenance: VERIFIED_FACT
+    domain: runtime_source
+    concepts: [tensor_parallelism, rank_layout, expert_parallelism]
+    confidence: high
+    currentness_status: "CURRENT SOURCE SNAPSHOT"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "vLLM parallel linear layers and parallel state", repository: "https://github.com/vllm-project/vllm", commit: "863475eb9cd78ae6a4a22f1b90df7fe85e0af438", verification_date: "2026-09-30", file: "vllm/model_executor/layers/linear.py; vllm/distributed/communication_op.py; vllm/distributed/parallel_state.py", symbol: "ColumnParallelLinear.forward; RowParallelLinear.forward; tensor_model_parallel_all_reduce; GroupCoordinator.all_reduce; initialize_model_parallel", entry_point: "Model layers constructed with ColumnParallelLinear/QKVParallelLinear followed by RowParallelLinear (e.g., o_proj, down_proj)", execution_path: "ColumnParallelLinear.forward: quant_method.apply -> optional tensor_model_parallel_all_gather -> RowParallelLinear.forward: split input if not input_is_parallel -> quant_method.apply (bias only on rank 0) -> tensor_model_parallel_all_reduce -> get_tp_group().all_reduce -> world_size==1 bypass or device_communicator.all_reduce", url: "https://github.com/vllm-project/vllm/blob/863475eb9cd78ae6a4a22f1b90df7fe85e0af438/vllm/model_executor/layers/linear.py", accessed_at: "2026-09-30" }
+    limitations: ["Static inspection only; which device communicator (custom all-reduce, NCCL, symmetric memory) runs is configuration- and hardware-dependent and was not traced.", "Contiguous TP ranks usually but not necessarily map to one node; the launcher's rank-to-host assignment decides."]
+    applicability: "Production source trace for TP communication and group layout."
+    curriculum_usage: { lessons: ["20.3"], labs: ["LAB-B"], assessments: ["Production-Source-Trace"] }
+  - id: CLM-004
+    claim: "NVIDIA nccl-tests defines algorithm bandwidth as data size divided by time and bus bandwidth as algorithm bandwidth times an operation-specific factor—2(n-1)/n for AllReduce, (n-1)/n for ReduceScatter, AllGather, and AlltoAll, and 1 for Broadcast and Reduce—so that bus bandwidth reflects hardware link utilization independent of rank count."
+    provenance: VERIFIED_FACT
+    domain: collectives
+    concepts: [all_reduce, algbw, busbw, collective_cost]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    evidence: [{ source_type: official_docs, tier: 2, title: "NCCL Tests: Performance reported", authors: "NVIDIA", year: "2026", url: "https://github.com/NVIDIA/nccl-tests/blob/master/doc/PERFORMANCE.md", section: "algbw; busbw; per-operation factors", accessed_at: "2026-09-30" }]
+    limitations: ["Factors assume bandwidth-optimal algorithms; small messages are latency-dominated and topology/algorithm (ring, tree, NVLS) changes achieved bandwidth."]
+    applicability: "Converting benchmark numbers into per-collective time estimates."
+    curriculum_usage: { lessons: ["20.2"], labs: ["LAB-B"], assessments: ["Mastery-20"] }
+  - id: CLM-005
+    claim: "A first-order all-reduce time model is T(S, n) ≈ α + 2(n-1)/n · S / B_bus, with S the message bytes, n ranks, α a size-independent latency term, and B_bus the achieved bus bandwidth; for tensor-parallel decode S = batch_tokens × hidden × bytes is small, so per-token TP cost is often dominated by α times the number of all-reduces rather than by bandwidth."
+    provenance: DERIVED
+    domain: collectives
+    concepts: [collective_cost, latency_bandwidth_model, decode_communication]
+    confidence: medium
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions: ["Bandwidth-optimal all-reduce (CLM-004)", "α and B_bus measured on the target topology and message size", "No overlap with compute"]
+    derivation: "From CLM-004 the bandwidth term per rank is 2(n-1)/n · S / B_bus. In decode, one step carries one token per sequence, so S is batch × hidden × bytes (hundreds of KiB) and the bandwidth term is microseconds on intra-node links, comparable to or smaller than fixed latency; with two all-reduces per layer (CLM-002) the step pays 2L(α + bandwidth term)."
+    limitations: ["α is not a constant across algorithms and sizes; overlap, fusion, and custom all-reduce kernels change the effective cost. Measure with nccl-tests or the runtime profiler at the real sizes."]
+    applicability: "Predicting TP communication cost before profiling."
+    curriculum_usage: { lessons: ["20.2", "20.3"], labs: ["LAB-B"], assessments: ["Mastery-20"] }
+  - id: CLM-006
+    claim: "Narayanan et al. derive a pipeline bubble time fraction of (p-1)/m for p stages and m microbatches, reduce it to (1/v)·(p-1)/m with an interleaved schedule of v model chunks per device at v times the communication, and conclude (Takeaway #1) that tensor parallelism should generally be used up to the number of GPUs in a server, with pipeline parallelism used across servers."
+    provenance: VERIFIED_FACT
+    domain: pipeline_parallelism
+    concepts: [pipeline_parallelism, pipeline_bubble, interleaved_schedule]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "Efficient Large-Scale Language Model Training on GPU Clusters Using Megatron-LM", authors: "Deepak Narayanan, Mohammad Shoeybi, Jared Casper, Patrick LeGresley, Mostofa Patwary, Vijay Korthikanti, Dmitri Vainbrand, Prethvi Kashinkunti, Julie Bernauer, Bryan Catanzaro, Amar Phanishayee, Matei Zaharia", year: "2021", url: "https://arxiv.org/abs/2104.04473", section: "Sections 2.2.1-2.2.2 (bubble fractions); Section 3.2 Takeaway #1", accessed_at: "2026-09-30" }]
+    limitations: ["Training schedules (forward plus backward); inference is forward-only and uses in-flight batches rather than gradient microbatches (see CLM-008)."]
+    applicability: "Bubble arithmetic and TP-within/PP-across placement heuristics."
+    curriculum_usage: { lessons: ["20.4"], labs: ["LAB-C"], assessments: ["Mastery-20"] }
+  - id: CLM-007
+    claim: "GPipe describes the pipeline bubble overhead as O((K-1)/(M+K-1)) for K partitions and M micro-batches and reports finding it negligible in its experiments when M ≥ 4 × K."
+    provenance: VERIFIED_FACT
+    domain: pipeline_parallelism
+    concepts: [pipeline_parallelism, pipeline_bubble]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "GPipe: Efficient Training of Giant Neural Networks using Pipeline Parallelism", authors: "Yanping Huang, Youlong Cheng, Ankur Bapna, Orhan Firat, Mia Xu Chen, Dehao Chen, HyoukJoong Lee, Jiquan Ngiam, Quoc V. Le, Yonghui Wu, Zhifeng Chen", year: "2018", url: "https://arxiv.org/abs/1811.06965", section: "Section 2.3 Performance Optimization", accessed_at: "2026-09-30" }]
+    limitations: ["Training with re-materialization; the M ≥ 4K rule is empirical for their models."]
+    applicability: "Reference form of the bubble fraction."
+    curriculum_usage: { lessons: ["20.4"], labs: ["LAB-C"], assessments: ["Mastery-20"] }
+  - id: CLM-008
+    claim: "In forward-only pipelined inference with p equal stages, a single request's step still traverses all p stages sequentially, so pipeline parallelism does not reduce per-token latency and adds p-1 inter-stage transfers; stage utilization approaches m/(m+p-1) only when m independent batches are in flight, and unequal stages or variable per-batch work make the slowest stage set throughput."
+    provenance: DERIVED
+    domain: pipeline_parallelism
+    concepts: [pipeline_parallelism, pipeline_bubble, stage_imbalance]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Equal stage times t_s; transfers not overlapped; m batches ready to enter."]
+    derivation: "A pass over m batches takes (m+p-1)·t_s while each stage is busy m·t_s, giving utilization m/(m+p-1), the forward-only analogue of CLM-006/CLM-007. A single batch's latency is p·t_s plus transfers regardless of m. With stage times t_i the steady-state rate is 1/max(t_i)."
+    limitations: ["Runtimes schedule decode steps of different batches into the pipeline dynamically; measure utilization rather than assuming the equal-stage formula."]
+    applicability: "Deciding when PP serves capacity rather than latency."
+    curriculum_usage: { lessons: ["20.4"], labs: ["LAB-C"], assessments: ["Mastery-20", "Incident-20.1"] }
+  - id: CLM-009
+    claim: "Pope et al. develop an analytical model for inference efficiency used to select multi-dimensional partitioning layouts for TPU v4 slices by application latency and throughput requirements, and report that with appropriate partitioning, multiquery attention's lower memory enables up to 32x longer context, a 29 ms per-token low-batch generation latency with int8 weights, and 76% MFU for large-batch prompt processing on PaLM 540B."
+    provenance: VERIFIED_FACT
+    domain: placement
+    concepts: [partitioning_layout, latency_throughput_tradeoff]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "Efficiently Scaling Transformer Inference", authors: "Reiner Pope, Sholto Douglas, Aakanksha Chowdhery, Jacob Devlin, James Bradbury, Anselm Levskaya, Jonathan Heek, Kefan Xiao, Shivani Agrawal, Jeff Dean", year: "2022", url: "https://arxiv.org/abs/2211.05102", section: "Abstract (abstract-level inspection)", accessed_at: "2026-09-30" }]
+    limitations: ["TPU v4 and PaLM-specific; numbers are author-reported and not transferable to GPU clusters."]
+    applicability: "Evidence that the best layout differs between latency-bound and throughput-bound phases."
+    curriculum_usage: { lessons: ["20.1"], labs: ["LAB-A"], assessments: ["Mastery-20"] }
+  - id: CLM-010
+    claim: "The DeepSeek-V3 technical report describes an inference deployment that separates prefilling and decoding: prefilling uses 4 nodes (32 GPUs) with TP4 plus sequence parallelism and DP8 for attention and EP32 for MoE, with 32 redundant experts chosen from online load statistics and adjusted periodically (e.g., every 10 minutes); decoding uses 40 nodes (320 GPUs) with TP4 plus SP and DP80 for attention and EP320 for MoE; all-to-all dispatch/combine crosses nodes over InfiniBand then forwards within nodes over NVLink, and two micro-batches are processed simultaneously to overlap computation with dispatch/combine."
+    provenance: VERIFIED_FACT
+    domain: expert_parallelism
+    concepts: [expert_parallelism, all_to_all, redundant_experts, dp_attention, pd_disaggregation]
+    confidence: high
+    currentness_status: "CURRENT / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "DeepSeek-V3 Technical Report", authors: "DeepSeek-AI", year: "2024", url: "https://arxiv.org/abs/2412.19437", section: "Section 3.4 Inference and Deployment (3.4.1 Prefilling; 3.4.2 Decoding)", accessed_at: "2026-09-30" }]
+    limitations: ["One vendor's H800 deployment for one MoE architecture; a documented design, not an industry default."]
+    applicability: "Reference large-scale EP plus PD deployment."
+    curriculum_usage: { lessons: ["20.4", "20.5"], labs: ["LAB-C"], assessments: ["Mastery-20"] }
+  - id: CLM-011
+    claim: "MegaScale-Infer disaggregates attention and FFN modules within each layer of MoE models for independent scaling and parallelism, uses ping-pong pipeline parallelism over micro-batches to hide communication, provides an M2N communication library for token dispatch, and reports up to 1.90x higher per-GPU throughput than state-of-the-art solutions."
+    provenance: VERIFIED_FACT
+    domain: expert_parallelism
+    concepts: [expert_parallelism, attention_ffn_disaggregation]
+    confidence: medium
+    currentness_status: "FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "MegaScale-Infer: Serving Mixture-of-Experts at Scale with Disaggregated Expert Parallelism", authors: "Ruidong Zhu, Ziheng Jiang, Chao Jin, Peng Wu, et al.", year: "2025", url: "https://arxiv.org/abs/2504.02263", section: "Abstract (abstract-level inspection)", accessed_at: "2026-09-30" }]
+    limitations: ["Author-reported speedup under the paper's models, hardware, and baselines."]
+    applicability: "Frontier alternative to colocated EP."
+    curriculum_usage: { lessons: ["20.4"], labs: [], assessments: ["Mastery-20"] }
+  - id: CLM-012
+    claim: "Ring Attention distributes long sequences across devices using blockwise attention and feedforward, fully overlapping communication of key-value blocks with blockwise attention computation, and reports supporting sequences up to device-count times longer than prior memory-efficient Transformers without approximation."
+    provenance: VERIFIED_FACT
+    domain: context_parallelism
+    concepts: [context_parallelism, ring_attention]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "Ring Attention with Blockwise Transformers for Near-Infinite Context", authors: "Hao Liu, Matei Zaharia, Pieter Abbeel", year: "2023", url: "https://arxiv.org/abs/2310.01889", section: "Abstract (abstract-level inspection)", accessed_at: "2026-09-30" }]
+    limitations: ["Full overlap requires per-block compute time to exceed block transfer time."]
+    applicability: "Long-context prefill across devices."
+    curriculum_usage: { lessons: ["20.4"], labs: ["LAB-C"], assessments: ["Mastery-20"] }
+  - id: CLM-013
+    claim: "Yang et al. report context-parallel long-context inference with lossless ring-attention variants pass-KV and pass-Q, near-linear prefill scaling up to 128 H100 GPUs across 16 nodes, 1M-token prefill of Llama3 405B in 77 s at 93% parallelization efficiency, and similar scalability over RDMA and TCP interconnects."
+    provenance: VERIFIED_FACT
+    domain: context_parallelism
+    concepts: [context_parallelism, ring_attention, pass_kv_pass_q]
+    confidence: medium
+    currentness_status: "WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "Context Parallelism for Scalable Million-Token Inference", authors: "Amy Yang, Jingyi Yang, Aya Ibrahim, Xinfeng Xie, Bangsheng Tang, Grigory Sizov, Jeremy Reizenstein, Jongsoo Park, Jianyu Huang", year: "2024", url: "https://arxiv.org/abs/2411.01783", section: "Abstract (abstract-level inspection)", accessed_at: "2026-09-30" }]
+    limitations: ["Author-reported on their hosts; long prefill is compute-heavy, which is what makes inter-host overlap feasible."]
+    applicability: "Evidence that CP targets long-prefill latency."
+    curriculum_usage: { lessons: ["20.4"], labs: ["LAB-C"], assessments: ["Mastery-20"] }
+  - id: CLM-014
+    claim: "DistServe assigns prefill and decoding to different GPUs to eliminate prefill-decoding interference, co-optimizes resource allocation and parallelism for each phase given TTFT and TPOT requirements, places phases according to cluster bandwidth to limit KV-transfer cost, and reports serving up to 7.4x more requests or 12.6x tighter SLOs than compared systems while keeping over 90% of requests within latency constraints."
+    provenance: VERIFIED_FACT
+    domain: pd_disaggregation
+    concepts: [pd_disaggregation, goodput, phase_parallelism]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "DistServe: Disaggregating Prefill and Decoding for Goodput-optimized Large Language Model Serving", authors: "Yinmin Zhong, Shengyu Liu, Junda Chen, Jianbo Hu, Yibo Zhu, Xuanzhe Liu, Xin Jin, Hao Zhang", year: "2024", url: "https://arxiv.org/abs/2401.09670", section: "Abstract (abstract-level inspection); OSDI 2024", accessed_at: "2026-09-30" }]
+    limitations: ["Gains are relative to the paper's baselines, models, and SLOs."]
+    applicability: "Goodput-driven phase disaggregation."
+    curriculum_usage: { lessons: ["20.5"], labs: ["LAB-D"], assessments: ["Mastery-20"] }
+  - id: CLM-015
+    claim: "Splitwise splits prompt computation and token generation onto separate machines, transfers state over back-plane interconnects, allows phase-specific hardware, and reports designs achieving 1.4x higher throughput at 20% lower cost than their baseline designs."
+    provenance: VERIFIED_FACT
+    domain: pd_disaggregation
+    concepts: [pd_disaggregation, heterogeneous_hardware, kv_transfer]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "Splitwise: Efficient generative LLM inference using phase splitting", authors: "Pratyush Patel, Esha Choukse, Chaojie Zhang, Aashaka Shah, Iñigo Goiri, Saeed Maleki, Ricardo Bianchini", year: "2023", url: "https://arxiv.org/abs/2311.18677", section: "Abstract (abstract-level inspection)", accessed_at: "2026-09-30" }]
+    limitations: ["Cluster-design results from the paper's characterization and simulation; not a measured deployment claim."]
+    applicability: "Phase-specific provisioning."
+    curriculum_usage: { lessons: ["20.5"], labs: ["LAB-D"], assessments: ["Mastery-20"] }
+  - id: CLM-016
+    claim: "Mooncake, the serving platform for Moonshot AI's Kimi, uses a KVCache-centric disaggregated architecture with separate prefill and decoding clusters and a disaggregated KV cache on CPU, DRAM, and SSD, adds prediction-based early rejection for overload, and reports up to 525% higher throughput in certain simulated scenarios and 75% more requests handled under real workloads."
+    provenance: VERIFIED_FACT
+    domain: pd_disaggregation
+    concepts: [pd_disaggregation, kv_cache_pool, early_rejection]
+    confidence: high
+    currentness_status: "CURRENT / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "Mooncake: A KVCache-centric Disaggregated Architecture for LLM Serving", authors: "Ruoyu Qin, Zheming Li, Weiran He, Mingxing Zhang, Yongwei Wu, Weimin Zheng, Xinran Xu", year: "2024", url: "https://arxiv.org/abs/2407.00079", section: "Abstract (abstract-level inspection)", accessed_at: "2026-09-30" }]
+    limitations: ["The 525% figure is simulated; the 75% figure is a provider-reported production outcome without full context."]
+    applicability: "Production-scale disaggregation with overload control."
+    curriculum_usage: { lessons: ["20.5"], labs: ["LAB-D"], assessments: ["Mastery-20"] }
+  - id: CLM-017
+    claim: "vLLM's documentation marks disaggregated prefilling as experimental, gives its motivations as tuning TTFT and inter-token latency separately and controlling tail inter-token latency, and states that disaggregated prefill does not improve throughput."
+    provenance: VERIFIED_FACT
+    domain: pd_disaggregation
+    concepts: [pd_disaggregation, tail_itl]
+    confidence: high
+    currentness_status: "CURRENT / PROVIDER-SPECIFIC"
+    evidence: [{ source_type: official_docs, tier: 2, title: "Disaggregated Prefilling (experimental)", authors: "vLLM project", year: "2026", url: "https://docs.vllm.ai/en/latest/features/disagg_prefill.html", section: "Why disaggregated prefilling?", accessed_at: "2026-09-30" }]
+    limitations: ["Documentation for one runtime's 'latest' docs; statements may change between releases."]
+    applicability: "Counterexample to 'disaggregation always raises throughput'."
+    curriculum_usage: { lessons: ["20.5"], labs: ["LAB-D"], assessments: ["Mastery-20"] }
+  - id: CLM-018
+    claim: "Wang et al. (TaiChi, 2025) report that prefill-decode aggregation is best for tight TTFT with relaxed TPOT, disaggregation is best for strict TPOT with relaxed TTFT, neither delivers optimal goodput under balanced TTFT and TPOT SLOs, and a hybrid with prefill-heavy and decode-heavy instances improves goodput by up to 77% in their experiments."
+    provenance: VERIFIED_FACT
+    domain: pd_disaggregation
+    concepts: [pd_disaggregation, pd_aggregation, goodput]
+    confidence: medium
+    currentness_status: "FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "Prefill-Decode Aggregation or Disaggregation? Unifying Both for Goodput-Optimized LLM Serving", authors: "Chao Wang, Pengfei Zuo, Zhangyu Chen, Yunkai Liang, Zhou Yu, Ming-Chang Yang", year: "2025", url: "https://arxiv.org/abs/2508.01989", section: "Abstract (abstract-level inspection)", accessed_at: "2026-09-30" }]
+    limitations: ["Preprint; regime boundaries depend on model, hardware, and workload."]
+    applicability: "SLO-dependent choice between aggregation and disaggregation."
+    curriculum_usage: { lessons: ["20.5"], labs: ["LAB-D"], assessments: ["Mastery-20"] }
+  - id: CLM-019
+    claim: "At the same vLLM commit, KVConnectorBase_V1 splits the KV-transfer contract into scheduler-side methods (get_num_new_matched_tokens, update_state_after_alloc, build_connector_meta, request_finished) and worker-side methods (start_load_kv, wait_for_layer_load, save_kv_layer, wait_for_save); get_num_new_matched_tokens must count only the prefix actually loadable at call time and may return None to be asked again, request_finished may take ownership of blocks for asynchronous sending, and get_block_ids_with_load_errors reports blocks that failed to load."
+    provenance: VERIFIED_FACT
+    domain: runtime_source
+    concepts: [kv_transfer, kv_connector, transfer_failure]
+    confidence: high
+    currentness_status: "CURRENT SOURCE SNAPSHOT"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "vLLM KV connector v1 base", repository: "https://github.com/vllm-project/vllm", commit: "863475eb9cd78ae6a4a22f1b90df7fe85e0af438", verification_date: "2026-09-30", file: "vllm/distributed/kv_transfer/kv_connector/v1/base.py", symbol: "KVConnectorBase_V1.get_num_new_matched_tokens; update_state_after_alloc; build_connector_meta; request_finished; start_load_kv; wait_for_layer_load; save_kv_layer; wait_for_save; get_block_ids_with_load_errors", entry_point: "A configured KV connector (e.g., NixlConnector, MooncakeConnector) subclassing KVConnectorBase_V1", execution_path: "scheduler: get_num_new_matched_tokens -> allocate -> update_state_after_alloc -> build_connector_meta -> worker: start_load_kv / wait_for_layer_load per layer, save_kv_layer / wait_for_save -> scheduler: request_finished (may defer block free) -> get_finished / get_transfer_results; failed loads via get_block_ids_with_load_errors", url: "https://github.com/vllm-project/vllm/blob/863475eb9cd78ae6a4a22f1b90df7fe85e0af438/vllm/distributed/kv_transfer/kv_connector/v1/base.py", accessed_at: "2026-09-30" }
+    limitations: ["Abstract interface and docstrings only; concrete connectors' transports, retries, and recovery were not traced or executed."]
+    applicability: "Source trace of the KV-transfer lifecycle and its failure surface."
+    curriculum_usage: { lessons: ["20.5"], labs: ["LAB-D"], assessments: ["Production-Source-Trace", "Incident-20.1"] }
+  - id: CLM-020
+    claim: "The KV bytes a prefill worker must hand to a decode worker are at least the logical KV payload per token times the prompt tokens not already cached at the decode side, so the transfer adds at least bytes/achieved-bandwidth plus setup to TTFT unless it is overlapped layer by layer with prefill compute."
+    provenance: DERIVED
+    domain: kv_transfer
+    concepts: [kv_transfer, kv_payload, ttft_accounting]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Logical KV bytes/token = 2 × layers × kv_heads × head_dim × bytes (Module 03)", "No compression or recomputation at the receiver"]
+    derivation: "Decode cannot start a token until the KV for all prior positions is resident; bytes not already present must move. Minimum time is size over achieved bandwidth plus per-transfer setup; only the non-overlapped part lands on the TTFT critical path."
+    limitations: ["Layouts, block padding, MLA/latent or hybrid-attention models, and quantized KV change the payload; measure actual bytes on the wire."]
+    applicability: "Sizing interconnect for disaggregation."
+    curriculum_usage: { lessons: ["20.5"], labs: ["LAB-D"], assessments: ["Mastery-20", "Incident-20.1"] }
+  - id: CLM-021
+    claim: "Qin et al. (Prefill-as-a-Service, April 2026) argue that KV transfer still bounds where prefill and decode can be placed, that hybrid-attention models' smaller KV makes cross-datacenter transport plausible but not sufficient given bursty, skewed workloads and fluctuating bandwidth, and report in a case study on an internal 1T-parameter hybrid model 54% higher throughput and 64% lower P90 TTFT than a homogeneous PD baseline."
+    provenance: VERIFIED_FACT
+    domain: pd_disaggregation
+    concepts: [pd_disaggregation, kv_transfer, cross_datacenter]
+    confidence: medium
+    currentness_status: "FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "Prefill-as-a-Service: KVCache of Next-Generation Models Could Go Cross-Datacenter", authors: "Ruoyu Qin, Weiran He, Yaoyu Wang, Zheming Li, Xinran Xu, Yongwei Wu, Weimin Zheng, Mingxing Zhang", year: "2026", url: "https://arxiv.org/abs/2604.15039", section: "Abstract (abstract-level inspection)", accessed_at: "2026-09-30" }]
+    limitations: ["Preprint; internal model and case study; the abstract's statement that PD is 'the standard architecture' is an author claim, not adoption evidence."]
+    applicability: "Frontier placement boundary for KV transport."
+    curriculum_usage: { lessons: ["20.5"], labs: [], assessments: ["Mastery-20"] }
+  - id: CLM-022
+    claim: "Li et al. (PPD disaggregation, March 2026) report that in multi-turn serving, repeated prefill-to-decode KV transfers can saturate bandwidth, that append-prefill reusing cached KV causes an order-of-magnitude smaller decode slowdown than full prefill, that no fixed routing satisfies all SLOs, and that dynamically running turn-2+ prefill on decode nodes cut turn-2+ TTFT by about 68% in their evaluation."
+    provenance: VERIFIED_FACT
+    domain: pd_disaggregation
+    concepts: [pd_disaggregation, multi_turn, kv_transfer]
+    confidence: medium
+    currentness_status: "FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "Not All Prefills Are Equal: PPD Disaggregation for Multi-turn LLM Serving", authors: "Zongze Li, Jingyu Liu, Zhen Xu, Yineng Zhang, Tahseen Rabbani, Ce Zhang", year: "2026", url: "https://arxiv.org/abs/2603.13358", section: "Abstract (abstract-level inspection)", accessed_at: "2026-09-30" }]
+    limitations: ["Preprint; evaluation workloads and hardware not inspected."]
+    applicability: "Counterexample to static PD routing for agentic and multi-turn traffic."
+    curriculum_usage: { lessons: ["20.5"], labs: ["LAB-D"], assessments: ["Mastery-20"] }
+  - id: CLM-023
+    claim: "Preble schedules prompts across a distributed serving cluster to co-optimize KV-state reuse and computation load balancing with a hierarchical scheduler, and reports 1.5x-14.5x lower average latency and 2x-10x lower p99 latency than compared systems on real workloads and arrival patterns with two open-source LLMs."
+    provenance: VERIFIED_FACT
+    domain: routing
+    concepts: [prefix_aware_routing, load_balancing]
+    confidence: medium
+    currentness_status: "WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "Preble: Efficient Distributed Prompt Scheduling for LLM Serving", authors: "Vikranth Srivatsa, Zijian He, Reyna Abhyankar, Dongming Li, Yiying Zhang", year: "2024", url: "https://arxiv.org/abs/2407.00023", section: "Abstract (abstract-level inspection)", accessed_at: "2026-09-30" }]
+    limitations: ["Gains depend on prompt-sharing prevalence; author-reported."]
+    applicability: "Prefix-aware routing across replicas."
+    curriculum_usage: { lessons: ["20.6"], labs: ["LAB-A"], assessments: ["Mastery-20"] }
+  - id: CLM-024
+    claim: "Across replicas, routing by prefix affinity raises cache hit rate but concentrates load when a few prefixes dominate traffic, while load-only routing balances queues but repeats prefill; a router must therefore bound affinity by load, and its quality is measured by goodput and tail latency at the offered load, not by hit rate alone."
+    provenance: DERIVED
+    domain: routing
+    concepts: [prefix_aware_routing, load_balancing, hotspot]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Replicas hold independent prefix caches; prefix popularity is skewed."]
+    derivation: "If a prefix carrying share f of traffic is pinned to one of R replicas, that replica receives at least f of load versus 1/R fair share; when f > 1/R its queue grows while others idle. Hit-rate gains reduce prefill work only for requests that are actually served within SLO."
+    limitations: ["Replicating hot prefixes or a shared KV pool (CLM-016) changes the trade-off."]
+    applicability: "Designing and evaluating a multi-replica router."
+    curriculum_usage: { lessons: ["20.6"], labs: ["LAB-A"], assessments: ["Mastery-20", "Incident-20.1"] }
+  - id: CLM-025
+    claim: "Because model-parallel ranks synchronize on every forward pass, the failure or straggling of any one rank stalls its whole group, so the model-parallel group (not the GPU) is the unit of failure and the blast radius of one fault is the group's share of capacity; vLLM's parallel_state notes that ranks in the same in-model DP group must call generate together or deadlock."
+    provenance: DERIVED
+    domain: failure_domains
+    concepts: [failure_domain, straggler, blast_radius]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Blocking collectives without per-rank failover inside the group."]
+    derivation: "A collective completes only when all participants contribute; a missing or slow rank delays or hangs all others. Independent replicas share no collective, so a fault removes only that replica. The vLLM layout comment (CLM-003 commit, initialize_model_parallel) records the same constraint for in-model DP."
+    limitations: ["Elastic EP and redundant experts can tolerate some expert-rank loss; check the runtime's actual recovery path."]
+    applicability: "Capacity and availability planning."
+    curriculum_usage: { lessons: ["20.6"], labs: ["LAB-A"], assessments: ["Mastery-20", "Incident-20.1"] }
+  - id: CLM-026
+    claim: "For a dense model whose weights and target KV fit within one NVLink-connected node, tensor parallelism within the node plus independent replicas will deliver lower TPOT and higher goodput at the same GPU count than extending tensor parallelism across nodes."
+    provenance: HYPOTHESIS
+    domain: tensor_parallelism
+    concepts: [tensor_parallelism, placement, interconnect]
+    confidence: medium
+    currentness_status: "WORKLOAD-DEPENDENT"
+    hypothesis:
+      prediction: "Cross-node TP raises per-step all-reduce time (CLM-005) enough to raise TPOT and lower goodput versus intra-node TP replicas."
+      measurement_target: "TPOT distribution, goodput at SLO, all-reduce time share from profiler, at matched GPU count and offered load."
+      falsifying_observation: "Cross-node TP matches intra-node TP replicas on TPOT and goodput, e.g., because communication is overlapped or the model is compute-bound at the served batch."
+    limitations: ["Interconnect generations with rack-scale NVLink domains change what 'node' means."]
+    applicability: "Placement decision records."
+    curriculum_usage: { lessons: ["20.3"], labs: ["LAB-B"], assessments: ["Mastery-20"] }
+  - id: CLM-027
+    claim: "For a workload with long prompts and a strict TPOT SLO, prefill/decode disaggregation will raise goodput at SLO over a colocated deployment with chunked prefill at equal GPU count only if achieved KV-transfer bandwidth keeps transfer time well below the TTFT budget; with short prompts or tight TTFT the colocated deployment will match or win."
+    provenance: HYPOTHESIS
+    domain: pd_disaggregation
+    concepts: [pd_disaggregation, goodput, kv_transfer]
+    confidence: medium
+    currentness_status: "WORKLOAD-DEPENDENT"
+    hypothesis:
+      prediction: "Goodput advantage of disaggregation grows with prompt length and TPOT strictness and disappears as transfer time approaches the TTFT budget."
+      measurement_target: "Goodput at (TTFT, TPOT) SLO, transfer bytes and time, TTFT decomposition, prefill:decode ratio, at matched GPUs across prompt-length bins."
+      falsifying_observation: "Disaggregation wins for short prompts under tight TTFT, or loses for long prompts with ample bandwidth and strict TPOT."
+    limitations: ["Prefill:decode instance ratio must be tuned for each point, or the comparison is unfair."]
+    applicability: "Disaggregation decision records."
+    curriculum_usage: { lessons: ["20.5"], labs: ["LAB-D"], assessments: ["Mastery-20"] }

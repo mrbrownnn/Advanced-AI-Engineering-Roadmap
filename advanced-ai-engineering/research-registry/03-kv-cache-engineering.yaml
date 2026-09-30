@@ -1,7 +1,9 @@
 module: "03-kv-cache-engineering"
-registry_version: "1.0.0"
-research_cutoff: "2026-09-25"
-change_reason: "Evidence registry for KV state sizing, block allocation, sharing, prefix reuse, eviction, compression, tiering, and a pinned current vLLM V1 trace."
+registry_version: "1.1.0"
+previous_version: "1.0.0"
+research_cutoff: "2026-09-30"
+change_reason: "WP-F1 (AUD-03-01, AUD-01-01 dependency, AUD-G04): add MLA retained-state sizing tied to the Module 01 prerequisite, replace the unconditional 'delay protects TPOT' feedback with a conditional hypothesis and a derived two-scenario timeline, and correct the pinned vLLM hashing entry point (generate_block_hashes does not exist at 25b0add; the path is get_request_block_hasher). Claim IDs aligned to the curriculum-wide CLM-### form. Other claims were not re-read and keep their 2026-09-25 access dates."
+changed_claims: ["CLM-006", "CLM-014", "CLM-015", "CLM-016", "CLM-017"]
 
 out_of_scope_candidates:
   - "GPU execution and Roofline profiling (Module 02)"
@@ -10,7 +12,7 @@ out_of_scope_candidates:
   - "Distributed prefill/decode placement and transport specialization (Module 20)"
 
 claims:
-  - id: "M03-CLM-001"
+  - id: "CLM-001"
     claim: "During autoregressive self-attention, caching previously computed keys and values avoids recomputing those K/V projections for the retained prefix, while the new query still attends to retained state and cache storage grows with retained positions."
     provenance: "VERIFIED_FACT"
     domain: "kv_semantics"
@@ -33,7 +35,7 @@ claims:
       labs: ["LAB-A"]
       assessments: ["Mastery-03"]
 
-  - id: "M03-CLM-002"
+  - id: "CLM-002"
     claim: "For uncompressed decoder self-attention with L cached layers, H_kv key/value heads, head width d_h, and b bytes per stored scalar, the logical KV payload per retained token is 2*L*H_kv*d_h*b bytes before sharding, alignment, metadata, and architecture-specific state."
     provenance: "DERIVED"
     domain: "memory_accounting"
@@ -52,7 +54,7 @@ claims:
       labs: ["LAB-A"]
       assessments: ["Mastery-03"]
 
-  - id: "M03-CLM-003"
+  - id: "CLM-003"
     claim: "PagedAttention introduced block-granular logical-to-physical KV mapping so a sequence can grow using non-contiguous physical blocks; the paper also describes block sharing and copy-on-write for compatible sampling workloads."
     provenance: "VERIFIED_FACT"
     domain: "paged_allocation"
@@ -76,7 +78,7 @@ claims:
       labs: ["LAB-A", "LAB-B"]
       assessments: ["Mastery-03"]
 
-  - id: "M03-CLM-004"
+  - id: "CLM-004"
     claim: "In a simple fixed-size per-sequence block allocation with block size B tokens and sequence length S>0, allocated capacity is B*ceil(S/B) and tail slack is B*ceil(S/B)-S, which is between 0 and B-1 tokens."
     provenance: "DERIVED"
     domain: "fragmentation"
@@ -94,7 +96,7 @@ claims:
       labs: ["LAB-A", "LAB-B"]
       assessments: ["Mastery-03"]
 
-  - id: "M03-CLM-005"
+  - id: "CLM-005"
     claim: "At vLLM commit 25b0add7b8a1c944d5c4e364f2de6aa82497a2ad, Scheduler.schedule requests KV slots through KVCacheManager.allocate_slots; allocation returns None when required blocks plus configured headroom exceed available blocks, otherwise coordinators allocate blocks from BlockPool."
     provenance: "VERIFIED_FACT"
     domain: "runtime_implementation"
@@ -122,8 +124,8 @@ claims:
       labs: ["LAB-B", "LAB-E"]
       assessments: ["Production-Source-Trace", "Mastery-03"]
 
-  - id: "M03-CLM-006"
-    claim: "In the same vLLM revision, prefix caching hashes full token blocks with the parent-block hash and request-dependent extra keys; current extra keys include LoRA identity, multimodal identifiers/positions, cache salt, and prompt-embedding hashes."
+  - id: "CLM-006"
+    claim: "In the same vLLM revision, get_request_block_hasher hashes only full token blocks, chaining each block hash from the parent-block hash, the block token IDs, and request-dependent extra keys; extra keys include the LoRA name, multimodal identifiers with their offset inside the block, the cache salt for the first block only, and a SHA-256 of per-block prompt embeddings."
     provenance: "VERIFIED_FACT"
     domain: "prefix_cache_identity"
     concepts: ["block_hash", "prefix_cache", "identity", "full_blocks"]
@@ -134,13 +136,13 @@ claims:
         title: "vLLM V1 KV cache hashing"
         repository: "https://github.com/vllm-project/vllm"
         commit: "25b0add7b8a1c944d5c4e364f2de6aa82497a2ad"
-        verification_date: "2026-09-25"
+        verification_date: "2026-09-30"
         file: "vllm/v1/core/kv_cache_utils.py"
-        symbol: "generate_block_hash_extra_keys; hash_block_tokens; generate_block_hashes"
-        entry_point: "generate_block_hashes"
-        execution_path: "generate_block_hashes -> generate_block_hash_extra_keys -> hash_block_tokens(parent hash, token ids, extra keys)"
+        symbol: "get_request_block_hasher; generate_block_hash_extra_keys; hash_block_tokens"
+        entry_point: "get_request_block_hasher"
+        execution_path: "get_request_block_hasher -> request_block_hasher(request): for each full block -> generate_block_hash_extra_keys (LoRA name, multimodal identifier and offset, cache salt on first block, prompt-embedding sha256) -> hash_block_tokens(parent hash, block token ids, extra keys)"
         url: "https://github.com/vllm-project/vllm/blob/25b0add7b8a1c944d5c4e364f2de6aa82497a2ad/vllm/v1/core/kv_cache_utils.py"
-        accessed_at: "2026-09-25"
+        accessed_at: "2026-09-30"
     limitations:
       - "A hash-key implementation is not a universal semantic proof of KV equivalence; deployment isolation and model/runtime identity remain system responsibilities."
       - "Only full blocks are hashed for reuse in this path."
@@ -150,7 +152,7 @@ claims:
       labs: ["LAB-C", "LAB-E"]
       assessments: ["Mastery-03"]
 
-  - id: "M03-CLM-007"
+  - id: "CLM-007"
     claim: "In the pinned vLLM BlockPool, cached blocks whose reference count reaches zero enter the free queue as eviction candidates; a later cache hit removes such a block from that queue and increments its reference count, while allocation can evict cached metadata before reuse."
     provenance: "VERIFIED_FACT"
     domain: "runtime_implementation"
@@ -176,7 +178,7 @@ claims:
       labs: ["LAB-B", "LAB-C", "LAB-E"]
       assessments: ["Production-Source-Trace"]
 
-  - id: "M03-CLM-008"
+  - id: "CLM-008"
     claim: "SGLang's RadixAttention organizes reusable KV state in a radix-tree-oriented cache for sharing across structured generation calls; its reported performance results are tied to the paper's workloads and baselines."
     provenance: "VERIFIED_FACT"
     domain: "prefix_reuse"
@@ -199,7 +201,7 @@ claims:
       labs: ["LAB-C"]
       assessments: ["Mastery-03"]
 
-  - id: "M03-CLM-009"
+  - id: "CLM-009"
     claim: "KV quantization reduces nominal stored bits per value, but realized memory, bandwidth, latency, and quality depend on scales/metadata, residual full-precision state, packing, dequantization kernels, model, task, and workload."
     provenance: "VERIFIED_FACT"
     domain: "kv_quantization"
@@ -222,7 +224,7 @@ claims:
       labs: ["LAB-D"]
       assessments: ["Mastery-03"]
 
-  - id: "M03-CLM-010"
+  - id: "CLM-010"
     claim: "Token-selective KV eviction changes the retained attention state and therefore is not equivalent to lossless memory management; H2O is one policy that retains recent and attention-heavy tokens and evaluates quality/performance under specific models and tasks."
     provenance: "VERIFIED_FACT"
     domain: "lossy_eviction"
@@ -245,7 +247,7 @@ claims:
       labs: ["LAB-D"]
       assessments: ["Mastery-03"]
 
-  - id: "M03-CLM-011"
+  - id: "CLM-011"
     claim: "For a payload of Q bytes crossing a link with measured effective bandwidth beta bytes/s, Q/beta is an ideal serialization-time lower bound; real offload or KV-transfer latency also includes setup, contention, synchronization, layout conversion, and any non-overlapped critical-path work."
     provenance: "DERIVED"
     domain: "tiering"
@@ -264,7 +266,7 @@ claims:
       labs: ["LAB-D"]
       assessments: ["Mastery-03"]
 
-  - id: "M03-CLM-012"
+  - id: "CLM-012"
     claim: "Current TensorRT-LLM documentation describes both contiguous and paged KV caches, block reuse, host offload, prioritized eviction, cache events, and multiple manager paths for hybrid attention/state models; this demonstrates that modern KV management is not one universal block layout or policy."
     provenance: "VERIFIED_FACT"
     domain: "production_landscape"
@@ -294,7 +296,7 @@ claims:
       labs: ["LAB-C", "LAB-D"]
       assessments: ["Mastery-03"]
 
-  - id: "M03-CLM-013"
+  - id: "CLM-013"
     claim: "Under memory pressure, rising block churn, evictions, preemptions, or recomputation can form a feedback loop that lowers useful progress, but these signals do not uniquely prove KV-capacity thrashing without aligned allocation, scheduler, cache-hit, transfer, and timeline evidence."
     provenance: "HYPOTHESIS"
     domain: "diagnostic_methodology"
@@ -311,3 +313,93 @@ claims:
       lessons: ["3.5", "3.10"]
       labs: ["LAB-E"]
       assessments: ["Incident-03.1", "Mastery-03"]
+
+  - id: "CLM-014"
+    claim: "DeepSeek-V2's Multi-head Latent Attention caches, per token and layer, a joint key-value latent c^KV of width d_c and one decoupled RoPE key k^R of width d_h^R shared across heads, (d_c+d_h^R)*l elements per token; per-head keys and values are reconstructed by up-projections. The paper and the released config give l=60, d_c=512 (kv_lora_rank), and d_h^R=64 (qk_rope_head_dim), while the config also lists num_key_value_heads=128."
+    provenance: "VERIFIED_FACT"
+    domain: "kv_state_geometry"
+    concepts: ["mla", "latent_kv_state", "kv_payload_accounting"]
+    confidence: "high"
+    evidence:
+      - source_type: "paper"
+        tier: 1
+        title: "DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model"
+        authors: "DeepSeek-AI"
+        year: "2024"
+        version: "arXiv:2405.04434v5"
+        url: "https://arxiv.org/abs/2405.04434"
+        section: "Sections 2.1.2-2.1.4 (Eqs. 9-19, Table 1); Section 3.1.2"
+        accessed_at: "2026-09-30"
+      - source_type: "official_docs"
+        tier: 2
+        title: "DeepSeek-V2 released model configuration (config.json)"
+        authors: "DeepSeek-AI"
+        version: "Hugging Face revision 4461458f186c35188585855f28f77af5661ad489"
+        url: "https://huggingface.co/deepseek-ai/DeepSeek-V2/blob/4461458f186c35188585855f28f77af5661ad489/config.json"
+        section: "kv_lora_rank; qk_rope_head_dim; num_hidden_layers; num_key_value_heads"
+        accessed_at: "2026-09-30"
+    limitations:
+      - "Runtime cache layout (pre- or post-normalization latent, dtype, padding of 576 to alignment, page format) is not established by the paper and is TODO_VERIFY per runtime."
+    applicability: "MLA KV sizing in Lesson 3.1; consumes the Module 01 Lesson 1.7 prerequisite."
+    curriculum_usage:
+      lessons: ["3.1"]
+      labs: ["LAB-A"]
+      assessments: ["Mastery-03"]
+
+  - id: "CLM-015"
+    claim: "Under the MLA retained-state model, logical KV payload per token is bytes_per_element*l*(d_c+d_h^R); with DeepSeek-V2 values and 2-byte elements this is 69,120 bytes (67.5 KiB) per token and 270 MiB for a 4,096-token request, whereas inserting num_key_value_heads=128 and head_dim=128 into the GQA formula gives 3,932,160 bytes (3.75 MiB) per token, about 56.9x larger."
+    provenance: "DERIVED"
+    domain: "memory_accounting"
+    concepts: ["mla", "bytes_per_token", "config_field_trap"]
+    confidence: "high"
+    assumptions:
+      - "One latent and one decoupled RoPE key per layer per token as in CLM-014; no per-head K/V cached."
+      - "2 bytes per element is an exercise assumption; no padding, scales, or allocator rounding."
+    derivation: "2*60*(512+64)=69,120 bytes; 69,120/1024=67.5 KiB; 69,120*4096/2^20=270 MiB. GQA misuse: 2*2*60*128*128=3,932,160 bytes = 3.75 MiB; ratio 56.89."
+    limitations:
+      - "A logical payload, not measured runtime memory."
+    applicability: "Rejecting GQA-formula sizing for latent-attention models."
+    related_claims: ["CLM-014", "CLM-002"]
+    curriculum_usage:
+      lessons: ["3.1"]
+      labs: ["LAB-A"]
+      assessments: ["Mastery-03"]
+
+  - id: "CLM-016"
+    claim: "Whether delaying or admitting a request under KV pressure lowers per-token latency (TPOT/ITL) of running requests cannot be inferred from free-block counts; it depends on the completion and reclaim timeline, the preemption and victim policy, and the measured per-iteration cost as a function of resident batch and scheduled prefill work."
+    provenance: "HYPOTHESIS"
+    domain: "diagnostic_methodology"
+    concepts: ["admission", "tpot", "prefill_interference", "preemption", "timeline"]
+    confidence: "high"
+    hypothesis:
+      prediction: "For a fixed block state, runs that differ only in completion timing or in the step-cost function will show different signs or magnitudes of the TPOT change caused by admission; when admission forces preemption with recomputation, running requests' mean gaps rise, and when it does not, delaying mostly relocates prefill interference rather than removing it."
+      measurement_target: "Per-iteration duration with resident batch size and scheduled prefill tokens; per-request token emission timestamps; free/allocatable block trace; preemption events and recomputed tokens."
+      falsifying_observation: "Across controlled runs with the same block state but different completion timing and batch/prefill cost profiles, the TPOT change caused by admission is invariant and fully predicted by the free-block count."
+    limitations:
+      - "Policy effects on queueing, fairness, and SLO attainment are owned by Module 04."
+    applicability: "Lesson 3.5 admission reasoning and Incident 03.1."
+    related_claims: ["CLM-013", "CLM-017"]
+    curriculum_usage:
+      lessons: ["3.5"]
+      labs: ["LAB-B"]
+      assessments: ["Incident-03.1", "Mastery-03"]
+
+  - id: "CLM-017"
+    claim: "In the Lesson 3.5 synthetic model (10 free blocks; A +4 and B +8 blocks of growth; C needs 6; 16-token blocks; youngest-victim recompute), admitting C leaves 10-6=4 free blocks; if A uses its full growth, admission forces one preemption at iteration 17 and raises A's and B's mean gaps under both step-cost models, while if A stops after 12 tokens there is no preemption and B's mean gap is identical under admit-now and delay (20.375 ms under K1, 22.4375 ms under K2)."
+    provenance: "DERIVED"
+    domain: "scheduler_allocator_interface"
+    concepts: ["admission", "timeline", "preemption", "synthetic_example"]
+    confidence: "high"
+    assumptions:
+      - "All quantities are exercise assumptions: block size 16; A holds 6 and B 8 blocks with full tails; C has a 96-token prompt and emits 32 tokens; completions free all blocks."
+      - "K1: 20 ms per decode iteration for batch 1-3 plus 0.5 ms per scheduled prefill token; K2: 14+6*batch ms plus the same prefill term."
+      - "Allocation order per iteration: running requests, then admission; shortfall preempts the youngest request and recomputes its prompt plus generated tokens on re-admission."
+    derivation: "Iteration-by-iteration replay. T1/K1 admit-now: iteration 1 = 20+0.5*96 = 68 ms; shortfall at iteration 17 preempts C; re-prefill of 112 tokens at iteration 65 = 76 ms; A = (63*20+68)/64 = 20.75 ms; B = (126*20+68+76)/128 = 20.8125 ms. T1/K1 delay: A = 20 ms; B = (127*20+68)/128 = 20.375 ms; C TTFT = 64*20+68 = 1,348 ms. T2 (A stops after 12): no shortfall; B's multiset of (batch, prefill) iterations is the same under both policies, so B's mean gap is equal."
+    limitations:
+      - "A toy model for teaching the dependence on timeline and cost; not a measurement of any runtime."
+    applicability: "Lesson 3.5 worked example and guided practice."
+    related_claims: ["CLM-016"]
+    curriculum_usage:
+      lessons: ["3.5"]
+      labs: ["LAB-B"]
+      assessments: ["Incident-03.1"]

@@ -1,7 +1,9 @@
 module: "08-ai-data-engineering"
-registry_version: "1.0.0"
+registry_version: "1.1.0"
+previous_version: "1.0.0"
 research_cutoff: "2026-09-26"
-change_reason: "Replace generated placeholders with traceable data contracts, validation, leakage and drift models, synthetic-data controls, active-learning loops, and pinned production source evidence."
+change_reason: "WP-D1 (AUD-08-01, AUD-08-02, AUD-G04): state what each shift type changes and what it assumes invariant, citing the covariate-shift and label-shift primary sources opened on 2026-09-30; state that unlabeled drift alarms cannot establish pure covariate shift; make PSI's positive-bin and zero-bin policy explicit; replace the generic 2025-2026 frontier line with sources opened on 2026-09-30 plus an explicit TODO_VERIFY. Unchanged claims keep their 2026-09-26 cutoff and were not re-verified in this revision."
+changed_claims: ["CLM-004", "CLM-005", "CLM-015", "CLM-016", "CLM-017", "CLM-018", "CLM-019"]
 
 claims:
   - id: CLM-001
@@ -44,27 +46,28 @@ claims:
     curriculum_usage: { lessons: ["8.2"], labs: ["LAB-A"], assessments: ["Mastery-08"] }
 
   - id: CLM-004
-    claim: "Covariate shift changes P(X), label shift changes P(Y), and concept shift changes P(Y|X); unlabeled feature monitoring can observe evidence of input shift but cannot by itself identify label or concept shift."
+    claim: "Covariate shift changes P(X) while assuming P(Y|X) invariant, label shift changes P(Y) while assuming P(X|Y) invariant, and concept shift changes P(Y|X); unlabeled feature monitoring can observe that P(X) changed but cannot establish which conditional stayed invariant, so it cannot prove pure covariate shift, and a mixed shift can produce the same P(X) as a pure covariate shift."
     provenance: DERIVED
     domain: drift
     concepts: [covariate_shift, label_shift, concept_shift]
     confidence: high
     currentness_status: "REFERENCE / BASELINE"
     assumptions: ["A stable definition of X, Y, population, and time window is available."]
-    derivation: "P(X,Y)=P(Y|X)P(X)=P(X|Y)P(Y); different factors can change while producing similar observed marginals, and Y-dependent changes are not identifiable from X alone without further assumptions or labels."
-    limitations: ["Operational pipelines often change feature definitions simultaneously with population behavior."]
+    derivation: "P(X,Y)=P(Y|X)P(X)=P(X|Y)P(Y). Fix any target P_T(X). Pairing it with the reference P(Y|X) gives a pure covariate shift; pairing it with a different P(Y|X) gives a mixed shift. Both have identical P_T(X), so any statistic of unlabeled X has the same distribution under both. The module's toy (S vs T1 vs T2) gives identical PSI on X (0.376) while the fixed rule's error moves from 0.22 to 0.16 or to 0.37."
+    limitations: ["Operational pipelines often change feature definitions simultaneously with population behavior.", "Identifiability can improve with labels, labeled canaries, or additional structural assumptions; the claim concerns unlabeled X alone."]
     applicability: "Drift hypothesis formation and telemetry design."
-    curriculum_usage: { lessons: ["8.3"], labs: ["LAB-B"], assessments: ["Mastery-08"] }
+    curriculum_usage: { lessons: ["8.3"], labs: ["LAB-B"], assessments: ["Mastery-08", "Incident-08.1"] }
+    related_claims: ["CLM-015", "CLM-016"]
 
   - id: CLM-005
-    claim: "Population Stability Index is a binned symmetric divergence heuristic, sum_i (p_i-q_i) ln(p_i/q_i); its value depends on bins and smoothing and has no universal alert threshold or direct mapping to model-quality loss."
+    claim: "Population Stability Index is a binned symmetric divergence heuristic, sum_i (p_i-q_i) ln(p_i/q_i), defined only when every bin proportion is strictly positive; the zero-bin policy (pseudocount or merging), bin edges, and sample size are part of the metric, and it has no universal alert threshold or direct mapping to model-quality loss."
     provenance: DERIVED
     domain: drift_metrics
     concepts: [psi, binning, drift_threshold]
     confidence: high
     currentness_status: "LEGACY / WORKLOAD-DEPENDENT"
     assumptions: ["Reference and current proportions use identical exhaustive bins and strictly positive smoothed values."]
-    derivation: "The statistic is computed from bin proportions; changing boundaries or pseudocounts changes terms, while model impact also depends on feature use and conditional labels."
+    derivation: "Each term (p_i-q_i) ln(p_i/q_i) is non-negative and undefined when p_i or q_i is 0. In the module's example the same counts give PSI 0.702 (pseudocount 0.5), 0.465 (pseudocount 5), or 0.221 (merged bins); model impact also depends on feature use and conditional labels."
     limitations: ["Do not interpret a conventional PSI cutoff as a statistical or product guarantee."]
     applicability: "A descriptive drift signal when binning and calibration against outcomes are documented."
     curriculum_usage: { lessons: ["8.3"], labs: ["LAB-B"], assessments: ["Mastery-08"] }
@@ -198,3 +201,70 @@ claims:
     limitations: ["Rare incidents and policy changes make calibration uncertain and nonstationary."]
     applicability: "Data observability, quarantine, and promotion gates."
     curriculum_usage: { lessons: ["8.3"], labs: ["LAB-B"], assessments: ["Incident-08.1", "Mastery-08"] }
+
+  - id: CLM-015
+    claim: "Zhang, Yamane, Lu, and Sugiyama define covariate shift as the setting where the input distribution differs between training and test while the conditional distribution of the output given the input remains unchanged."
+    provenance: VERIFIED_FACT
+    domain: drift
+    concepts: [covariate_shift, conditional_invariance]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence:
+      - { source_type: paper, tier: 1, title: "A One-step Approach to Covariate Shift Adaptation", authors: "Tianyi Zhang, Ikko Yamane, Nan Lu, Masashi Sugiyama", year: "2020", version: "Proceedings of the 12th Asian Conference on Machine Learning, PMLR 129:65-80", url: "https://proceedings.mlr.press/v129/zhang20a.html", section: "Abstract", accessed_at: "2026-09-30" }
+    limitations: ["Abstract-level inspection; the paper's one-step adaptation method and bound were not studied.", "The definition is an assumption about the deployment, not something an unlabeled monitor can verify."]
+    applicability: "Stating the invariant that importance-weighting and covariate-shift reasoning rely on."
+    curriculum_usage: { lessons: ["8.3"], labs: ["LAB-B"], assessments: ["Mastery-08"] }
+    related_claims: ["CLM-004"]
+
+  - id: CLM-016
+    claim: "Lipton, Wang, and Smola define label shift as a change in the label marginal p(y) while the conditional p(x|y) does not change, and introduce Black Box Shift Estimation to estimate the test label distribution from unlabeled test inputs using a predictor whose confusion matrix is invertible."
+    provenance: VERIFIED_FACT
+    domain: drift
+    concepts: [label_shift, conditional_invariance, bbse]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence:
+      - { source_type: paper, tier: 1, title: "Detecting and Correcting for Label Shift with Black Box Predictors", authors: "Zachary Lipton, Yu-Xiang Wang, Alexander Smola", year: "2018", version: "Proceedings of the 35th International Conference on Machine Learning, PMLR 80:3122-3130", url: "https://proceedings.mlr.press/v80/lipton18a.html", section: "Abstract", accessed_at: "2026-09-30" }
+    limitations: ["Abstract-level inspection; the estimator's consistency conditions and experiments were not studied.", "Under label shift P(Y|X) generally changes, so correction must not assume it is fixed."]
+    applicability: "Class-prior change where class-conditional inputs are plausibly stable."
+    curriculum_usage: { lessons: ["8.3"], labs: ["LAB-B"], assessments: ["Mastery-08"] }
+    related_claims: ["CLM-004"]
+
+  - id: CLM-017
+    claim: "Tao et al. report that existing contamination detectors are close to random guessing for contamination introduced during RL post-training, propose an entropy-collapse-based probe (Self-Critique), and introduce the RL-MIA benchmark; the results are author-reported on their models and tasks."
+    provenance: VERIFIED_FACT
+    domain: contamination
+    concepts: [post_training_contamination, membership_inference, detector_recall]
+    confidence: medium
+    currentness_status: "FRONTIER / WORKLOAD-DEPENDENT"
+    evidence:
+      - { source_type: paper, tier: 1, title: "Detecting Data Contamination from Reinforcement Learning Post-training for Large Language Models", authors: "Yongding Tao, Tian Wang, Yihong Dong, Huanyu Liu, Kechi Zhang, Xiaolong Hu, Ge Li", year: "2026", version: "arXiv v2 (2026-03-18); v1 2025-10-10", url: "https://arxiv.org/abs/2510.09259", section: "Abstract only", accessed_at: "2026-09-30" }
+    limitations: ["Abstract-level inspection only; the arXiv page's venue note (ICLR 2026) was not independently checked.", "A new detector's recall remains detector- and model-relative (CLM-008)."]
+    applicability: "Frontier evidence that decontamination audits must cover post-training stages, not only pretraining corpora."
+    curriculum_usage: { lessons: ["8.4"], labs: ["LAB-C"], assessments: ["Mastery-08"] }
+    related_claims: ["CLM-008"]
+
+  - id: CLM-018
+    claim: "Chen et al. survey the move from static to dynamic LLM benchmarks as a response to data contamination and argue that standardized criteria for evaluating dynamic benchmarks are lacking."
+    provenance: VERIFIED_FACT
+    domain: contamination
+    concepts: [dynamic_benchmarks, contamination_mitigation]
+    confidence: medium
+    currentness_status: "FRONTIER / SURVEY"
+    evidence:
+      - { source_type: paper, tier: 1, title: "Recent Advances in Large Language Model Benchmarks against Data Contamination: From Static to Dynamic Evaluation", authors: "Simin Chen, Yiming Chen, Zexin Li, Yifan Jiang, Zhongwei Wan, Yixin He, Dezhi Ran, Tianle Gu, Haizhou Li, Tao Xie, Baishakhi Ray", year: "2025", version: "arXiv v2 (2025-09-29)", url: "https://arxiv.org/abs/2502.17521", section: "Abstract only", accessed_at: "2026-09-30" }
+    limitations: ["Abstract-level inspection only; a survey maps proposals and does not establish adoption."]
+    applicability: "Designing refreshed or regenerated evaluation anchors."
+    curriculum_usage: { lessons: ["8.4"], labs: ["LAB-C"], assessments: ["Mastery-08"] }
+    related_claims: ["CLM-008"]
+
+  - id: CLM-019
+    claim: "TODO_VERIFY: 2025-2026 primary-source evidence on semantic decontamination, automated data valuation, learned quality filters, and adaptive synthetic mixtures has not been surveyed in this revision; no specific result is asserted."
+    provenance: TODO_VERIFY
+    domain: data_frontier
+    concepts: [data_valuation, quality_filters, adaptive_mixtures]
+    confidence: low
+    currentness_status: "FRONTIER / UNVERIFIED"
+    limitations: ["Placeholder for a primary-source survey; must not support any required outcome."]
+    applicability: "Research backlog for the frontier source map."
+    curriculum_usage: { lessons: ["8.4", "8.5"], labs: [], assessments: [] }

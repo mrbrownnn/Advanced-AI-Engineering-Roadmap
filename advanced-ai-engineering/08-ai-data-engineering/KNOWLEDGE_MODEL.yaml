@@ -1,5 +1,5 @@
 module: "08-ai-data-engineering"
-registry_version: "1.0.0"
+registry_version: "1.1.0"
 
 required_concepts:
   - "data_contract"
@@ -70,11 +70,11 @@ mechanisms:
 
 mathematical_models:
   - id: MATH-01
-    description: "Joint shift factorization P(X,Y)=P(Y|X)P(X)=P(X|Y)P(Y) distinguishes input, label, and concept components. Observed P(X) alone cannot generally identify changes involving Y."
-    evidence_ids: ["CLM-004"]
+    description: "Joint shift factorization P(X,Y)=P(Y|X)P(X)=P(X|Y)P(Y). Covariate shift changes P(X) with P(Y|X) invariant; label shift changes P(Y) with P(X|Y) invariant (so P(Y|X) generally changes); concept shift changes P(Y|X). A mixed shift can share P_T(X) with a pure covariate shift, so observed P(X) alone cannot prove pure covariate shift or identify changes involving Y."
+    evidence_ids: ["CLM-004", "CLM-015", "CLM-016"]
     derived_from: ["MECH-03"]
   - id: MATH-02
-    description: "PSI=sum_i(p_i-q_i)ln(p_i/q_i) for identical bins and positive proportions. It is a descriptive binned divergence whose magnitude changes with bins/smoothing and does not predict model loss without empirical linkage."
+    description: "PSI=sum_i(p_i-q_i)ln(p_i/q_i) for identical exhaustive bins with every p_i>0 and q_i>0; each term is non-negative and a zero bin is undefined, so a declared pseudocount or merge policy is part of the metric. Magnitude changes with bins/smoothing (0.702, 0.465, or 0.221 for the same counts in the module example) and does not predict model loss without empirical linkage."
     evidence_ids: ["CLM-005"]
     derived_from: ["MECH-03"]
   - id: MATH-03
@@ -85,10 +85,14 @@ mathematical_models:
     description: "Label-efficiency curve plots representative holdout utility against cumulative annotation cost, not only labeled-item count. Area or budget operating points require identical initialization, annotator policy, model update schedule, and test set across query strategies."
     evidence_ids: ["CLM-011", "CLM-012"]
     derived_from: ["MECH-06"]
+  - id: MATH-05
+    description: "Alert-rule cost over a window = alerts x investigation cost + missed incidents x miss cost. The ranking of rules depends on the cost ratio: in the module example the combined PSI-plus-canary rule is cheapest at a miss cost of 3,000, but the broad PSI rule is cheapest at 6,000."
+    evidence_ids: ["CLM-014"]
+    derived_from: ["MECH-03", "MATH-02"]
 
 implementation_mechanisms:
   - id: IMPL-01
-    description: "A dataset manifest stores immutable source snapshots/hashes, record IDs, parent-child lineage, transform code/config/environment, schema, split assignment, filters/removals, label provenance, generator metadata, counts, quality results, and consumer compatibility."
+    description: "A dataset manifest stores immutable source snapshots/hashes, record IDs, parent-child lineage, transform code/config/environment, schema, split assignment, filters/removals with the reason (for example 'duplicate of X'), label provenance, generator metadata, counts, quality results, and consumer compatibility. Corrections create new record versions and releases; deletions follow parent edges to synthetic descendants and re-run dedup so a surviving duplicate is re-promoted."
     evidence_ids: ["CLM-001", "CLM-002", "CLM-010"]
     derived_from: ["MECH-01"]
   - id: IMPL-02
@@ -110,7 +114,7 @@ failure_modes:
     evidence_ids: ["CLM-001", "CLM-002"]
     derived_from: ["MECH-01", "IMPL-01"]
   - id: FAIL-02
-    description: "Schema-green semantic failure: types/ranges pass while units, joins, label meaning, timestamps, encodings, or source authority are wrong."
+    description: "Schema-green semantic failure: types/ranges pass while units, joins, label meaning, timestamps, encodings, or source authority are wrong. Example: a non-unique dimension key turns a 4-row left join into 6 rows and inflates summed revenue by 29.0%; key uniqueness, row conservation, and total reconciliation catch it while schema checks pass."
     evidence_ids: ["CLM-003", "CLM-013"]
     derived_from: ["MECH-02"]
   - id: FAIL-03
@@ -133,6 +137,14 @@ failure_modes:
     description: "Active-learning selection failure: an early miscalibrated model repeatedly queries redundant outliers, annotator cost rises, pool coverage narrows, and queried-set evaluation reports biased progress."
     evidence_ids: ["CLM-011", "CLM-012"]
     derived_from: ["MECH-06", "MATH-04"]
+  - id: FAIL-08
+    description: "Shift misattribution: an unlabeled P(X) alarm is reported as 'covariate shift' and the model is assumed still valid, although a mixed or concept shift with the same P(X) has changed P(Y|X) and raised error."
+    evidence_ids: ["CLM-004", "CLM-015", "CLM-016"]
+    derived_from: ["MATH-01", "FAIL-03"]
+  - id: FAIL-09
+    description: "Deletion-lineage gap: a deletion removes the source record but misses synthetic descendants linked only by parent edges, or removes a canonical duplicate without re-promoting an eligible surviving duplicate."
+    evidence_ids: ["CLM-002", "CLM-010"]
+    derived_from: ["IMPL-01", "FAIL-01"]
 
 production_connections:
   - id: PROD-01
@@ -150,13 +162,19 @@ research_connections:
     evidence_ids: ["CLM-007", "CLM-009"]
     derived_from: ["MECH-04", "MECH-05"]
   - id: RESEARCH-02
-    description: "2026 contamination work motivates post-training audits, but individual preprints remain frontier evidence and do not replace direct provenance across every stage."
-    evidence_ids: ["CLM-008"]
+    description: "2025-2026 contamination work (RL post-training detection, dynamic benchmarks) motivates audits across post-training stages, but these abstract-level, author-reported results remain frontier evidence and do not replace direct provenance across every stage. Other data-frontier topics are unverified in this revision."
+    evidence_ids: ["CLM-008", "CLM-017", "CLM-018", "CLM-019"]
     derived_from: ["MECH-04"]
 
+todo_verify:
+  - id: TODO-01
+    description: "Survey 2025-2026 primary sources on semantic decontamination, automated data valuation, learned quality filters, and adaptive synthetic mixtures before naming any in the frontier map."
+    evidence_ids: ["CLM-019"]
+    derived_from: ["RESEARCH-02"]
+
 candidate_capabilities:
-  - { capability: "Produce a replayable dataset release with complete lineage and contracts.", mapped_mechanisms: ["MECH-01", "IMPL-01", "PROD-01"] }
+  - { capability: "Produce a replayable dataset release with complete lineage, correction, and deletion propagation.", mapped_mechanisms: ["MECH-01", "IMPL-01", "PROD-01", "FAIL-09"] }
   - { capability: "Build layered validation and diagnose schema-green semantic failures.", mapped_mechanisms: ["MECH-02", "IMPL-02", "IMPL-04", "FAIL-02"] }
-  - { capability: "Distinguish drift types and validate alerts against downstream risk.", mapped_mechanisms: ["MECH-03", "MATH-01", "MATH-02", "FAIL-03"] }
+  - { capability: "Distinguish drift types by their invariants and validate alerts against downstream risk and cost.", mapped_mechanisms: ["MECH-03", "MATH-01", "MATH-02", "MATH-05", "FAIL-03", "FAIL-08"] }
   - { capability: "Audit leakage, duplicates, and contamination without claiming detector completeness.", mapped_mechanisms: ["MECH-04", "MATH-03", "IMPL-03", "FAIL-04", "FAIL-05"] }
   - { capability: "Operate synthetic-data and active-learning loops with independent anchors and cost-aware evaluation.", mapped_mechanisms: ["MECH-05", "MECH-06", "MATH-04", "FAIL-06", "FAIL-07", "PROD-02"] }

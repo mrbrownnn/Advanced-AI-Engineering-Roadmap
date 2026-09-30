@@ -1,5 +1,5 @@
 module: "03-kv-cache-engineering"
-registry_version: "1.0.0"
+registry_version: "1.1.0"
 
 required_concepts:
   - "kv_cache_semantics"
@@ -14,10 +14,13 @@ required_concepts:
   - "kv_quantization_and_lossy_eviction"
   - "offload_and_tiering"
   - "allocator_scheduler_interface"
+  - "latent_kv_state"
+  - "admission_timeline_reasoning"
 
 prerequisite_concepts:
   - "scientific_claim_discipline"
   - "attention_head_geometry"
+  - "mla_latent_state"
   - "gpu_memory_hierarchy"
   - "asynchronous_measurement"
 
@@ -38,122 +41,146 @@ concept_dependencies:
     depends_on: ["logical_vs_physical_blocks", "reference_counts_and_sharing"]
   - concept: "allocator_scheduler_interface"
     depends_on: ["eviction_and_lifecycle", "block_size_tradeoffs"]
+  - concept: "latent_kv_state"
+    depends_on: ["mla_latent_state", "kv_payload_accounting"]
+  - concept: "admission_timeline_reasoning"
+    depends_on: ["allocator_scheduler_interface", "logical_vs_physical_blocks"]
 
 mechanisms:
   - id: "M03-MECH-01"
     description: "Autoregressive KV caching retains layer-wise keys and values for prior positions so later tokens reuse them rather than recompute those projections. Retention policy and state geometry are architecture-specific."
-    evidence_ids: ["M03-CLM-001", "M03-CLM-002"]
+    evidence_ids: ["CLM-001", "CLM-002"]
     derived_from: []
 
   - id: "M03-MECH-02"
     description: "Paged KV allocation maps logical token blocks to physical blocks from a pool. Sequence growth appends mappings without requiring one maximum-length contiguous allocation, while block tails, metadata, and pool allocation remain real costs."
-    evidence_ids: ["M03-CLM-003", "M03-CLM-004"]
+    evidence_ids: ["CLM-003", "CLM-004"]
     derived_from: []
 
   - id: "M03-MECH-03"
     description: "Sharing requires explicit ownership/lifetime tracking. Immutable full-prefix blocks can be referenced by multiple requests; a shared mutable representation requires isolation such as copy-on-write or a runtime-specific alternative."
-    evidence_ids: ["M03-CLM-003", "M03-CLM-007"]
+    evidence_ids: ["CLM-003", "CLM-007"]
     derived_from: []
 
   - id: "M03-MECH-04"
     description: "Prefix reuse has two separate contracts: an index finds a candidate matching prefix, and a semantic identity key prevents incompatible state from being treated as equivalent. Hash chains and radix trees are implementation families, not the semantic definition."
-    evidence_ids: ["M03-CLM-006", "M03-CLM-008", "M03-CLM-012"]
+    evidence_ids: ["CLM-006", "CLM-008", "CLM-012"]
     derived_from: []
 
   - id: "M03-MECH-05"
     description: "Cache lifecycle distinguishes active references, reusable residency, eviction candidacy, physical reuse, and invalidation. A zero reference count has policy-specific meaning and must not be equated universally with immediate deallocation."
-    evidence_ids: ["M03-CLM-007", "M03-CLM-012"]
+    evidence_ids: ["CLM-007", "CLM-012"]
     derived_from: []
 
   - id: "M03-MECH-06"
     description: "KV reduction mechanisms differ: exact paging changes placement; quantization changes representation; token eviction changes retained attention state; offload changes storage tier; architectural methods change the state itself. Their quality and runtime costs require different evidence."
-    evidence_ids: ["M03-CLM-009", "M03-CLM-010", "M03-CLM-011", "M03-CLM-012"]
+    evidence_ids: ["CLM-009", "CLM-010", "CLM-011", "CLM-012"]
     derived_from: []
 
 mathematical_models:
   - id: "M03-MATH-01"
     description: "Standard uncompressed MHA/MQA/GQA logical payload per retained token is 2*L*H_kv*d_h*b bytes under the stated uniform-layer assumptions. Multiply by retained tokens per request and sum requests before applying sharding/replication and allocation rounding."
-    evidence_ids: ["M03-CLM-002"]
+    evidence_ids: ["CLM-002"]
     derived_from: []
 
   - id: "M03-MATH-02"
     description: "Simple fixed-block allocation for S>0 and block size B uses ceil(S/B) blocks, capacity B*ceil(S/B), and tail slack in [0,B-1] tokens per independently allocated sequence."
-    evidence_ids: ["M03-CLM-004"]
+    evidence_ids: ["CLM-004"]
     derived_from: []
 
   - id: "M03-MATH-03"
     description: "Pool capacity screening separates physical pool bytes, bytes per block, reserved/headroom blocks, active blocks, reusable/evictable blocks, and immediately allocatable blocks. Runtime meanings must be read before computing a free percentage."
-    evidence_ids: ["M03-CLM-005", "M03-CLM-007", "M03-CLM-012"]
+    evidence_ids: ["CLM-005", "CLM-007", "CLM-012"]
     derived_from: []
 
   - id: "M03-MATH-04"
     description: "Ideal transfer serialization lower bound is T>=Q/beta for Q payload bytes and measured effective path bandwidth beta; add setup and non-overlapped work, and model overlap on the actual critical path."
-    evidence_ids: ["M03-CLM-011"]
+    evidence_ids: ["CLM-011"]
     derived_from: []
+
+  - id: "M03-MATH-05"
+    description: "MLA logical payload per retained token is b*l*(d_c+d_h^R) bytes from the latent and decoupled-RoPE widths; the 2*L*H_kv*d_h*b formula does not apply to latent attention even when a config lists a KV-head count."
+    evidence_ids: ["CLM-014", "CLM-015"]
+    derived_from: []
+
+  - id: "M03-MATH-06"
+    description: "Admission screening is exact only at an instant (free - demand); latency consequences require a timeline of growth and reclaim events plus a measured step-cost function of resident batch and scheduled prefill tokens."
+    evidence_ids: ["CLM-016", "CLM-017"]
+    derived_from: ["M03-MATH-03"]
 
 implementation_mechanisms:
   - id: "M03-IMPL-01"
     description: "Minimal block manager maintains a fixed physical pool, per-request logical block tables, reference counts, explicit cached/evictable state, allocation/free transitions, and invariant checks before adding policy complexity."
-    evidence_ids: ["M03-CLM-003", "M03-CLM-004", "M03-CLM-007"]
+    evidence_ids: ["CLM-003", "CLM-004", "CLM-007"]
     derived_from: ["M03-MECH-02", "M03-MECH-03", "M03-MECH-05"]
 
   - id: "M03-IMPL-02"
-    description: "Pinned vLLM V1 trace: Scheduler.schedule -> KVCacheManager.allocate_slots -> coordinator allocation calculations -> BlockPool.get_new_blocks; prefix lookup/cache paths use KVCacheManager.get_computed_blocks, block hashes, BlockPool.touch, and BlockPool.free_blocks."
-    evidence_ids: ["M03-CLM-005", "M03-CLM-006", "M03-CLM-007"]
+    description: "Pinned vLLM V1 trace: Scheduler.schedule -> KVCacheManager.allocate_slots -> coordinator allocation calculations -> BlockPool.get_new_blocks; prefix lookup/cache paths use KVCacheManager.get_computed_blocks, block hashes from get_request_block_hasher and hash_block_tokens, BlockPool.touch, and BlockPool.free_blocks."
+    evidence_ids: ["CLM-005", "CLM-006", "CLM-007"]
     derived_from: []
 
 failure_modes:
   - id: "M03-FAIL-01"
     description: "Logical-payload-as-VRAM fallacy: the standard KV formula is reported as exact process memory despite block rounding, multiple pools, metadata, workspaces, allocator reservations, model state, sharding, or hybrid architecture."
-    evidence_ids: ["M03-CLM-002", "M03-CLM-004", "M03-CLM-012"]
+    evidence_ids: ["CLM-002", "CLM-004", "CLM-012"]
     derived_from: ["M03-MATH-01", "M03-MATH-02"]
 
   - id: "M03-FAIL-02"
     description: "Fragmentation layer confusion: paged logical allocation is claimed to eliminate framework/device allocator fragmentation or all memory waste."
-    evidence_ids: ["M03-CLM-003", "M03-CLM-004"]
+    evidence_ids: ["CLM-003", "CLM-004"]
     derived_from: ["M03-MECH-02"]
 
   - id: "M03-FAIL-03"
     description: "Unsafe cache hit: token equality or a weak hash key is treated as sufficient despite adapters, multimodal inputs, prompt embeddings, cache isolation, positions, model state, or collision policy."
-    evidence_ids: ["M03-CLM-006", "M03-CLM-012"]
+    evidence_ids: ["CLM-006", "CLM-012"]
     derived_from: ["M03-MECH-04"]
 
   - id: "M03-FAIL-04"
     description: "Lifecycle corruption: a block is returned for physical reuse while still referenced/read, reference counts drift, cached metadata survives reuse, or reset/invalidation omits changed execution state."
-    evidence_ids: ["M03-CLM-007"]
+    evidence_ids: ["CLM-007"]
     derived_from: ["M03-MECH-03", "M03-MECH-05"]
 
   - id: "M03-FAIL-05"
     description: "Nominal compression multiplier: bit-width reduction is translated directly into concurrency or throughput without metadata, kernels, residual state, other memory, and quality evidence."
-    evidence_ids: ["M03-CLM-009", "M03-CLM-010"]
+    evidence_ids: ["CLM-009", "CLM-010"]
     derived_from: ["M03-MECH-06"]
 
   - id: "M03-FAIL-06"
     description: "KV thrashing misdiagnosis: high usage or low hit rate alone is called memory thrashing without linking churn, recomputation/transfer, scheduler actions, and lost useful progress."
-    evidence_ids: ["M03-CLM-013"]
+    evidence_ids: ["CLM-013"]
     derived_from: []
+
+  - id: "M03-FAIL-07"
+    description: "Latency-from-occupancy inference: a TPOT benefit or harm is claimed from remaining free blocks without completion timing, preemption policy, or per-iteration cost evidence."
+    evidence_ids: ["CLM-016", "CLM-017"]
+    derived_from: ["M03-MATH-06"]
+
+  - id: "M03-FAIL-08"
+    description: "GQA formula applied to an MLA model using a configured KV-head count, overstating retained KV payload by about 56.9x for DeepSeek-V2 values."
+    evidence_ids: ["CLM-014", "CLM-015"]
+    derived_from: ["M03-MATH-05"]
 
 production_connections:
   - id: "M03-PROD-01"
     description: "The allocator exposes feasibility and state to the scheduler, but queue discipline, fairness, admission objectives, TTFT/TPOT, and capacity policy belong to Module 04."
-    evidence_ids: ["M03-CLM-005", "M03-CLM-013"]
+    evidence_ids: ["CLM-005", "CLM-013"]
     derived_from: []
 
   - id: "M03-PROD-02"
     description: "Production telemetry aligns logical demand, pool/group capacity, active/reusable/evictable blocks, hits by reusable tokens, block churn, allocation failures, invalidations, transfer/recompute, and scheduler decisions."
-    evidence_ids: ["M03-CLM-005", "M03-CLM-006", "M03-CLM-007", "M03-CLM-013"]
+    evidence_ids: ["CLM-005", "CLM-006", "CLM-007", "CLM-013"]
     derived_from: []
 
 research_connections:
   - id: "M03-RES-01"
     description: "Paged block management is a reference/current baseline; prefix/radix reuse is common but locality-dependent; low-bit KV, lossy token selection, multi-tier persistence, hybrid-state managers, and cross-instance connectors remain workload-, model-, hardware-, and runtime-dependent."
-    evidence_ids: ["M03-CLM-003", "M03-CLM-008", "M03-CLM-009", "M03-CLM-010", "M03-CLM-012"]
+    evidence_ids: ["CLM-003", "CLM-008", "CLM-009", "CLM-010", "CLM-012"]
     derived_from: []
 
 todo_verify:
   - id: "M03-TODO-01"
     description: "Execute the pinned vLLM paths with cache events and allocation telemetry for full attention, sliding-window/hybrid, LoRA, multimodal, and connector cases; static source inspection does not establish the locally selected coordinator or device layout."
-    evidence_ids: ["M03-CLM-005", "M03-CLM-006", "M03-CLM-007", "M03-CLM-012"]
+    evidence_ids: ["CLM-005", "CLM-006", "CLM-007", "CLM-012"]
     derived_from: []
 
 candidate_capabilities:
@@ -165,5 +192,9 @@ candidate_capabilities:
     mapped_mechanisms: ["M03-MECH-04", "M03-FAIL-03"]
   - capability: "Compare exact paging, prefix reuse, quantization, token eviction, and offload without applying nominal multipliers as system results."
     mapped_mechanisms: ["M03-MECH-06", "M03-MATH-04", "M03-FAIL-05"]
+  - capability: "Size latent-attention KV from the Module 01 retained-state model and reject KV-head-count sizing for MLA."
+    mapped_mechanisms: ["M03-MATH-05", "M03-FAIL-08"]
+  - capability: "Replay an admission decision as a block timeline under at least two cost models and name the measurements that separate prefill interference, batching efficiency, and preemption."
+    mapped_mechanisms: ["M03-MATH-06", "M03-FAIL-07", "M03-FAIL-06"]
   - capability: "Trace a current runtime from scheduler feasibility through KV allocation and cache lifecycle, then diagnose pressure with competing hypotheses."
     mapped_mechanisms: ["M03-IMPL-02", "M03-FAIL-06", "M03-PROD-02"]

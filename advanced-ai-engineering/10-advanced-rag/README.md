@@ -16,7 +16,7 @@ A wrong answer can therefore arise because evidence did not exist, was not yet v
 
 This module owns query orchestration, incremental-index freshness and version consistency, context assembly, contradiction handling, citations/grounding, staged RAG diagnosis, and RAG-versus-long-context decisions. Module 08 owns upstream data lineage, Module 09 owns retrieval/index/fusion/reranking mechanics, Module 11 owns general context and memory engineering, and Module 15 owns the organization-wide evaluation program.
 
-**Research cutoff:** 2026-09-27.
+**Research cutoff:** 2026-09-30. Sources marked as re-opened on that date are listed in the registry; other entries keep their original access dates.
 
 **Module Orientation**
 
@@ -56,13 +56,14 @@ depth_contract:
   research_connection: SELECTIVE
 
 estimated_effort:
-  instruction: 5h
-  guided_practice: 3h
-  labs: 18h
-  assessment: 3h
-  source_trace: 2h
+  instruction: 5h        # lesson instruction: 35+65+45+50+55+50 min = 300 min
+  guided_practice: 3h    # lesson practice: 30+35+30+25+30+30 min = 180 min
+  labs: 18h              # LAB A 4.5h + LAB B 4.5h + LAB C 4.5h + LAB D 4.5h
+  assessment: 3h         # Mastery transfer problem 2.5h + Incident 10.1 0.5h
+  source_trace: 2h       # Section 05 Haystack trace and Mastery Deliverable 8, counted once
   total: 31h
 ```
+Each category is counted once. Lab analysis is not also counted as guided practice, and the source trace is not also counted as assessment time.
 
 The learner must be able to define an end-to-end RAG contract; build idempotent incremental updates and deletes; prove query visibility and snapshot lineage; test query rewrites and context order; resolve or expose contradictions; validate citations at claim level; attribute failures by stage; and choose RAG, long context, or a hybrid route from matched evidence.
 
@@ -119,11 +120,15 @@ The original RAG architecture is a reference: generation is conditioned on retri
 
 **Guided Practice:** Specify and validate a request trace containing all revisions, transformations, candidates, context order, claims, citations, and finish state.
 
-**Feedback Contract:** Expected evidence is byte- or identity-stable replay with explicit unavailable dependencies. A common failure is storing only the final prompt.
+**Feedback Contract:**
+- *Expected Output*: a trace record whose replay against the recorded snapshot reproduces the same eligible set, candidates, context order, and citation targets. Any dependency that cannot be replayed (for example, a hosted model revision that is no longer served) is listed explicitly as unavailable.
+- *Common Failure*: storing only the final prompt and answer. The prompt shows what the model saw. It does not show which evidence was eligible but not retrieved, or which query transformation ran.
+- *Diagnostic Hint*: remove one field from your trace. Can you still tell whether a wrong answer came from a missing source, an invisible version, or a retrieval miss? If you can, that field was not doing any work.
+- *Concept to Revisit*: available versus opportunity versus use/support.
 
 **Learning Outcome:** Capture a complete request trace rather than only the final prompt and answer.
 
-*(Effort: 35m instruction, 25m practice)*
+*(Effort: 35m instruction, 30m practice)*
 
 ### Lesson 10.2 — Incremental Indexing, Visibility, and Consistency
 
@@ -148,23 +153,94 @@ $$
 
 The relation is exact for declared endpoints; decomposing it into stage times requires the actual dependency graph because work may overlap. Record event time semantics and clock skew. Report a distribution and stale-read fraction by source/slice, not only a mean.
 
-Stable IDs and monotonic versions make retries idempotent. Updates and deletes must converge across text, chunks, embeddings, metadata, caches, replicas, and citation targets. A tombstone that reaches lexical search but not vector search is not a completed delete. A high-watermark or read-snapshot contract prevents mixed-version answers; the required strength is product-specific.
+**Stable IDs and versions are inputs to idempotency; they do not create it.** A retry is safe only if the *store* applies an acceptance rule to every write, and applies it atomically. Each logical source item has a stable `doc_id`. The source assigns each change a monotonically increasing `version` (an event sequence number or source revision, never a worker's wall clock). The store keeps one record per `doc_id`: `(version_s, content_hash_s, state_s ∈ {live, tombstone})`. An incoming event `(op, doc_id, version_e, hash_e)` is decided as follows (**D**, CLM-018):
 
-Cache invalidation and partial failure belong to the same visibility contract. Cache keys must include every revision that can alter eligibility or ranking, and timeout/retry handling must expose whether the response is stale, partial, failed, or safely abstained. A fallback that silently serves an older snapshot changes the consistency contract.
+| Stored state | Incoming event | Decision | Store after | Acknowledge source as |
+|---|---|---|---|---|
+| no record | upsert / create | ACCEPT | live, `version_e` | applied |
+| no record | delete | ACCEPT as tombstone | tombstone, `version_e` | applied |
+| any | `version_e > version_s` | ACCEPT (upsert → live, delete → tombstone) | new state, `version_e` | applied |
+| any | `version_e = version_s`, same op, same hash | DUPLICATE (no write) | unchanged | applied (return the stored outcome) |
+| any | `version_e = version_s`, different op or hash | CONFLICT (no write, alert) | unchanged | rejected; the same key was reused with a different intent |
+| any | `version_e < version_s` | STALE (no write) | unchanged | superseded |
 
-Elasticsearch provides one concrete example: a write can be acknowledged before it becomes searchable; refresh controls visibility and costs work, while sequence numbers and primary terms support conditional updates. This is implementation evidence, not a universal store definition.
+Four conditions make this rule an idempotency guarantee rather than a hope:
 
-**Worked Example:** A write acknowledgement at $t_w$ and first successful production-equivalent read at $t_v$ give $L_{visible}=t_v-t_{event}$ for the declared source-event endpoint; $t_v-t_w$ is only the post-write portion.
+1. **Atomicity.** Compare and write must be one atomic step per `doc_id`: a conditional write, a compare-and-set, or a single-writer partition. "Read the stored version, then write" in two steps lets two workers both pass the check. Elasticsearch implements such conditions: `version_type=external` fails the write with a 409 conflict when the supplied version is less than or equal to the stored one, `if_seq_no`/`if_primary_term` make a write conditional on the last modification, and `op_type=create` fails if the ID already exists (**O**, CLM-019). Those are one store's semantics, not a definition for every vector store.
+2. **Same rule in every representation.** Text, chunks, embeddings, metadata, and citation-target stores each apply the rule with the *source* version, not a local counter. A tombstone that reaches lexical search but not vector search is not a completed delete.
+3. **Tombstones outlive the replay window.** A delete must leave a versioned tombstone. If it is physically removed (or the delete was unversioned) before every delayed or retried event for that `doc_id` has arrived, a late upsert meets "no record" and is accepted. The deleted document comes back.
+4. **Acknowledge after the decision is durable.** The ingestion worker acknowledges a source event only after the ACCEPT/DUPLICATE/STALE/CONFLICT outcome is durably recorded. That acknowledgement means "decided", not "query-visible".
 
-**Knowledge Check:** Why does worker success not establish cache/replica visibility?
+This is the same contract Module 14 (Lesson 14.2) develops for external effects: the receiver stores identity, canonical intent (here, version plus content hash), and outcome atomically, and rejects reuse of a key with different intent. Module 10 applies it to index writes. Durable workflow recovery stays in Module 14.
 
-**Guided Practice:** Inject duplicate, reordered, delayed, failed, and timed-out events across text/vector/cache representations; probe high-watermarks and deletion convergence.
+**Solved traces for one `doc_id`** (synthetic events; hashes `hA ≠ hB`):
 
-**Feedback Contract:** Expected evidence is a stage ledger, clock semantics, revision-aware cache keys, visibility distributions, stale/partial rates, and rollback proof. A common failure is averaging only successful updates.
+| Trace | Events in arrival order | Decisions | Final state | What last-writer-wins would do |
+|---|---|---|---|---|
+| Reordered retry | upsert v2 hA; upsert v1 hB; upsert v2 hA | ACCEPT; STALE; DUPLICATE | live v2 hA | ends at v2, but v1 content is served between the second and third event |
+| Same order, different tail | upsert v2 hA; upsert v2 hA; upsert v1 hB | ACCEPT; DUPLICATE; STALE | live v2 hA | ends at **v1**: an older version wins permanently |
+| Duplicate create | create v1 hA; create v1 hA; create v1 hB | ACCEPT; DUPLICATE; CONFLICT | live v1 hA | second create overwrites or errors; a changed body under the same version is silently accepted |
+| Delete then delayed upsert | upsert v3; delete v4; *(retry of)* upsert v3 | ACCEPT; ACCEPT (tombstone v4); STALE | tombstone v4 | the deleted document is live again |
+| Same, tombstone collected before the retry arrives | upsert v3; delete v4; *GC*; upsert v3 | ACCEPT; ACCEPT; —; ACCEPT (no record) | **live v3: resurrected** | same failure |
+
+The last row is the reason for condition 3. The fix is a tombstone retention period longer than the maximum event delay plus replay window, and a convergence check across all representations before garbage collection.
+
+**Progress watermark versus pinned read snapshot.** These are different objects:
+
+- A **progress watermark** $H_r$ for representation $r$ is the largest source sequence number $s$ such that every event $\le s$ has been decided and is visible in $r$. It is a monotone progress report. By itself it guarantees nothing about what one request reads.
+- A **pinned read snapshot** $S$ is chosen once per request, and *every* read for that request is served at $S$: lexical, vector, metadata, citation-target fetch, and cache. Enforcement needs one of: a store-level point-in-time or generation/alias read; or an application filter that drops any hit with version newer than $S$ and refuses (or waits for) representations with $H_r<S$. If a representation cannot serve $S$, the response is marked partial or the request abstains.
+
+Deletions obligated by policy or law are a separate hard constraint. A snapshot older than a delete must still exclude the deleted item, typically through a tombstone overlay checked at read time.
+
+**Mixed-version read fixture** (synthetic). Event 101 updates `A` from v1 to v2; event 102 deletes `B`. At request time $H_{lex}=102$, $H_{vec}=100$, and a cached candidate list was built at 100.
+
+| Read policy | What the request sees | Decision |
+|---|---|---|
+| No pinning | lexical returns `A` v2; vector and cache return `A` v1 chunks and `B` | **Mixed-version answer.** Context contains both versions of `A` and a deleted document. Not acceptable. |
+| Pin $S=\min_r H_r=100$, no overlay | `A` v1 and `B` everywhere | consistent but stale, *and* serves a deleted document. Fails the delete constraint. |
+| Pin $S=100$ plus tombstone overlay through 102 | `A` v1, `B` excluded | consistent; answer marked stale by the lag of event 101. Acceptable if the freshness SLO allows it. |
+| Pin $S=102$ | lexical ready; vector must catch up | wait up to the deadline for $H_{vec}\ge102$; otherwise answer from lexical only, marked partial, or abstain. |
+
+**Cache keys.** Including $S$ (or the index generation), the transformation/prompt versions, and the access scope in the cache key is one strategy. It stops a response built at one snapshot from being served to a request pinned at another. It does not remove the need for delete overlays and for validating the version of each cached citation target, because a key built at an old $S$ can still be requested legitimately. Timeout and retry handling must expose whether a response is stale, partial, failed, or a safe abstention. A fallback that silently serves an older snapshot changes the consistency contract.
+
+**Worked Example — freshness ledger with two replicas and a cache** (synthetic values; times in seconds after the source event at $t=0$):
+
+| Stage | Time | Note |
+|---|---:|---|
+| source event (document `P` updated v7→v8) | 0.0 | declared endpoint $t_{event}$ |
+| change detected, parsed, chunked, embedded | 9.0 | |
+| write acknowledged by primary | 11.0 | $t_w$ |
+| refresh makes v8 searchable on replica R1 | 12.5 | |
+| replica R2 applies and refreshes | 19.0 | R2 is lagging |
+| result cache entry for the popular query, built at | 5.0 | TTL 60 s, holds v7 |
+| delete of document `Q` (same event batch): lexical tombstone applied | 12.0 | |
+| delete of `Q`: vector delete fails, retried and applied | 40.0 | branch failure, not lag |
+
+Steps:
+
+1. Per-path visibility: $L_{visible,R1}=12.5$ s and $L_{visible,R2}=19.0$ s. The post-write portion $t_v-t_w$ is 1.5 s on R1 and 8.0 s on R2. Reporting only $t_v-t_w$ would hide the 11 s before the write.
+2. Probes run once per second from $t=0$ to $t=30$ (31 probes), alternating R1 (even seconds) and R2 (odd seconds), bypassing the cache. Stale probes: 7 on R1 ($t=0,2,\dots,12$) and 9 on R2 ($t=1,3,\dots,17$), so $16/31\approx0.516$ of probes in the window are stale.
+3. The cache is independent of both replicas. With no invalidation, the cached v7 answer is served until $t=65$. With invalidation at $t=12.0$ and a cache miss refilled from R2 at $t=12.2$, the refill stores v7 again and serves it until $t=72.2$. Invalidation without a version check made the cache *later* than either replica. A cache key or entry check that requires version ≥ v8 prevents that refill.
+4. For `Q`, the lexical path stops returning it at 12 s, but the vector path still returns it until 40 s. That is an incomplete delete, not refresh lag.
+
+Interpretation: an "index refresh lag" hypothesis predicts that direct replica probes and cached answers become fresh at the same time. At $t=30$ both direct replica probes return v8 while the cached path returns v7, so index lag is **refuted** as the cause of staleness after 19 s. The remaining causes are the cache and, for `Q`, the failed vector delete. Limits: the numbers are synthetic, the probe schedule is deterministic, and a real measurement needs clock-skew bounds and a distribution over many events, not one document.
+
+**Knowledge Check:**
+1. Why does worker success not establish cache or replica visibility?
+2. In the trace `upsert v2; delete v3; upsert v2 (retry)`, what is the final state, and what extra condition makes it safe?
+3. Why does a progress watermark not stop a request from reading two versions of one document?
+
+**Guided Practice:** Inject duplicate, reordered, delayed, failed, and timed-out events across text/vector/cache representations; probe high-watermarks and deletion convergence. Then decide these two traces with the acceptance table: (a) `create v1 hA; upsert v3 hB; upsert v2 hC; delete v3`; (b) `upsert v5; delete v6; GC after 30 s; upsert v5 retry arriving at 45 s`.
+
+**Feedback Contract:**
+- *Expected Output*: (a) ACCEPT, ACCEPT, STALE, CONFLICT: the delete reuses version 3 with a different op, so it is rejected and alerted, and the item stays live at v3 hB. The source must issue the delete as v4. (b) The retry meets "no record" and is accepted, resurrecting the document; the design fails unless tombstone retention exceeds 45 s. Your ledger should also report visibility as a distribution per representation, the stale/partial rate, and a rollback proof.
+- *Common Failure*: averaging only successful updates; or treating stable IDs plus versions as idempotent without an atomic conditional write.
+- *Diagnostic Hint*: for each event ask "who compares the version, and can two workers both pass that comparison?" For each stale read ask "was the replica behind, or did the cache refill from a replica that was behind?"
+- *Concept to Revisit*: conditional acceptance rule; progress watermark versus pinned read snapshot; Module 14 Lesson 14.2 (atomic idempotency).
 
 **Learning Outcome:** Prove update/delete visibility and rollback end to end under reordered and duplicated events.
 
-*(Effort: 50m instruction, 35m practice)*
+*(Effort: 65m instruction, 35m practice)*
 
 ### Lesson 10.3 — Query Orchestration and Context Assembly
 

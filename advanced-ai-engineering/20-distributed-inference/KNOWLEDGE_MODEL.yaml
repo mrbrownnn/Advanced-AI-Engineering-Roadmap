@@ -1,0 +1,62 @@
+module: "20-distributed-inference"
+registry_version: "1.0.0"
+
+required_concepts: [parallelism_taxonomy, replica, model_parallel_group, collective_cost, all_reduce, busbw, latency_bandwidth_model, tensor_parallelism, rank_layout, pipeline_parallelism, pipeline_bubble, stage_imbalance, expert_parallelism, all_to_all, redundant_experts, context_parallelism, ring_attention, pd_disaggregation, kv_transfer, kv_connector, goodput, prefix_aware_routing, load_balancing, failure_domain, straggler]
+prerequisite_concepts: [parameter_accounting, gpu_memory_hierarchy, roofline, kv_payload, paged_kv, ttft_tpot, continuous_batching, chunked_prefill, moe_routing]
+first_occurrence_concepts: [parallelism_taxonomy, replica, model_parallel_group, collective_cost, busbw, latency_bandwidth_model, tensor_parallelism, rank_layout, pipeline_parallelism, pipeline_bubble, stage_imbalance, expert_parallelism, all_to_all, redundant_experts, context_parallelism, ring_attention, pd_disaggregation, kv_transfer, kv_connector, prefix_aware_routing, failure_domain, straggler]
+
+concept_dependencies:
+  - { concept: parallelism_taxonomy, depends_on: [parameter_accounting, kv_payload] }
+  - { concept: collective_cost, depends_on: [all_reduce, busbw] }
+  - { concept: latency_bandwidth_model, depends_on: [collective_cost] }
+  - { concept: tensor_parallelism, depends_on: [parameter_accounting, all_reduce, latency_bandwidth_model] }
+  - { concept: pipeline_parallelism, depends_on: [parallelism_taxonomy] }
+  - { concept: pipeline_bubble, depends_on: [pipeline_parallelism] }
+  - { concept: expert_parallelism, depends_on: [moe_routing, all_to_all] }
+  - { concept: context_parallelism, depends_on: [ring_attention, kv_payload] }
+  - { concept: pd_disaggregation, depends_on: [ttft_tpot, chunked_prefill, kv_transfer] }
+  - { concept: kv_transfer, depends_on: [kv_payload, paged_kv] }
+  - { concept: prefix_aware_routing, depends_on: [paged_kv, load_balancing] }
+  - { concept: failure_domain, depends_on: [model_parallel_group, replica] }
+
+mechanisms:
+  - { id: "MECH-01", description: "Placement: choose replicated versus sharded state per layer type so weights and KV fit, then choose the layout by whether the phase is latency-bound or throughput-bound; replicas add throughput and isolation, model-parallel groups add capacity at the price of synchronous communication.", evidence_ids: ["CLM-001", "CLM-009"], derived_from: [] }
+  - { id: "MECH-02", description: "Collective cost: each model-parallel dimension puts a collective (all-reduce, all-gather, all-to-all, point-to-point) on the step's critical path whose time is a latency term plus bytes over achieved bus bandwidth.", evidence_ids: ["CLM-004", "CLM-005"], derived_from: ["MECH-01"] }
+  - { id: "MECH-03", description: "Tensor parallelism: column-then-row sharding of attention and MLP with one all-reduce per block per forward pass; placed within the fastest interconnect domain.", evidence_ids: ["CLM-002", "CLM-003", "CLM-006", "CLM-026"], derived_from: ["MECH-02"] }
+  - { id: "MECH-04", description: "Pipeline, expert, and context parallelism: PP adds capacity with a bubble and no latency gain; EP shards experts and routes tokens by all-to-all with redundancy for hot experts; CP shards long sequences and overlaps KV/Q block exchange with attention.", evidence_ids: ["CLM-006", "CLM-007", "CLM-008", "CLM-010", "CLM-011", "CLM-012", "CLM-013"], derived_from: ["MECH-02"] }
+  - { id: "MECH-05", description: "Prefill/decode disaggregation: separate pools remove phase interference and allow per-phase parallelism, at the cost of KV transfer on the TTFT path and a pool-ratio tuning problem; its benefit depends on SLO regime and bandwidth.", evidence_ids: ["CLM-014", "CLM-015", "CLM-016", "CLM-017", "CLM-018", "CLM-020", "CLM-021", "CLM-022", "CLM-027"], derived_from: ["MECH-01"] }
+  - { id: "MECH-06", description: "Multi-replica routing and failure domains: a router trades prefix affinity against load; the model-parallel group is the unit of failure and straggling.", evidence_ids: ["CLM-023", "CLM-024", "CLM-025"], derived_from: ["MECH-01"] }
+
+mathematical_models:
+  - { id: "MATH-01", description: "All-reduce time T ≈ α + 2(n-1)/n · S/B_bus; decode S = batch × hidden × bytes; per step 2L all-reduces for L layers under Megatron TP.", evidence_ids: ["CLM-002", "CLM-004", "CLM-005"], derived_from: ["MECH-02", "MECH-03"] }
+  - { id: "MATH-02", description: "Pipeline bubble fraction (p-1)/m (training), (1/v)(p-1)/m interleaved; forward-only utilization m/(m+p-1); throughput 1/max(t_i).", evidence_ids: ["CLM-006", "CLM-007", "CLM-008"], derived_from: ["MECH-04"] }
+  - { id: "MATH-03", description: "KV transfer bytes = 2 × layers × kv_heads × head_dim × bytes × uncached prompt tokens; non-overlapped transfer time adds to TTFT.", evidence_ids: ["CLM-020"], derived_from: ["MECH-05"] }
+  - { id: "MATH-04", description: "Affinity hotspot: a prefix with traffic share f pinned to one of R replicas gives that replica load ≥ f versus fair share 1/R.", evidence_ids: ["CLM-024"], derived_from: ["MECH-06"] }
+
+implementation_mechanisms:
+  - { id: "IMPL-01", description: "Pinned vLLM trace: RowParallelLinear.forward all-reduce, ColumnParallelLinear optional all-gather, GroupCoordinator.all_reduce world-size bypass, and the ExternalDP x DP x PP x PCP x TP rank layout with MoE-only EP groups.", evidence_ids: ["CLM-003"], derived_from: ["MECH-03"] }
+  - { id: "IMPL-02", description: "Pinned vLLM KV connector contract: scheduler-side matching and ownership, worker-side layerwise load/save, and load-error reporting.", evidence_ids: ["CLM-019"], derived_from: ["MECH-05"] }
+
+failure_modes:
+  - { id: "FAIL-01", description: "Cross-node tensor parallelism: per-token all-reduces over slower links inflate TPOT.", evidence_ids: ["CLM-005", "CLM-006", "CLM-026"], derived_from: ["MECH-03"] }
+  - { id: "FAIL-02", description: "Pipeline bubbles and stage imbalance: too few in-flight batches or uneven stages cap throughput; PP mistaken for a latency fix.", evidence_ids: ["CLM-007", "CLM-008"], derived_from: ["MECH-04"] }
+  - { id: "FAIL-03", description: "Expert hotspots: skewed routing overloads EP ranks and stretches all-to-all tail time.", evidence_ids: ["CLM-010"], derived_from: ["MECH-04"] }
+  - { id: "FAIL-04", description: "KV-transfer bottleneck or loss: transfer time consumes the TTFT budget, multi-turn transfers saturate links, or failed loads force recompute.", evidence_ids: ["CLM-019", "CLM-020", "CLM-022"], derived_from: ["MECH-05"] }
+  - { id: "FAIL-05", description: "Disaggregation in the wrong regime: tight TTFT or short prompts, or a mis-set prefill:decode ratio, lowers goodput.", evidence_ids: ["CLM-017", "CLM-018", "CLM-027"], derived_from: ["MECH-05"] }
+  - { id: "FAIL-06", description: "Affinity hotspots and group-wide stalls: a hot prefix overloads one replica; one failed or slow rank stalls its whole group.", evidence_ids: ["CLM-024", "CLM-025"], derived_from: ["MECH-06"] }
+
+production_connections:
+  - { id: "PROD-01", description: "Large MoE deployments separate prefill and decode pools with different attention DP/TP and EP degrees, redundant hot experts, and micro-batch overlap of compute with all-to-all.", evidence_ids: ["CLM-010", "CLM-016"], derived_from: ["MECH-04", "MECH-05"] }
+  - { id: "PROD-02", description: "Capacity plans count failure domains: many small model-parallel replicas lose less capacity per fault than one large group.", evidence_ids: ["CLM-001", "CLM-025"], derived_from: ["MECH-06"] }
+
+research_connections:
+  - { id: "RESEARCH-01", description: "Parallelism foundations (Megatron, GPipe, PTD-P, Pope et al.) supply communication counts, bubble arithmetic, and layout selection by phase.", evidence_ids: ["CLM-002", "CLM-006", "CLM-007", "CLM-009"], derived_from: ["MECH-03", "MECH-04"] }
+  - { id: "RESEARCH-02", description: "Disaggregation research moved from phase split (DistServe, Splitwise, Mooncake) to SLO-adaptive hybrids, multi-turn routing, attention-FFN splits, and cross-datacenter prefill (2025-2026).", evidence_ids: ["CLM-011", "CLM-014", "CLM-015", "CLM-016", "CLM-018", "CLM-021", "CLM-022"], derived_from: ["MECH-05"] }
+
+candidate_capabilities:
+  - { capability: "Choose a placement plan (replicas and TP/PP/EP/CP degrees) from memory fit, SLOs, and topology.", mapped_mechanisms: ["MECH-01", "PROD-02"] }
+  - { capability: "Predict and measure collective cost on the critical path.", mapped_mechanisms: ["MECH-02", "MATH-01", "FAIL-01"] }
+  - { capability: "Implement and trace tensor parallelism in a production runtime.", mapped_mechanisms: ["MECH-03", "IMPL-01"] }
+  - { capability: "Reason about pipeline, expert, and context parallelism trade-offs.", mapped_mechanisms: ["MECH-04", "MATH-02", "FAIL-02", "FAIL-03", "PROD-01"] }
+  - { capability: "Decide and size prefill/decode disaggregation including KV transfer.", mapped_mechanisms: ["MECH-05", "MATH-03", "IMPL-02", "FAIL-04", "FAIL-05"] }
+  - { capability: "Design multi-replica routing and failure-domain-aware capacity.", mapped_mechanisms: ["MECH-06", "MATH-04", "FAIL-06"] }

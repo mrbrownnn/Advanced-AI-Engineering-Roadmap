@@ -14,7 +14,7 @@ $$
 
 The module covers failure taxonomy, factuality/truthfulness measurement, calibration, distribution shift, selective prediction, uncertainty signals for free-form generation, conformal factuality, and behavior regression. Test-time search and verifiers belong to Module 06; general evaluation-program design belongs to Module 15; retrieval quality to Modules 09–10; security behavior to Module 18.
 
-**Research cutoff:** 2026-09-27.
+**Research cutoff:** 2026-09-27 for the original revision. Sources added in the 2026-09-30 revision (conformal construction, frontier items) were searched through 2026-09-30. Claims not listed as changed in the registry were not re-verified.
 
 **Module Orientation**
 
@@ -55,10 +55,10 @@ depth_contract:
 estimated_effort:
   instruction: 5h
   guided_practice: 3h
-  labs: 19h
+  labs: 20h
   assessment: 3h
   source_trace: 2h
-  total: 32h
+  total: 33h
 ```
 
 The learner must be able to:
@@ -68,7 +68,7 @@ The learner must be able to:
 3. measure calibration without relying on ECE alone;
 4. distinguish likelihood, self-evaluation, sample disagreement, semantic uncertainty, and learned scores;
 5. select abstention thresholds using risk-coverage and application utility;
-6. state exactly what a conformal guarantee covers and which assumptions sustain it;
+6. implement a split-conformal claim filter and state exactly what its guarantee covers and which assumptions sustain it;
 7. detect slice and shift regressions across model, prompt, runtime, retrieval, tool, and evaluator versions;
 8. diagnose apparent behavior changes through label audit and matched reruns.
 
@@ -131,9 +131,9 @@ A behavior contract declares:
 
 A useful taxonomy may include unsupported fabrication, contradiction with supplied evidence, stale fact, wrong attribution/citation, reasoning error, omission, instruction violation, invalid refusal, format failure, and evaluator failure. Categories can interact and are not universal: an unsupported claim in closed-book QA differs from a contradiction in grounded summarization.
 
-TruthfulQA isolates susceptibility to selected human misconceptions. FActScore decomposes long-form output into atomic facts and measures supported-fact precision. Neither is “the hallucination metric”: TruthfulQA is a fixed behavior slice, while FActScore depends on claim decomposition, retrieval, evidence authority, entailment, and time. Factual precision also omits required-fact recall and usefulness.
+TruthfulQA isolates susceptibility to selected human misconceptions (**O**, CLM-008). FActScore decomposes long-form output into atomic facts and measures supported-fact precision (**O**, CLM-009). Neither is “the hallucination metric”: TruthfulQA is a fixed behavior slice, while FActScore depends on claim decomposition, retrieval, evidence authority, entailment, and time. Factual precision also omits required-fact recall and usefulness.
 
-Kalai and Vempala prove a lower bound for a defined class of arbitrary facts under their calibration assumptions. The theorem is important precisely because its scope is narrow: it does not make systematic facts, grounded answers, or all production errors inevitable.
+Kalai and Vempala prove a lower bound for a defined class of arbitrary facts under their calibration assumptions (**O**, CLM-013). The theorem matters because its scope is narrow: it does not make systematic facts, grounded answers, or all production errors inevitable. A 2025 follow-up by Kalai, Nachum, Vempala, and Zhang argues that binary-graded evaluations reward guessing over abstention. That is an argument about evaluation incentives, read at abstract level here, and it motivates scoring abstention explicitly as in Lesson 7.3. It is not a measured production result (**O**, CLM-019).
 
 **Worked Example:**
 A response can contain four supported claims, one stale claim, and one required omission. A response-level “hallucinated” label hides which intervention is relevant; a claim/evidence/time table exposes both stale-fact precision and missing-required-fact recall.
@@ -165,6 +165,14 @@ Probability of what, for whom, and under which sampling process?
 
 **Concepts & Definitions:**
 
+- **Forecast event $Y_i$:** a binary event fixed by the behavior contract, for example "the delivered answer to item $i$ is labeled correct under guide v3". Changing the label guide changes $Y$.
+- **Confidence $q_i\in[0,1]$:** a number the system emits *before* seeing $Y_i$, intended as a probability of that event. A logit, a log-likelihood, or a verbal phrase is not yet a confidence until it is mapped to $[0,1]$ and validated.
+- **Calibration:** agreement between $q$ and the empirical frequency of $Y$ among items given that $q$, on a declared population (**D**, CLM-001).
+- **Discrimination (ranking):** whether higher $q$ goes with $Y=1$ more often, for example AUROC. It is unaffected by any strictly increasing relabeling of $q$, so it can be good while calibration is bad.
+- **Sharpness:** how far forecasts move away from the base rate. Always forecasting the base rate is calibrated but has no sharpness.
+- **Proper scoring rule:** a loss that is minimized in expectation by reporting the true probability; Brier and NLL are proper, and binned ECE is not a scoring rule at all (**D**, CLM-002).
+- **Reliability table/diagram:** per-bin count, mean confidence, and observed frequency under a declared binning.
+
 **Quantitative Model / Derivation:**
 For binary event $Y$ and forecast $Q$, population calibration targets:
 
@@ -192,36 +200,56 @@ $$
 
 These scores combine calibration and sharpness; they do not localize the failure cause.
 
+*Conventions used in this module:* NLL uses the natural logarithm (units: nats). A forecast of exactly $0$ or $1$ on the wrong outcome gives infinite NLL; report that as $\infty$ with the offending item IDs instead of silently clipping. If a pipeline must clip, declare $\epsilon$ and report both clipped NLL and the count of clipped items. ECE uses equal-width bins $[0,0.2),[0.2,0.4),\dots,[0.8,1.0]$ (the last bin closed), weights each non-empty bin by $n_b/n$, and skips empty bins. Every ECE report states its bin edges.
+
 Scalar temperature scaling uses:
 
 $$
 p_T(y\mid x)=softmax(z(x)/T)_y,\quad T>0.
 $$
 
-It preserves argmax but changes probability sharpness. Fit $T$ only on calibration data, freeze it before testing, and repeat after shift. One scalar cannot generally correct task-, class-, language-, or subgroup-conditional errors.
+It preserves argmax but changes probability sharpness (**O**, CLM-003). Fit $T$ only on calibration data, freeze it before testing, and repeat after shift. One scalar cannot generally correct task-, class-, language-, or subgroup-conditional errors.
 
-For free-form generation, declare how a scalar is constructed: selected-token log probability, length normalization, answer-option probability, prompted P(True), learned probe, verifier, or another signal. Jiang et al. show calibration problems in studied generative QA models; Kadavath et al. show promising but task-dependent P(True)/P(IK behavior. Neither licenses universal self-confidence semantics.
+For free-form generation, declare how a scalar is constructed: selected-token log probability, length normalization, answer-option probability, prompted P(True), learned probe, verifier, or another signal. Jiang et al. show calibration problems in studied generative QA models (**O**, CLM-006); Kadavath et al. show promising but task-dependent P(True)/P(IK) behavior (**O**, CLM-007). Neither licenses universal self-confidence semantics.
 
-**Worked Example:**
-Two predictors can have the same accuracy and similar binned ECE while assigning different probabilities inside bins and therefore different Brier/NLL. Recompute ECE under two declared binning schemes and retain the raw forecast-label pairs.
+**Worked Example (synthetic exercise data):**
+*Input.* One model answered 10 held-out questions; $y_i=1$ means the answer was labeled correct, so the answer accuracy is $6/10$ for both forecasters. Two confidence constructions, A and B, forecast the same events:
+
+| item | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| $y$ | 1 | 1 | 1 | 0 | 1 | 0 | 1 | 0 | 1 | 0 |
+| $q^A$ | 0.95 | 0.85 | 0.75 | 0.65 | 0.65 | 0.55 | 0.45 | 0.35 | 0.25 | 0.05 |
+| $q^B$ | 0.60 | 0.60 | 0.60 | 0.60 | 0.60 | 0.40 | 0.40 | 0.40 | 0.40 | 0.40 |
+
+*Steps.*
+
+1. Brier for A: squared errors are $0.0025, 0.0225, 0.0625, 0.4225, 0.1225, 0.3025, 0.3025, 0.1225, 0.5625, 0.0025$; the sum is $1.925$, so $Brier_A=0.1925$. For B, five items contribute $0.16$ and five contribute $0.36$, so $Brier_B=2.2/10=0.2200$.
+2. NLL (nats) for A: the per-item losses are $-\ln q_i$ when $y_i=1$ and $-\ln(1-q_i)$ when $y_i=0$; for example item 9 contributes $-\ln 0.25=1.3863$. The mean is $NLL_A=0.5447$. For B, $NLL_B=0.6325$.
+3. Five-bin ECE for A: bins hold $(n, \bar y, \bar q)$ = $(1, 0, 0.05)$, $(2, 0.5, 0.30)$, $(2, 0.5, 0.50)$, $(3, 0.667, 0.683)$, $(2, 1.0, 0.90)$. Weighted gaps: $0.1(0.05)+0.2(0.20)+0.2(0)+0.3(0.0167)+0.2(0.10)=0.0700$. For B only two bins are non-empty: $(5,0.4,0.4)$ and $(5,0.8,0.6)$, giving $0.5(0)+0.5(0.2)=0.1000$.
+4. Two-bin ECE (edges $[0,0.5),[0.5,1.0]$): A has bins $(4,0.5,0.275)$ and $(6,0.667,0.733)$, so $0.4(0.225)+0.6(0.0667)=0.1300$. B is unchanged at $0.1000$.
+5. Ranking: counting positive–negative pairs with ties as one half, AUROC is $18.5/24=0.771$ for A and $17/24=0.708$ for B.
+
+*Result.* A beats B on Brier, NLL, AUROC, and five-bin ECE. With two bins, however, B has the *lower* ECE ($0.100<0.130$). The ECE ranking depends on the binning choice, while both proper scores give the same ordering.
+
+*Interpretation and limits.* ECE is a binned estimator, not a property of the forecaster, which is why the bin edges must be reported (**D**, CLM-002). Ten items cannot support a claim that A is better calibrated in general; with $n=10$ the uncertainty is larger than every gap shown here. The example teaches the computation only. It is not evidence about any real model.
 
 **Knowledge Check:**
 1. Does temperature scaling change the argmax class?
 2. Can aggregate calibration coexist with subgroup miscalibration?
 
 **Guided Practice:**
-Fit temperature on a calibration split, freeze it, and evaluate raw/scaled scores on in-distribution and shifted test sets. Report bins, counts, uncertainty, proper scores, ranking, and slice results.
+(a) By hand, for $y=(1,0,1,1)$ and $q=(0.9,0.3,0.6,0.8)$, compute Brier, NLL in nats, and two-bin ECE with the edges above. (b) Fit temperature on a calibration split, freeze it, and evaluate raw and scaled scores on in-distribution and shifted test sets. Report bins, counts, uncertainty, proper scores, ranking, and slice results.
 
 **Feedback Contract:**
-- *Expected Evidence*: Exact event/population, split lineage, fitted parameter, raw predictions, reproducible binning, and held-out results.
-- *Common Failure*: Fitting calibration or bin choices on the reported test set.
-- *Diagnostic Hint*: Which examples determined the transformation?
-- *Concept to Revisit*: Calibration Versus Discrimination.
+- *Expected Evidence*: (a) Brier $=0.0750$; NLL $=0.2990$ nats; two-bin ECE $=0.25$, because the low bin holds only item 2 ($|0-0.3|$, weight 0.25) and the high bin holds items 1, 3, and 4 with $\bar y=1$ and $\bar q=0.767$ (gap $0.233$, weight 0.75). The sum is $0.075+0.175=0.25$. (b) Exact event and population, split lineage, fitted $T$, raw predictions, reproducible binning, and held-out results.
+- *Common Failure*: Using $\log_{10}$ or clipping without saying so, which makes NLL incomparable. Fitting $T$ or choosing bins on the reported test set.
+- *Diagnostic Hint*: If your ECE differs, list each bin's members; an item at exactly $0.5$ belongs to the upper bin under these edges. For (b), ask which examples determined the transformation.
+- *Concept to Revisit*: Calibration Versus Discrimination; Proper Scoring Rule.
 
 **Learning Outcome:**
 Turn “confidence” into a reproducible forecast and prove its meaning on held-out data.
 
-*(Effort: 55m instruction, 30m practice)*
+*(Effort: 65m instruction, 30m practice)*
 
 ---
 
@@ -231,6 +259,13 @@ Turn “confidence” into a reproducible forecast and prove its meaning on held
 Which outputs should the system deliver, and what happens to the rest?
 
 **Concepts & Definitions:**
+
+- **Acceptance rule:** deliver the answer when its score is at least $t$ ($s_i\ge t$). Otherwise route the item to a fallback action.
+- **Coverage:** the fraction of the target population that is answered directly.
+- **Selective (conditional) risk:** the expected loss among *accepted* items only (**D**, CLM-005).
+- **Rejected-set outcome:** what happens to non-accepted items, for example fallback success, delay, abandonment, and whether the model's answer would have been correct.
+- **Utility:** a declared per-item value that combines accepted-correct gain, accepted-wrong harm (severity-weighted), and fallback cost. It is a product decision, not a statistical property.
+- **Operating point:** a threshold chosen on data other than the reporting test set, together with its coverage, risk, utility, subgroup coverage, and fallback load.
 
 **Quantitative Model / Derivation:**
 For acceptance event $A_t$ at threshold $t$ and loss $L$:
@@ -245,26 +280,40 @@ Calibration and ranking answer different questions. A monotone score may rank ri
 
 Possible actions are not only “answer” or “refuse”: retrieve evidence, invoke a deterministic tool, sample/reason again, ask a clarifying question, return a bounded uncertainty set, or escalate. Each action needs its own cost and failure contract.
 
-**Worked Example:**
-A threshold with 2% accepted risk at 10% coverage is not automatically preferable to 4% risk at 80% coverage. The decision also depends on rejected-user loss, fallback success/capacity, severity, and subgroup coverage.
+**Worked Example (synthetic exercise data and costs):**
+*Input.* Use the 10 items and score $q^A$ from Lesson 7.2 as the acceptance score. The exercise utility is $+1$ for an accepted correct answer, $-4$ for an accepted wrong answer, and $-0.3$ for each item routed to escalation, assuming escalation always resolves the item. The escalation queue can absorb at most 5 of every 10 items.
+
+*Steps.* For each threshold, count accepted items ($q^A\ge t$), wrong accepted items, and rejected items. Then compute total utility as $1\cdot\text{right}-4\cdot\text{wrong}-0.3\cdot\text{rejected}$.
+
+| $t$ | coverage | accepted wrong | selective risk | rejected (of which model was right) | utility / item | within escalation capacity? |
+|---|---|---|---|---|---|---|
+| 0.0 | 1.0 | 4 | 0.40 | 0 (0) | −1.00 | yes |
+| 0.5 | 0.6 | 2 | 0.33 | 4 (2) | −0.52 | yes |
+| 0.6 | 0.5 | 1 | 0.20 | 5 (2) | −0.15 | yes |
+| 0.7 | 0.3 | 0 | 0.00 | 7 (3) | +0.09 | **no** |
+| 0.9 | 0.1 | 0 | 0.00 | 9 (5) | −0.17 | **no** |
+
+*Result.* Selective risk reaches zero at both $t=0.7$ and $t=0.9$. However, $t=0.9$ throws away five answers that were correct and has lower utility than $t=0.7$. Utility alone would pick $t=0.7$, but that rejects 7 items against a capacity of 5. The best feasible threshold in this table is $t=0.6$: coverage 0.5, risk 0.20, utility −0.15 per item.
+
+*Interpretation and limits.* The selected operating point depends on the cost weights and the capacity constraint as much as on the score. Change the $-4$ harm weight or add fallback failure, and the choice moves. Ten items give no usable uncertainty, so a real sweep needs a separate threshold-selection split, intervals on risk and coverage, and subgroup coverage. The table also shows that "risk 0" can hide rejected users whose answers were correct.
 
 **Knowledge Check:**
 1. How can a system drive selective risk toward zero without becoming useful?
 2. Why must fallback queueing and failure be included in utility?
 
 **Guided Practice:**
-Sweep thresholds on a frozen test set and plot coverage, conditional risk, false-accept severity, fallback volume, end-to-end success, cost, and subgroup effects.
+(a) Repeat the table with $q^B$ from Lesson 7.2 at $t\in\{0.5,0.61\}$, using the same costs. (b) Sweep thresholds on a selection split, freeze the choice, then report coverage, conditional risk, false-accept severity, fallback volume, end-to-end success, cost, and subgroup effects on a separate test split.
 
 **Feedback Contract:**
-- *Expected Evidence*: Frozen threshold-selection process, risk-coverage curve with uncertainty, fallback outcomes, and capacity impact.
-- *Common Failure*: Reporting risk without coverage or rejected outcomes.
-- *Diagnostic Hint*: What happened to every case the model did not answer?
+- *Expected Evidence*: (a) With $t=0.5$, B accepts items 1–5: coverage $0.5$, 1 wrong, risk $0.20$, 5 rejected (2 of which the model got right), utility $(4-4-1.5)/10=-0.15$ per item. With $t=0.61$, B accepts nothing: coverage 0, risk undefined, utility $-0.30$ per item, and 10 rejections exceed capacity. (b) Frozen threshold-selection process, risk–coverage curve with uncertainty, fallback outcomes, and capacity impact.
+- *Common Failure*: Reporting risk without coverage or rejected outcomes, or reporting "risk 0" for an empty accepted set instead of "undefined".
+- *Diagnostic Hint*: What happened to every case the model did not answer, and could the fallback absorb them?
 - *Concept to Revisit*: Selective Utility Contract.
 
 **Learning Outcome:**
 Defend an operating point by coverage, conditional risk, utility, subgroup impact, and downstream capacity.
 
-*(Effort: 40m instruction, 25m practice)*
+*(Effort: 45m instruction, 25m practice)*
 
 ---
 
@@ -286,30 +335,41 @@ Useful signal families include:
 
 **Mechanism Explanation:**
 
-SelfCheckGPT uses black-box sample inconsistency as a hallucination signal. Semantic entropy groups generations by meaning before computing uncertainty. These are valuable mechanisms, not oracles. A model can repeat one correlated falsehood with low disagreement. Surface variation can be factual paraphrase. Semantic clustering can merge contradiction or split equivalents. Sampling adds cost and changes with temperature.
+SelfCheckGPT uses black-box sample inconsistency as a hallucination signal (**O**, CLM-010). Semantic entropy groups generations by meaning before computing uncertainty (**O**, CLM-011). Semantic-entropy probes approximate that quantity from one generation's hidden states to avoid multi-sample cost. This is frontier work, and its reported gains are scoped to the authors' models and tasks (**O**, CLM-018). These are valuable mechanisms, not oracles. A model can repeat one correlated falsehood with low disagreement. Surface variation can be factual paraphrase. Semantic clustering can merge contradiction or split equivalents. Sampling adds cost and changes with temperature.
 
 Evaluation must use an independent correctness label—not the same detector being assessed—and report discrimination, calibration, risk-coverage, cost, and performance by failure type. Test counterexamples: stable misconceptions, ambiguous questions, multiple correct answers, paraphrases, entity aliases, stale facts, and adversarially persuasive false statements.
 
-**Worked Example:**
-Five near-identical samples that repeat one false claim yield low surface and semantic disagreement. Independent evidence can still label all five wrong, falsifying “agreement implies correctness” for that case.
+**Worked Example (synthetic samples; simplified estimator):**
+*Estimator used here.* Sample $m=5$ answers, group them into meaning clusters $c$ with an equivalence judge, and compute the discrete entropy $H=-\sum_c \hat p_c\ln\hat p_c$ in nats, where $\hat p_c$ is the fraction of samples in cluster $c$. This frequency-based estimate is a teaching simplification. Published estimators may weight clusters differently, for example by sequence likelihood, and this toy does not reproduce any paper's estimator.
+
+| case | five samples (paraphrased) | clusters | $H$ (nats) | independent label | what the signal says |
+|---|---|---|---|---|---|
+| 1. Correlated falsehood | "It opened in 1912", "1912", "The year was 1912", "Opened: 1912", "In 1912" | {1912}×5 | $0$ | all wrong (evidence: 1914) | maximally certain, and wrong |
+| 2. Alias split by a bad judge | "11 Nov 1918" ×3, "Armistice Day, 1918" ×2 | judge splits into 3 + 2 | $-0.6\ln0.6-0.4\ln0.4=0.673$ | all correct | "uncertain" although every sample is right |
+| 2′. Same samples, audited merge | same | {Nov 1918}×5 | $0$ | all correct | certain and right |
+| 3. Genuine ambiguity | "Paris" ×2, "Lyon" ×2, "Nice" ×1 | 2 + 2 + 1 | $1.055$ | question underspecified | high uncertainty is appropriate |
+
+*Result.* Case 1 has zero semantic entropy but is labeled wrong, which falsifies "low semantic entropy implies correct" on this item. Case 2 shows that the entropy value depends on the equivalence judge. The same five correct samples score 0.673 or 0 depending on one merge decision.
+
+*Interpretation and limits.* The detector can be evaluated only against labels that come from evidence outside the sample pool. The cluster audit (merge/split errors) is part of the measurement, not an optional clean-up step. Three cases are counterexamples that falsify universal claims, not estimates of how often these failures occur.
 
 **Knowledge Check:**
 1. Why can high surface diversity coexist with one semantic answer?
 2. Which label must remain independent of the uncertainty method?
 
 **Guided Practice:**
-Cluster repeated answers, audit merge/split errors, and compare likelihood, self-report, surface disagreement, and semantic uncertainty under fixed sample count and decoding.
+(a) Five samples are "Canberra" ×3, "Sydney" ×1, "canberra, ACT" ×1, and a string-match judge treats the last one as distinct. Compute $H$ as clustered, then after an audited merge. (b) Cluster repeated answers, audit merge/split errors, and compare likelihood, self-report, surface disagreement, and semantic uncertainty under fixed sample count and decoding.
 
 **Feedback Contract:**
-- *Expected Evidence*: Raw samples, clustering version, cluster audit, independent labels, cost, and failure-type slices.
-- *Common Failure*: Treating consensus as correctness.
-- *Diagnostic Hint*: Verify the most stable answer against evidence rather than the sample pool.
+- *Expected Evidence*: (a) As clustered, $(3,1,1)/5$ gives $H=-0.6\ln0.6-2(0.2\ln0.2)=0.950$ nats. After merging, $(4,1)/5$ gives $H=0.500$ nats. The majority answer's correctness still requires an external label. (b) Raw samples, clustering version, cluster audit, independent labels, cost, and failure-type slices.
+- *Common Failure*: Treating consensus as correctness, or reporting entropy without the judge version.
+- *Diagnostic Hint*: Verify the most stable answer against evidence rather than the sample pool, and re-run the entropy with the audited clusters.
 - *Concept to Revisit*: Consistency Illusion.
 
 **Learning Outcome:**
 Choose the granularity and signal that match the event, then actively search for consistency illusions.
 
-*(Effort: 40m instruction, 25m practice)*
+*(Effort: 45m instruction, 25m practice)*
 
 ---
 
@@ -320,7 +380,23 @@ What does a finite-sample coverage statement actually promise?
 
 **Concepts & Definitions:**
 
-Conformal methods calibrate a nonconformity score or output-set rule on exchangeable examples. Conformal factuality connects correctness to entailment sets and backs off toward less-specific output to meet a target marginal guarantee under its assumptions.
+- **Exchangeability:** the joint distribution of the $n$ calibration examples and the one test example is unchanged by any reordering. I.i.d. sampling implies it. Temporal drift, adaptive selection, or reuse of the test stream for tuning can break it.
+- **Nonconformity score $r_i$:** a scalar computed from a *labeled* calibration example, where larger means "harder to cover". It must be computed the same way for the test example.
+- **Split-conformal quantile:** with $k=\lceil (n+1)(1-\alpha)\rceil$, set $\hat q$ to the $k$-th smallest calibration score. Under exchangeability, $P(r_{n+1}\le\hat q)\ge 1-\alpha$, marginally over the calibration draw and the test draw (**O**, CLM-016).
+- **Conformal factuality (Mohri and Hashimoto):** split an LM output into sub-claims, score each sub-claim, and back off by removing low-scoring claims at a threshold calibrated this way. The covered event is "the reference entails the backed-off output". The authors state a lower bound $\ge1-\alpha$ under exchangeability for $\alpha\in[1/(n+1),1]$ (**O**, CLM-012).
+
+**Executable construction taught in this module — conformal claim filter (D, CLM-017):**
+
+*Inputs.* A frozen decomposer that turns an output into claims, a frozen claim scorer $s$ (higher means more trusted), a frozen label guide, a miscoverage target $\alpha$, and $n$ labeled calibration outputs drawn from the deployment population. No calibration output may appear in the test data.
+
+1. **Label.** For every calibration output $i$, label each claim true or false under the label guide, with independent raters.
+2. **Score.** Set $r_i=\max\{s(c): c \text{ in output } i,\ c \text{ false}\}$, or $r_i=-\infty$ if output $i$ has no false claim. So $r_i$ is the score of the most-trusted false claim.
+3. **Rank.** Compute $k=\lceil (n+1)(1-\alpha)\rceil$ with exact rational arithmetic; floating-point $10\times0.8$ can round above 8. If $k\le n$, $\hat q$ is the $k$-th smallest $r_i$, counting tied values with multiplicity. If $k>n$, set $\hat q=+\infty$.
+4. **Output rule.** For a new output, keep exactly the claims with $s(c)>\hat q$ (strict inequality), and drop every claim with $s(c)\le\hat q$. If nothing survives, return an abstention or escalation, never the unfiltered output. $\hat q=+\infty$ therefore means "always abstain".
+5. **Why it is valid.** Every kept claim is true $\iff$ no false claim has $s>\hat q$ $\iff$ $r_{n+1}\le\hat q$. That last event is exactly the split-conformal event above, so under exchangeability $P(\text{all kept claims true})\ge1-\alpha$.
+6. **Ties.** The strict output rule makes the equivalence in step 5 exact when a test claim's score equals $\hat q$: that claim is dropped whether it is true or false. The lower bound does not need tie-free scores. The companion upper bound $1-\alpha+1/(n+1)$ holds only without ties or with randomized tie-breaking (CLM-016), and this module does not claim it.
+
+*Correspondence to the paper (D, CLM-017).* This filter uses the same back-off and quantile idea as conformal factuality, but it is **not** a reproduction of that paper's implementation. The paper uses its own decomposer, scorers, merge step, annotation scheme, and entailment operator. Our covered event, "every kept claim is individually labeled true", matches the paper's event only when entailment of the kept set reduces to per-claim truth. Report results as "conformal claim filter (this module's construction)", not as "conformal factuality".
 
 **Mechanism Explanation:**
 
@@ -336,26 +412,58 @@ Audit every guarantee:
 
 A nominal marginal guarantee does not imply every prompt is correct, all subgroups meet the rate, the answer is complete/useful, or a changed pipeline remains covered. Monitor realized coverage with confidence intervals, but do not “repair” a violation by repeatedly tuning on the test stream without accounting for adaptivity.
 
-**Worked Example:**
-A target marginal coverage of $1-\alpha$ applies to the declared prediction object and exchangeable population under the chosen procedure. It does not say that each individual prompt has correctness probability $1-\alpha$ or that every language slice attains the same realized rate.
+**Worked Example (synthetic calibration data):**
+*Input.* There are $n=9$ calibration outputs. Claims are listed as (score, label), with 1 = true and 0 = false:
+
+| $i$ | claims | $r_i$ |
+|---|---|---|
+| 1 | (0.91,1) (0.62,1) (0.40,0) | 0.40 |
+| 2 | (0.88,1) (0.71,0) (0.30,1) | 0.71 |
+| 3 | (0.95,1) (0.80,1) | $-\infty$ |
+| 4 | (0.84,1) (0.52,0) (0.45,0) | 0.52 |
+| 5 | (0.93,1) (0.77,1) (0.66,0) | 0.66 |
+| 6 | (0.79,0) (0.60,1) | 0.79 |
+| 7 | (0.90,1) (0.58,1) (0.35,0) | 0.35 |
+| 8 | (0.86,1) (0.66,0) (0.20,1) | 0.66 |
+| 9 | (0.97,1) (0.83,1) (0.50,1) | $-\infty$ |
+
+*Steps.* The sorted scores are $-\infty,-\infty,0.35,0.40,0.52,0.66,0.66,0.71,0.79$.
+
+- $\alpha=0.2$: $k=\lceil10\times0.8\rceil=8$, so $\hat q=0.71$.
+- $\alpha=0.3$: $k=\lceil 7\rceil=7$, so $\hat q=0.66$. The tied value 0.66 occupies ranks 6 and 7.
+- $\alpha=0.05$: $k=\lceil9.5\rceil=10>9$, so $\hat q=+\infty$ and the filter always abstains.
+
+Test output claims: (0.92, true), (0.79, true), (0.66, **false**), (0.55, true).
+
+- With $\hat q=0.71$: keep 0.92 and 0.79. All kept claims are true, and 2 of 4 claims are retained.
+- With $\hat q=0.66$: the false claim at *exactly* 0.66 is dropped by the strict rule, so the output again keeps 0.92 and 0.79. A rule of $s\ge\hat q$ would have kept the false claim.
+
+*Result.* The procedure gives an auditable threshold, and the tie example shows why the inequality direction is part of the specification. With only 9 calibration outputs, $\alpha=0.05$ is not achievable except by abstaining. Smaller $\alpha$ requires $n\ge 1/\alpha-1$.
+
+*Simulation check (synthetic, not a benchmark).* We ran 20,000 trials of a generator that draws exchangeable outputs with 1–4 claims, scores rounded to 0.1 (so ties are frequent), and a claim is true with probability $0.3+0.6s$ (seed 7). The realized rate of "all kept claims true" was $0.835$ at $\alpha=0.2, n=9$ and $0.926$ at $\alpha=0.1, n=49$, both above $1-\alpha$. When test labels were redrawn as true with probability 0.3 regardless of score (a post-calibration shift), the rate fell to $0.561$. That breaks the target, as expected once exchangeability no longer holds.
+
+*Interpretation and limits.* The guarantee is marginal over calibration and test draws. It does not say that this particular test output has a 0.8 probability of being fully true, that each language slice attains 0.8, or that the retained 2 of 4 claims are useful or complete. It also inherits every labeling error, because labels define the event.
 
 **Knowledge Check:**
 1. What changes when calibration examples are no longer exchangeable with deployment examples?
 2. Does larger or less-specific output preserve usefulness automatically?
+3. Why is the output rule $s>\hat q$ and not $s\ge\hat q$ under this module's definition of $r_i$?
 
 **Guided Practice:**
-Write the guarantee in system terms, list every assumption and non-guarantee, then test marginal and slice coverage under a controlled temporal/domain shift.
+(a) Using the nine $r_i$ above, compute $\hat q$ for $\alpha=0.4$, then filter the test claims (0.70, false), (0.52, true), (0.51, false). (b) Implement the filter, then run the required test below on your own labeled calibration data and on a controlled temporal/domain-shifted split.
+
+**Required test (part of Lab D):** (i) unit-test $k$ and $\hat q$ against hand-computed cases, including $k>n$, ties at $\hat q$, and all $r_i=-\infty$; (ii) show that $\hat q$ never increases as $\alpha$ increases; (iii) run a seeded synthetic exchangeable simulation and check that the realized coverage is at least $1-\alpha$ minus Monte Carlo error; (iv) report realized coverage with a binomial interval on held-out labeled data, marginally and by slice, before and after shift.
 
 **Feedback Contract:**
-- *Expected Evidence*: Calibration set lineage, nonconformity score, finite-sample rule, tie handling, realized coverage uncertainty, and scope statement.
-- *Common Failure*: Promoting a marginal guarantee to a per-request or post-shift guarantee.
-- *Diagnostic Hint*: Identify the randomness and population over which coverage is stated.
-- *Concept to Revisit*: Marginal Coverage Semantics.
+- *Expected Evidence*: (a) $k=\lceil10\times0.6\rceil=6$, so $\hat q=0.66$. The filter keeps (0.70, false) and drops both 0.52 and 0.51, so this output **violates** the event. That is allowed: the guarantee is marginal, and a single miss does not falsify it. (b) Calibration-set lineage, scorer and decomposer versions, $r_i$ table, $k$, $\hat q$, retained fraction, realized coverage with an interval, slice results, and a scope statement.
+- *Common Failure*: Using the $\lceil n(1-\alpha)\rceil$ empirical quantile, which drops the $+1$ correction; using $\ge$ at the threshold; tuning $\alpha$ or the scorer on the test stream; calling the result "conformal factuality".
+- *Diagnostic Hint*: Write the covered event as an inequality on $r_{n+1}$. If you cannot, the guarantee does not apply to what you built.
+- *Concept to Revisit*: Marginal Coverage Semantics; Split-Conformal Quantile.
 
 **Learning Outcome:**
-Implement conformal control while preserving the exact theorem-to-system contract.
+Implement a split-conformal claim filter with an exact score, rank, and output rule, verify it with the required test, and state its guarantee without per-item, subgroup, or post-shift inflation.
 
-*(Effort: 45m instruction, 30m practice)*
+*(Effort: 65m instruction, 45m practice)*
 
 ---
 
@@ -380,7 +488,7 @@ A regression suite combines:
 
 Version model weights, system/developer/user prompts, decoding, runtime, retrieval corpus/index, tools, evaluator, label policy, and sampling frame. When a slice moves, consider model behavior, prompt interaction, runtime/tokenizer change, retrieval/tool failure, judge drift, label error, contamination, and traffic shift.
 
-Use paired deltas where the same items are valid across releases; use independent-population methods for live samples. Predeclare practically important margins and high-severity zero/near-zero tolerance rules. Exploratory slices found after seeing results require held-out replication.
+Treat regression claims as hypotheses to be tested (**H**, CLM-015); uncertainty signals validated before a release need revalidation after it (**O**, CLM-004). Use paired deltas where the same items are valid across releases; use independent-population methods for live samples. Predeclare practically important margins and high-severity zero/near-zero tolerance rules. Exploratory slices found after seeing results require held-out replication.
 
 **Worked Example:**
 Rescore identical old/new outputs with both old and new judges. If only the judge swap changes the metric, model regression is weakened; if matched raw outputs also worsen under blinded adjudication, evaluator drift alone is insufficient.
@@ -417,6 +525,7 @@ Diagnose behavior changes causally enough to select rollback, recalibration, rou
 
 **CURRENT DEFAULT**
 
+- Scope of this label: these are the module's *recommended baseline* practices, derived from the cited definitions (CLM-001, CLM-005, CLM-015). They are not a measured survey of industry adoption or of any single vendor's default.
 - Explicit event/population definitions, held-out calibration, risk-coverage reporting, slice-based regression, and versioned evaluator provenance are baseline practices.
 - No one uncertainty signal, ECE binning, threshold, or “hallucination metric” is a universal default.
 
@@ -428,9 +537,12 @@ Diagnose behavior changes causally enough to select rollback, recalibration, rou
 **FRONTIER**
 
 - [Semantic Uncertainty: Linguistic Invariances for Uncertainty Estimation in Natural Language Generation](https://arxiv.org/abs/2302.09664) — Kuhn, Gal, and Farquhar (ICLR 2023).
-- [Language Models with Conformal Factuality Guarantees](https://arxiv.org/abs/2402.10978) — Mohri and Hashimoto (2024).
+- [Language Models with Conformal Factuality Guarantees](https://arxiv.org/abs/2402.10978) — Mohri and Hashimoto (arXiv v1, February 2024). Reading pointers: §3 (entailment sets and conformal setup), Algorithm 1, Theorem 4.1, and Assumption 5.1. Lesson 7.5 teaches a related construction, not their implementation (CLM-012, CLM-017).
+- [A Gentle Introduction to Conformal Prediction and Distribution-Free Uncertainty Quantification](https://arxiv.org/abs/2107.07511) — Angelopoulos and Bates (arXiv v6, December 2022). Reading pointers: §1.1 quantile rule and Theorem 1, with the tie-breaking footnote for the upper bound (CLM-016).
 - [Calibrated Language Models Must Hallucinate](https://arxiv.org/abs/2311.14648) — Kalai and Vempala (STOC 2024): theoretical result with explicit fact/calibration scope.
-- 2025–2026 semantic-uncertainty probes, efficient estimators, and trajectory readers remain frontier and workload-dependent; benchmark results do not establish a production default.
+- [Semantic Entropy Probes](https://arxiv.org/abs/2406.15927) — Kossen et al. (arXiv, June 2024): approximate semantic entropy from one generation's hidden states. Read at abstract level; results are author-reported on their models and tasks (CLM-018).
+- [Why Language Models Hallucinate](https://arxiv.org/abs/2509.04664) — Kalai, Nachum, Vempala, and Zhang (arXiv, September 2025): argues that evaluation grading that penalizes abstention sustains guessing. Read at abstract level; this is an argument, not a deployment measurement (CLM-019).
+- `TODO_VERIFY` (CLM-020): the wider 2025–2026 landscape of efficient uncertainty estimators and reasoning-trace or trajectory-based detectors was **not** surveyed in this revision. No specific paper from that landscape is claimed here, and none is a production default.
 
 **LEGACY / INSUFFICIENT WHEN USED ALONE**
 
@@ -448,7 +560,7 @@ Diagnose behavior changes causally enough to select rollback, recalibration, rou
 - File: `src/transformers/generation/utils.py`.
 - Symbols: `GenerateDecoderOnlyOutput`, `GenerationMixin.generate`, `GenerationMixin.compute_transition_scores`.
 - Observed behavior: generation outputs can retain processed per-step scores and raw logits when requested; `compute_transition_scores` stacks/gathers selected-token scores and optionally applies `log_softmax`.
-- Generalization: these are generation-path scores at a pinned upstream revision. They do not become calibrated answer-correctness probabilities without an explicit event, aggregation, labels, and validation.
+- Generalization (**O**, CLM-014): these are generation-path scores at a pinned upstream revision. The 2026-09-26 static read was not repeated in the 2026-09-30 revision. They do not become calibrated answer-correctness probabilities without an explicit event, aggregation, labels, and validation.
 
 ---
 
@@ -499,14 +611,15 @@ $$
 
 ### LAB D — Release Regression and Conformal Scope
 
-- **Objective:** compare two pinned releases on anchor/time/slice suites, then implement either a conformal back-off/set policy or a prespecified abstention gate.
+- **Objective:** compare two pinned releases on anchor/time/slice suites, then implement the Lesson 7.5 conformal claim filter (required) and compare it with a prespecified abstention gate on the same calibration and test splits.
 - **Pre-Registered Hypothesis:** matched slice and evaluator-crossed analysis will expose at least one regression or guarantee-scope failure that aggregate accuracy alone cannot localize.
 - **Independent Variables:** model/prompt/evaluator release, temporal/domain shift, retrieval state, and conformal or abstention policy.
 - **Dependent Variables:** paired behavior deltas, severity, calibration/proper scores, marginal and subgroup coverage, risk-coverage, temporal validity, evaluator agreement, and system cost.
 - **Break & Falsify:** alter exchangeability through temporal/domain shift, change evaluator revision, inject a retrieval outage, and inspect a slice whose regression is hidden by the mean. Verify whether the stated guarantee still applies before interpreting coverage.
-- **Artifact:** release manifest, frozen thresholds/calibration set, regression report, assumption audit, incident decision, and rollback/recalibration criteria.
+- **Required conformal test:** Lesson 7.5 items (i)–(iv). Item (iv) must be run on the in-distribution split and on the temporally or domain-shifted split; the shifted run is expected to be able to fail.
+- **Artifact:** release manifest, frozen thresholds/calibration set, regression report, **Conformal Filter Record** (calibration IDs and lineage, decomposer/scorer/label-guide versions, per-output $r_i$, $n$, $lpha$, $k$, $\hat q$, retained-claim fraction, abstention rate, realized coverage with a binomial interval marginally and by slice, required-test output, and the scope statement), assumption audit, incident decision, and rollback/recalibration criteria.
 - **Alignment:** Lessons 7.5 and 7.6.
-- **Effort Estimate:** 5h.
+- **Effort Estimate:** 6h (2h conformal filter and required test, 4h release regression and evaluator crossing).
 
 ## 07 Break / Incident Scenarios
 
@@ -544,7 +657,7 @@ Design an uncertainty and regression system for a multilingual assistant answeri
 5. risk-coverage and utility for every fallback, including rejected-user and capacity costs;
 6. shift tests across prompt, language, time, domain, retrieval state, and model version;
 7. a consistency/semantic-uncertainty counterexample analysis using independent labels;
-8. an optional conformal guarantee statement copied into system terms with every assumption and non-guarantee;
+8. a conformal claim filter for the long-form answer path: $r_i$ definition, $k$ and $\hat q$ at the chosen $lpha$ with exact arithmetic, strict output rule, abstention rule when nothing survives, required-test results (Lesson 7.5 (i)–(iv)), realized coverage with an interval by slice before and after one shift, and the guarantee copied into system terms with every assumption and non-guarantee;
 9. a pinned runtime source trace explaining why generation scores are not correctness probabilities;
 10. versioned release gates, canary, rollback, evaluator audit, and post-intervention remeasurement.
 
@@ -552,7 +665,7 @@ Design an uncertainty and regression system for a multilingual assistant answeri
 
 ### Required Artifact: Behavior and Uncertainty Record
 
-Each record must join prompt/task and all component revisions, allowed evidence and date, raw/sample output, atomic claims and labels, category/severity/adjudication, every confidence signal and transformation, acceptance/fallback action, evaluator provenance, and observed downstream outcome where lawful and available.
+Each record must join prompt/task and all component revisions, allowed evidence and date, raw/sample output, atomic claims and labels, category/severity/adjudication, every confidence signal and transformation, acceptance/fallback action, evaluator provenance, and observed downstream outcome where lawful and available. The long-form path additionally submits the Conformal Filter Record defined in LAB D.
 
 ### Rubric Dimensions
 
@@ -562,19 +675,20 @@ For every dimension, **Insufficient** reports an unlabeled score or aggregate; *
 - **Calibration discipline:** no score is called probability of correctness without held-out evidence; bins and proper scores are reproducible.
 - **Decision quality:** risk, coverage, abstention/escalation utility, subgroup impact, and capacity are co-reported.
 - **Adversarial reasoning:** stable falsehoods, paraphrases, ambiguous/multiple answers, shift, and judge failure are tested.
-- **Guarantee discipline:** marginal, conditional, per-item, and post-shift claims remain distinct.
+- **Guarantee discipline:** *Insufficient* calls a score or threshold "guaranteed" or omits $k$/$\hat q$ arithmetic. *Competent* implements the Lesson 7.5 filter with exact $k$, a strict output rule and abstention, passes required tests (i)–(iii), and reports marginal realized coverage with an interval. *Strong* also reports slice and post-shift coverage from test (iv), explains any violation through exchangeability rather than by retuning on the test stream, and keeps marginal, conditional, per-item, and post-shift claims distinct.
 - **Diagnosis:** competing model/pipeline/evaluator/population causes are separated by matched experiments.
 
 ## 10 Capability Traceability Matrix
 
-| Capability | Taught | Practiced | Assessed | Evidence |
+| Capability | Taught | Practiced | Assessed | Evidence (artifact reviewers open) |
 |---|---|---|---|---|
-| Behavior contract and taxonomy | Lesson 7.1 | LAB A | Mastery 1–2 | Annotation guide and adjudication |
-| Confidence and calibration | Lesson 7.2 | LAB B | Mastery 3–4, 9 | Proper scores, reliability, source trace |
-| Selective prediction | Lesson 7.3 | LAB C | Mastery 5 | Risk-coverage and fallback utility |
-| Free-form uncertainty | Lesson 7.4 | LAB C | Mastery 3, 7 | Counterexamples and independent labels |
-| Conformal guarantee scope | Lesson 7.5 | LAB D | Mastery 8 | Assumption-to-system audit |
-| Behavior regression | Lesson 7.6 | LAB D | Incident / Mastery 6, 10 | Paired release and evaluator audit |
+| Behavior contract and taxonomy | Lesson 7.1 | 7.1 Guided Practice; LAB A | Mastery deliverables 1–2; Incident 07.1 step 2 | LAB A annotation guide, raw labels, adjudication log; claim/evidence rows in the Behavior and Uncertainty Record |
+| Confidence and calibration | Lesson 7.2 | 7.2 Guided Practice (a) hand computation, (b) temperature fit; LAB B | Mastery deliverables 3–4; Incident 07.1 step 3 (recompute calibration on matched slices) | LAB B raw predictions, bin table with edges/counts, Brier/NLL (nats), AUROC, shift matrix |
+| Generation-score source trace | Lesson 7.2 (free-form scalar construction); §05 Production Source Trace | LAB B source-trace artifact | Mastery deliverable 9 | Pinned `compute_transition_scores` trace and the documented mapping from score to event |
+| Selective prediction | Lesson 7.3 | 7.3 Guided Practice (a) threshold table, (b) frozen sweep; LAB C | Mastery deliverable 5; Incident 07.1 step 5 (threshold/fallback intervention) | LAB C routing frontier with coverage, risk, utility, capacity, rejected-set outcomes |
+| Free-form uncertainty | Lesson 7.4 | 7.4 Guided Practice (a) entropy recomputation, (b) cluster audit; LAB C | Mastery deliverables 3, 7 | LAB C semantic clusters with merge/split audit, counterexample set with independent labels |
+| Conformal claim filter and guarantee scope | Lesson 7.5 | 7.5 Guided Practice (a) $\hat q$ and filtering, (b) implementation; LAB D required conformal test | Mastery deliverable 8; rubric dimension *Guarantee discipline* | LAB D Conformal Filter Record, including required-test output (i)–(iv) and shifted-split coverage |
+| Behavior regression | Lesson 7.6 | 7.6 Guided Practice (2×2 replay); LAB D | Mastery deliverables 6, 10; Incident 07.1 steps 1–6 | LAB D release manifest, evaluator cross-score, paired deltas, remeasurement report |
 
 ## 11 Exit Criteria & Module Wrap-Up
 
@@ -588,7 +702,7 @@ A learner passes when they can:
 4. show why likelihood and verbal confidence need event-specific calibration;
 5. select and defend abstention/escalation thresholds under shift and subgroup constraints;
 6. break sample-consistency and semantic-uncertainty methods with realistic counterexamples;
-7. state conformal guarantees without per-item or post-shift inflation;
+7. implement and test a split-conformal claim filter, then state its guarantee without per-item, subgroup, or post-shift inflation;
 8. trace generation-score source code at a pinned revision;
 9. diagnose a hidden behavior regression and remeasure after intervention.
 

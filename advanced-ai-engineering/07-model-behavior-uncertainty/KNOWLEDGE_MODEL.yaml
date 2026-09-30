@@ -1,5 +1,5 @@
 module: "07-model-behavior-uncertainty"
-registry_version: "1.0.0"
+registry_version: "1.1.0"
 
 required_concepts:
   - "behavior_contract"
@@ -16,6 +16,7 @@ required_concepts:
   - "sample_disagreement"
   - "semantic_uncertainty"
   - "conformal_factuality"
+  - "split_conformal_claim_filter"
   - "behavior_regression"
 
 prerequisite_concepts:
@@ -34,6 +35,7 @@ first_occurrence_concepts:
   - "risk_coverage"
   - "semantic_uncertainty"
   - "conformal_factuality"
+  - "split_conformal_claim_filter"
   - "behavior_regression"
 
 concept_dependencies:
@@ -47,6 +49,8 @@ concept_dependencies:
     depends_on: ["test_time_candidates", "sample_disagreement"]
   - concept: "conformal_factuality"
     depends_on: ["calibration", "evidence_provenance"]
+  - concept: "split_conformal_claim_filter"
+    depends_on: ["conformal_factuality", "failure_taxonomy", "confidence_intervals", "selective_prediction"]
   - concept: "behavior_regression"
     depends_on: ["behavior_contract", "failure_taxonomy", "confidence_intervals"]
 
@@ -68,8 +72,8 @@ mechanisms:
     evidence_ids: ["CLM-010", "CLM-011"]
     derived_from: []
   - id: "MECH-05"
-    description: "Conformal factuality calibrates a back-off or uncertainty-set procedure on exchangeable labeled examples to provide its stated marginal coverage guarantee. Guarantee scope follows the score, entailment relation, calibration population, and output construction."
-    evidence_ids: ["CLM-012"]
+    description: "Conformal factuality calibrates a back-off procedure on exchangeable labeled examples to provide its stated marginal guarantee that the reference entails the backed-off output. The module teaches a related split-conformal claim filter whose covered event is 'every kept claim is labeled true'; guarantee scope follows the score, label or entailment relation, calibration population, output rule, and exchangeability."
+    evidence_ids: ["CLM-012", "CLM-016", "CLM-017"]
     derived_from: ["MECH-01", "MECH-02"]
   - id: "MECH-06"
     description: "Behavior regression compares pinned releases on versioned, severity-weighted slices and repeated samples, then uses label audit and matched reruns to distinguish model, prompt, runtime, retrieval/tool, evaluator, and population changes."
@@ -97,6 +101,14 @@ mathematical_models:
     description: "Binary Brier score is the sample mean of (q_i-y_i)^2 and negative log-likelihood is the sample mean of -[y_i log q_i+(1-y_i)log(1-q_i)]. Both couple calibration and predictive sharpness; neither diagnoses slice causes alone."
     evidence_ids: ["CLM-001", "CLM-002"]
     derived_from: ["MECH-02", "MATH-01"]
+  - id: "MATH-06"
+    description: "Split-conformal claim filter: r_i = max score of false claims in calibration output i (negative infinity if none); k = ceil((n+1)(1-alpha)) computed exactly; q_hat = k-th smallest r_i with ties counted, or positive infinity if k>n; keep test claims with s > q_hat. Under exchangeability, P(all kept claims true) = P(r_test <= q_hat) >= 1-alpha marginally. The lower bound holds with ties; an achievable alpha requires n >= 1/alpha - 1."
+    evidence_ids: ["CLM-016", "CLM-017"]
+    derived_from: ["MECH-05"]
+  - id: "MATH-07"
+    description: "Teaching estimator of discrete semantic uncertainty: H = -sum_c p_c ln p_c over meaning-cluster frequencies of m samples (nats). The value depends on the equivalence judge: the same five correct samples give 0.673 or 0 nats depending on one merge decision, and a correlated falsehood gives 0."
+    evidence_ids: ["CLM-011"]
+    derived_from: ["MECH-04"]
 
 implementation_mechanisms:
   - id: "IMPL-01"
@@ -115,6 +127,10 @@ implementation_mechanisms:
     description: "Pinned Transformers source trace records processed per-step scores or raw logits from generation and optionally reconstructs selected-token transition scores with compute_transition_scores. A separate labeled mapping is required before interpreting them as answer correctness confidence."
     evidence_ids: ["CLM-014"]
     derived_from: ["MECH-02"]
+  - id: "IMPL-05"
+    description: "Conformal Filter Record and required test: store calibration IDs and lineage, decomposer/scorer/label-guide versions, per-output r_i, n, alpha, k, q_hat, retained-claim fraction, abstention rate, and realized coverage with a binomial interval by slice before and after shift. Unit tests cover k>n, ties at q_hat, and all r_i = negative infinity; a monotonicity test checks q_hat is non-increasing in alpha; a seeded exchangeable simulation checks coverage >= 1-alpha minus Monte Carlo error."
+    evidence_ids: ["CLM-016", "CLM-017"]
+    derived_from: ["MATH-06", "IMPL-01"]
 
 failure_modes:
   - id: "FAIL-01"
@@ -139,12 +155,16 @@ failure_modes:
     derived_from: ["MECH-04", "IMPL-03"]
   - id: "FAIL-06"
     description: "Guarantee leakage: a marginal conformal guarantee is presented as per-item, subgroup, semantic-completeness, or post-shift correctness despite changed assumptions or score semantics."
-    evidence_ids: ["CLM-012"]
-    derived_from: ["MECH-05"]
+    evidence_ids: ["CLM-012", "CLM-017"]
+    derived_from: ["MECH-05", "MATH-06"]
   - id: "FAIL-07"
     description: "Hidden slice regression: release-level means remain stable while a severe, temporal, language, prompt-family, or subgroup failure worsens; post-hoc slice discovery then overstates certainty unless replicated."
     evidence_ids: ["CLM-004", "CLM-008", "CLM-015"]
     derived_from: ["MECH-06"]
+  - id: "FAIL-08"
+    description: "Conformal implementation error: using the uncorrected ceil(n(1-alpha)) quantile, keeping claims with s >= q_hat, silently returning the unfiltered output when nothing survives, or tuning alpha or the scorer on the test stream. Each breaks the equivalence between the covered event and r_test <= q_hat or breaks exchangeability."
+    evidence_ids: ["CLM-016", "CLM-017"]
+    derived_from: ["MATH-06", "IMPL-05"]
 
 production_connections:
   - id: "PROD-01"
@@ -163,8 +183,18 @@ research_connections:
     derived_from: ["MECH-02", "MECH-04", "MECH-05"]
   - id: "RESEARCH-02"
     description: "Theoretical lower bounds for arbitrary facts and empirical factuality benchmarks answer different questions; neither supplies a universal taxonomy or production failure rate."
-    evidence_ids: ["CLM-008", "CLM-009", "CLM-013"]
+    evidence_ids: ["CLM-008", "CLM-009", "CLM-013", "CLM-019"]
     derived_from: ["MECH-01"]
+  - id: "RESEARCH-03"
+    description: "Frontier uncertainty work includes single-generation semantic-entropy probes (author-reported, abstract-level evidence). The broader 2025-2026 landscape of efficient and trajectory-based detectors is unverified in this revision and supports no required outcome."
+    evidence_ids: ["CLM-018", "CLM-020"]
+    derived_from: ["MECH-04"]
+
+todo_verify:
+  - id: "TODO-01"
+    description: "Survey 2025-2026 primary sources on efficient uncertainty estimators and reasoning-trace or trajectory-based detectors before naming any in the frontier map."
+    evidence_ids: ["CLM-020"]
+    derived_from: ["RESEARCH-03"]
 
 candidate_capabilities:
   - capability: "Define behavior and failure events with evidence, temporal, severity, and unit boundaries."
@@ -173,7 +203,9 @@ candidate_capabilities:
     mapped_mechanisms: ["MECH-02", "MATH-01", "MATH-02", "MATH-03", "MATH-05", "IMPL-02", "IMPL-04", "FAIL-02"]
   - capability: "Design an abstention policy and defend its risk, coverage, subgroup, escalation, and cost operating point."
     mapped_mechanisms: ["MECH-03", "MATH-04", "FAIL-04", "PROD-01"]
-  - capability: "Compare sample disagreement, semantic uncertainty, and conformal controls under their actual assumptions."
-    mapped_mechanisms: ["MECH-04", "MECH-05", "IMPL-03", "FAIL-05", "FAIL-06", "RESEARCH-01"]
+  - capability: "Compare sample disagreement and semantic uncertainty under their actual assumptions, including judge-dependent clustering."
+    mapped_mechanisms: ["MECH-04", "MATH-07", "IMPL-03", "FAIL-05", "RESEARCH-01", "RESEARCH-03"]
+  - capability: "Implement and test a split-conformal claim filter and state its guarantee without per-item, subgroup, or post-shift inflation."
+    mapped_mechanisms: ["MECH-05", "MATH-06", "IMPL-05", "FAIL-06", "FAIL-08"]
   - capability: "Detect and diagnose behavior regressions across versions, slices, shifts, and evaluator changes."
     mapped_mechanisms: ["MECH-06", "FAIL-03", "FAIL-07", "PROD-02"]

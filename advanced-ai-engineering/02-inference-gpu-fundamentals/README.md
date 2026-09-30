@@ -11,7 +11,7 @@ This module builds the hardware/software measurement model needed before KV-cach
 - **Engineering Problem**: Connect tensor shapes and operations to GPU execution, memory traffic, time, profiler observations, and falsifiable performance explanations.
 - **What You Will Do**: Implement reference kernels, induce coalescing and divergence failures, prove why unsynchronized timing is invalid, construct qualified Roofline bounds, profile at system and kernel scope, trace a pinned benchmark implementation, and defend a diagnosis against alternatives.
 - **Environment**: Python 3.10+ plus CUDA C++ or a GPU kernel DSL; an NVIDIA GPU and current profiling tools are required for device-counter labs, while analytical exercises can run without them.
-- **Research Cutoff**: 2026-09-27. Current implementation claims remain pinned to the verified revisions below.
+- **Research Cutoff**: evidence registry 2026-09-25; WP-F1 review 2026-09-30 corrected units, rubric, and examples and re-checked pinned symbol presence without re-reading the NVIDIA documentation. Current implementation claims remain pinned to the verified revisions below.
 
 ## 01 Baseline Assumptions
 
@@ -60,11 +60,13 @@ depth_contract:
 estimated_effort:
   instruction: 6h
   guided_practice: 3h
-  labs: 15h
+  labs: 16h
   assessment: 3h
   source_trace: 2h
-  total: 29h
+  total: 30h
 ```
+
+*Effort reconciliation*: lesson instruction sums to 360 min and lesson practice to 180 min. Labs are A 4h + B 3h + C 4h + D 4h + E's 1h comparison = 16h; LAB E's 2h source trace (which includes Lesson 2.7's trace practice) is counted once, under `source_trace`. The WP-F1 revision raised labs from 15h to match the lab estimates already stated (total 29h → 30h).
 
 ---
 
@@ -110,7 +112,7 @@ Keep three knowledge types separate:
 
 **Concepts & Definitions:**
 
-A kernel launch defines a grid of thread blocks. Blocks are scheduled onto streaming multiprocessors (SMs); correctness cannot depend on the order in which blocks run. Threads within an SM execute in groups of 32 called warps on current CUDA devices. Threads have individual state, but a warp is most efficient when active lanes follow the same instruction path.
+A kernel launch defines a grid of thread blocks. Blocks are scheduled onto streaming multiprocessors (SMs); correctness cannot depend on the order in which blocks run. Threads within an SM execute in groups of 32 called warps on current CUDA devices (**O**, CLM-001). Threads have individual state, but a warp is most efficient when active lanes follow the same instruction path.
 
 Do not collapse these concepts:
 
@@ -121,19 +123,27 @@ Do not collapse these concepts:
 - **occupancy**: active warps divided by the architectural maximum;
 - **utilization/throughput**: activity or work rate during a named interval.
 
-Residency is jointly constrained by architectural block/thread limits and per-block registers and shared memory. More occupancy can help hide latency, but maximum occupancy is not a theorem of maximum performance. Reducing registers to increase occupancy can spill data; shrinking tiles can lower reuse; changing blocks can reduce instruction-level parallelism.
+Residency is jointly constrained by architectural block/thread limits and per-block registers and shared memory. More occupancy can help hide latency, but maximum occupancy is not a theorem of maximum performance (**O**, CLM-007). Reducing registers to increase occupancy can spill data; shrinking tiles can lower reuse; changing blocks can reduce instruction-level parallelism.
 
-**Worked Example:** Two kernels may launch the same grid while different register or shared-memory footprints permit different resident blocks per SM; occupancy alone does not predict which finishes first.
+**Worked Example (exercise limits, not a specific GPU):**
+- *Input*: per-SM limits of 65,536 32-bit registers, 2,048 resident threads (64 warps), and 32 resident blocks. Kernel X uses 256 threads/block and 32 registers/thread; kernel Y uses 256 threads/block and 64 registers/thread. Register-allocation granularity and shared memory are ignored.
+- *Steps*: X needs $256\times32=8{,}192$ registers/block, so registers allow $\lfloor65536/8192\rfloor=8$ blocks and threads allow $2048/256=8$, giving 8 blocks = 64 warps. Y needs 16,384 registers/block, so 4 blocks = 32 warps.
+- *Result*: theoretical occupancy is 100% for X and 50% for Y.
+- *Interpretation / limits*: Y may still finish first if its extra registers hold reused operands and expose more instruction-level parallelism, while X spills or reloads. Query real limits from the device and the occupancy API or profiler before reasoning about a real kernel.
 
 **Knowledge Check:** Which launch quantities are chosen by the program, and which residency/utilization quantities must be observed?
 
 **Guided Practice:** Sweep block size and artificial register/shared-memory use. Record theoretical occupancy, achieved active warps, spills, stall mix, and kernel time. Seek a case where higher occupancy is slower.
 
-**Feedback Contract:** Require launch geometry, resource limits, achieved activity, time, and a falsifier; reject “maximize occupancy” as an objective without workload evidence.
+**Feedback Contract:**
+- *Expected Evidence*: launch geometry; per-kernel registers, shared memory, and spills; theoretical versus achieved occupancy; stall mix; kernel time; and one measured case where higher occupancy is not faster (or a stated falsifier if none is found).
+- *Common Failure*: reporting theoretical occupancy as achieved, or tuning for occupancy without measuring time.
+- *Diagnostic Hint*: when you cap registers to raise occupancy, do local-memory (spill) loads appear?
+- *Concept to Revisit*: resource residency versus latency hiding.
 
 **Learning Outcome:** Connect execution hierarchy and resource residency to measured performance without treating occupancy as a universal target.
 
-*(Effort: 45m instruction, 25m practice)*
+*(Effort: 50m instruction, 25m practice)*
 
 ---
 
@@ -145,13 +155,13 @@ Residency is jointly constrained by architectural block/thread limits and per-bl
 
 A useful simplified path is registers and shared memory/L1, then L2, then device memory. The exact topology, capacities, cache behavior, and instructions vary by architecture. Never substitute an unqualified “GPU memory” byte count for all levels.
 
-When lanes in a warp access adjacent aligned values, hardware can serve requests with fewer memory transactions. Strided, scattered, or misaligned patterns can transfer sectors containing unused data. Coalescing therefore concerns the ratio of requested bytes to transferred bytes, not merely whether addresses are contiguous somewhere in source code.
+When lanes in a warp access adjacent aligned values, hardware can serve requests with fewer memory transactions. Strided, scattered, or misaligned patterns can transfer sectors containing unused data (**O**, CLM-002). Coalescing therefore concerns the ratio of requested bytes to transferred bytes, not merely whether addresses are contiguous somewhere in source code.
 
 For useful bytes read $B_r$, useful bytes written $B_w$, and synchronized elapsed time $t$ seconds:
 
 $$BW_{useful}=\frac{B_r+B_w}{t}\quad\text{bytes/s}.$$
 
-Use $10^9$ for decimal GB/s and $2^{30}$ for GiB/s; do not mix the label and divisor. This value is not DRAM traffic. Compare it with profiler traffic at a named boundary to test transaction waste or reuse hypotheses.
+Use $10^9$ for decimal GB/s and $2^{30}$ for GiB/s; do not mix the label and divisor (**D**, CLM-010). This value is not DRAM traffic. Compare it with profiler traffic at a named boundary to test transaction waste or reuse hypotheses.
 
 **Necessary but insufficient signals**
 
@@ -160,17 +170,25 @@ Use $10^9$ for decimal GB/s and $2^{30}$ for GiB/s; do not mix the label and div
 - high L2 hit rate does not reveal whether L1/shared/register use is optimal;
 - many transactions do not prove they are on the critical path.
 
-**Worked Example:** A kernel requesting 4 MiB and taking 1 ms has 4 GiB/s useful bandwidth under binary units; profiler-reported DRAM bytes may be larger or smaller depending on reuse and the named boundary.
+**Worked Example:**
+- *Input*: a kernel requests 4 MiB of useful bytes (read + write) and a synchronized interval of 1 ms.
+- *Steps*: $4\text{ MiB}=4\times2^{20}=4{,}194{,}304$ bytes; divided by $10^{-3}$ s gives $4{,}194{,}304{,}000$ bytes/s.
+- *Result*: exactly $4000$ MiB/s $=4000/1024=3.90625$ GiB/s $=4.194304$ GB/s. Rounded, “≈3.9 GiB/s” or “≈4.2 GB/s”; it is **not** 4 GiB/s, which would need 4 GiB/s × 1 ms $=4.096$ MiB.
+- *Interpretation / limits*: this is useful bandwidth. If the profiler reports 8 MiB of DRAM reads for the same launch, the transferred-to-useful ratio is 2, which supports (but does not prove) a transaction-waste hypothesis; reuse in L2 could equally make DRAM bytes smaller than useful bytes.
 
 **Knowledge Check:** Why are useful bytes, L2 traffic, and DRAM traffic different, and what does coalescing change?
 
 **Guided Practice:** Sweep aligned contiguous, offset, and strided accesses while preserving arithmetic; compare useful bandwidth with hierarchy-specific traffic.
 
-**Feedback Contract:** Require byte equations, units, boundary names, timing synchronization, transaction evidence, and competing explanations.
+**Feedback Contract:**
+- *Expected Evidence*: a byte equation per access pattern with the unit convention stated; synchronized time; useful bandwidth; profiler-reported sectors/bytes at L1/L2/DRAM for the same launch; the transferred-to-useful ratio; and at least two competing explanations.
+- *Common Failure*: dividing MiB by milliseconds and labeling the result GiB/s (a 2.4% error at this size that grows with prefix mismatch), or comparing useful bytes with a DRAM counter from a different launch.
+- *Diagnostic Hint*: convert to bytes and seconds first, then divide by $2^{30}$ or $10^9$ exactly once.
+- *Concept to Revisit*: useful versus transferred bytes at a named boundary.
 
 **Learning Outcome:** Distinguish requested work from measured traffic and diagnose layout-dependent transaction waste.
 
-*(Effort: 45m instruction, 25m practice)*
+*(Effort: 50m instruction, 25m practice)*
 
 ---
 
@@ -180,7 +198,7 @@ Use $10^9$ for decimal GB/s and $2^{30}$ for GiB/s; do not mix the label and div
 
 **Concepts & Definitions:**
 
-Kernel launches normally return before device completion. A host timer around a launch can therefore measure submission time, not execution time. Three common boundaries are different measurements:
+Kernel launches normally return before device completion. A host timer around a launch can therefore measure submission time, not execution time (**O**, CLM-003). Three common boundaries are different measurements:
 
 1. **device interval**: events recorded in the relevant stream;
 2. **synchronized host interval**: wall time with completion enforced at the end points;
@@ -197,13 +215,21 @@ Warmup can include context creation, library initialization, memory-pool growth,
 - selecting the minimum of many runs without documenting the intended estimator;
 - timing under a heavy profiler and treating the host duration as uninstrumented latency.
 
-**Worked Example:** A host launch returning in 20 microseconds while a synchronized boundary completes at 200 microseconds shows submission time and completed-work time, not conflicting measurements.
+**Worked Example (synthetic timestamps on one host clock, device events on the same stream):**
+- *Input*: host timer starts at 0 µs; the launch call returns at 20 µs; the start event records at 25 µs and the end event at 195 µs; `synchronize()` returns at 200 µs.
+- *Steps*: submission interval $=20$ µs; device interval $=195-25=170$ µs; synchronized host interval $=200$ µs.
+- *Result*: three different, non-conflicting measurements. The 30 µs between device and synchronized host time is launch-to-start delay plus synchronization return.
+- *Interpretation / limits*: reporting 20 µs as “kernel time” understates execution by $8.5\times$. Adding a second stream whose work is not bracketed by these events would leave the device interval unchanged while the application interval grows.
 
 **Knowledge Check:** Why can an event on one stream fail to bound work on another, and when is per-operator synchronization unrepresentative?
 
 **Guided Practice:** Time identical work using unsynchronized wall time, synchronized wall time, device events, and an application boundary; then add a second stream.
 
-**Feedback Contract:** Report clocks, streams, synchronization, warmup, repetitions, inclusion rules, raw samples, and profiler status.
+**Feedback Contract:**
+- *Expected Evidence*: for each method, the clock, stream, synchronization point, warmup, repetitions, inclusion rule, raw samples, and profiler status; an explanation of why the four methods disagree; the second-stream case showing which boundary excludes queued work.
+- *Common Failure*: `time.time()` around a launch without synchronization, or synchronizing after every operator and presenting the result as production overlap.
+- *Diagnostic Hint*: does the reported time change when you add a synchronization before stopping the timer?
+- *Concept to Revisit*: submission versus completion boundaries.
 
 **Learning Outcome:** Measure asynchronous execution at an explicit boundary without destroying the concurrency being studied.
 
@@ -224,7 +250,7 @@ Define:
 - $P_{peak}$: attainable compute ceiling for the selected precision/instruction path;
 - $\beta$: attainable bandwidth at the same selected memory boundary.
 
-The basic Roofline bound is
+The basic Roofline bound is (**O**, CLM-004; **D**, CLM-005)
 
 $$P\le\min(P_{peak},\beta I),$$
 
@@ -252,17 +278,27 @@ This is an analytical bound, not a latency guarantee. State all assumptions:
 
 A point below both ceilings is not automatically “neither compute nor memory.” It may reflect a lower unmodeled ceiling, poor instruction mix, dependencies, divergence, occupancy/resource limits, insufficient waves, frequency/power state, or invalid counts. Hierarchical Roofline and profiler evidence refine the hypothesis.
 
-**Worked Example:** For declared $P_{peak}$ and $\beta$, compute $I^*=P_{peak}/\beta$, then compare a modeled intensity with that ridge. The result is a screening bound, not a latency guarantee.
+**Worked Example (exercise ceilings, not a specific GPU):**
+- *Input*: $P_{peak}=400$ TFLOP/s for the selected FP16 tensor path and $\beta=2.0$ TB/s at DRAM, both treated as attainable; FMA = 2 FLOPs; one-pass DRAM bytes (read $A$ and $B$ once, write $C$ once), 2 bytes/element.
+- *Step 1 — ridge*: $I^*=400\times10^{12}/2.0\times10^{12}=200$ FLOP/byte.
+- *Step 2 — GEMV-like* ($M=K=4096$, $N=1$): $W=2\cdot4096\cdot1\cdot4096=33{,}554{,}432$ FLOPs; $Q=2(4096^2+4096+4096)=33{,}570{,}816$ bytes; $I\approx1.0$ FLOP/byte. Bounds: $T\ge\max(0.084,16.79)$ µs, so the memory term dominates.
+- *Step 3 — GEMM* ($M=N=K=4096$): $W=137{,}438{,}953{,}472$ FLOPs; $Q=2\cdot3\cdot4096^2=100{,}663{,}296$ bytes; $I\approx1365$ FLOP/byte. Bounds: $T\ge\max(343.6,50.3)$ µs, so the compute term dominates.
+- *Result*: the screen assigns the GEMV to the bandwidth roof and the GEMM to the compute roof.
+- *Interpretation / limits*: both are lower bounds on time under optimistic byte counts and attainable ceilings. A measured GEMV at 40 µs would sit well below the bandwidth roof and send you looking for launch overhead, insufficient parallelism, or a lower sustainable $\beta$. It would not refute the classification.
 
 **Knowledge Check:** Which byte boundary defines $I$, and why can a point below both ceilings have an unmodeled limiter?
 
 **Guided Practice:** Derive bounds using specification peaks and then measured sustainable ceilings; explain how the conclusion changes.
 
-**Feedback Contract:** Require units, FMA convention, selected instruction path, hierarchy boundary, attainable ceilings, exclusions, and profiler validation.
+**Feedback Contract:**
+- *Expected Evidence*: $W$, $Q$, $I$, $I^*$, and both time bounds with units; the FMA convention, precision/instruction path, and byte boundary; nameplate versus measured ceilings side by side; and at least one kernel whose classification changes when the measured ceiling or measured traffic replaces the optimistic one.
+- *Common Failure*: combining a tensor-core FP16 peak with an FP32 CUDA-core kernel, or DRAM bandwidth with L2-level byte counts.
+- *Diagnostic Hint*: are $W$ and $P_{peak}$ counted on the same instruction path, and are $Q$ and $\beta$ measured at the same boundary?
+- *Concept to Revisit*: a Roofline is a bound, and the boundary must match.
 
 **Learning Outcome:** Build and qualify a Roofline model without promoting it to a measured bottleneck or latency guarantee.
 
-*(Effort: 55m instruction, 30m practice)*
+*(Effort: 60m instruction, 35m practice)*
 
 ---
 
@@ -293,17 +329,25 @@ Therefore “prefill is compute-bound” and “decode is memory-bound” are us
 
 Numerical behavior remains part of the experiment. Floating-point addition is not generally associative, and fused or reordered reductions may differ. Define tolerances and downstream quality checks before declaring a faster path correct.
 
-**Worked Example:** A tiny high-intensity GEMM can underfill the GPU, whereas a larger shape can expose enough parallelism to approach another ceiling; arithmetic intensity alone does not encode grid size.
+**Worked Example (same exercise ceilings as Lesson 2.4, $I^*=200$ FLOP/byte):**
+- *Input*: FP16, $M=K=4096$, batch-like dimension $N\in\{1,8,64,512\}$, one-pass bytes.
+- *Steps*: $I=MNK/(MK+KN+MN)$ gives $1.0$, $7.97$, $62.1$, and $409.6$ FLOP/byte.
+- *Result*: the one-pass screen crosses the ridge between $N=64$ and $N=512$. The memory-bound lower time stays near 17–21 µs while $N$ grows 512×, which is why batching decode tokens can raise throughput until another ceiling appears (**O**, CLM-006).
+- *Interpretation / limits*: a $64\times64\times64$ GEMM has $I\approx21$ FLOP/byte, but at a typical $128\times128$ output tile it launches one block and cannot fill the device. Intensity does not encode grid size, and the kernel library may pick a different tiling for each $N$.
 
 **Knowledge Check:** Why is the one-pass GEMM intensity not measured intensity, and how can padding both add work and improve execution?
 
 **Guided Practice:** Sweep GEMV-like and GEMM-like shapes, dtype, alignment, and backend; record selected kernels, traffic, grid size, time, and numerical error.
 
-**Feedback Contract:** Identify transitions from aligned evidence rather than assigning one universal regime to prefill or decode.
+**Feedback Contract:**
+- *Expected Evidence*: for each shape, the selected kernel, grid size, one-pass and measured intensity, achieved throughput and bandwidth, time, and numerical error versus a reference (**O**, CLM-013); the $N$ at which the measured regime changes, compared with the screen's prediction.
+- *Common Failure*: labeling all decode as memory-bound and all prefill as compute-bound without measuring the shapes involved.
+- *Diagnostic Hint*: does the measured time grow with $N$ before the predicted ridge? If not, what else limits it?
+- *Concept to Revisit*: shape-dependent reuse and parallelism.
 
 **Learning Outcome:** Explain and measure shape-dependent bottleneck transitions while preserving numerical validity.
 
-*(Effort: 50m instruction, 30m practice)*
+*(Effort: 55m instruction, 35m practice)*
 
 ---
 
@@ -321,9 +365,9 @@ Use the least intrusive evidence that can answer the current question:
 5. inspect source or SASS only when the hypothesis requires instruction-path evidence;
 6. change one causal variable and remeasure the baseline.
 
-Nsight Systems and Nsight Compute are complementary. Systems traces application scheduling and the CPU/GPU timeline. Compute collects detailed metrics for selected kernels. A kernel can be efficient while the application is slow; an application timeline can show a long kernel without explaining its internal limiter.
+Nsight Systems and Nsight Compute are complementary. Systems traces application scheduling and the CPU/GPU timeline. Compute collects detailed metrics for selected kernels (**O**, CLM-008). A kernel can be efficient while the application is slow; an application timeline can show a long kernel without explaining its internal limiter.
 
-Profilers are interventions. Nsight Compute may replay kernels or ranges, save/restore memory, control caches/clocks, serialize launches, or patch instructions depending on the metric set. Keep replay mode, cache control, metric set, filtering, and concurrent activity in the evidence record. If the workload is nondeterministic or relies on concurrency, verify that the capture method preserves the behavior of interest.
+Profilers are interventions. Nsight Compute may replay kernels or ranges, save/restore memory, control caches/clocks, serialize launches, or patch instructions depending on the metric set (**O**, CLM-009). Keep replay mode, cache control, metric set, filtering, and concurrent activity in the evidence record. If the workload is nondeterministic or relies on concurrency, verify that the capture method preserves the behavior of interest.
 
 Apply this chain:
 
@@ -337,19 +381,27 @@ SYMPTOM
   → unprofiled remeasurement
 ```
 
-Example: “GPU utilization fell” can be explained by host launch gaps, smaller grids, dependency stalls, a faster kernel, throttling, memory faults, synchronization, or another process. Utilization alone cannot rank them.
+Example: “GPU utilization fell” can be explained by host launch gaps, smaller grids, dependency stalls, a faster kernel, throttling, memory faults, synchronization, or another process. Utilization alone cannot rank them (**H**, CLM-012).
 
-**Worked Example:** A Systems trace showing a CPU gap before an unchanged kernel weakens an internal-kernel bottleneck claim; targeted kernel counters are unnecessary until the changed interval is localized.
+**Worked Example (synthetic traces):**
+- *Input*: a 10-iteration loop regressed from 4.0 ms to 6.0 ms per iteration after an upgrade. Aligned Nsight Systems timelines show the same kernel sequence with per-kernel durations within 2%, but a new 190 µs gap before each of 10 launches in the new trace.
+- *Steps*: accumulated gaps $=10\times0.19=1.9$ ms, explaining $1.9$ of the $2.0$ ms regression; kernel-duration changes explain at most $0.02\times4.0=0.08$ ms.
+- *Result*: host-side launch or dispatch gaps rank first, and kernel-internal limiters rank last.
+- *Interpretation / limits*: the next measurement is a CPU sampling or API trace of the gap. Nsight Compute on the unchanged kernels would cost time without discriminating. Confirm by removing the suspected host cause and remeasuring *unprofiled*.
 
 **Knowledge Check:** When should a timeline precede kernel metrics, and how can replay invalidate a concurrency-sensitive capture?
 
 **Guided Practice:** Diagnose the same latency symptom after separately injecting a host gap, strided access, and register pressure.
 
-**Feedback Contract:** Require an unprofiled baseline, minimal discriminating capture, capture settings, alternatives, intervention, and unprofiled remeasurement.
+**Feedback Contract:**
+- *Expected Evidence*: unprofiled baseline distribution; the minimal capture for each injected fault with settings (replay mode, cache control, metric set); the alternatives ruled down and by which observation; the intervention; and unprofiled remeasurement.
+- *Common Failure*: starting with a full Nsight Compute metric dump on every kernel, or reporting the profiled duration as the fix's effect.
+- *Diagnostic Hint*: does the regression live inside kernels or between them on the timeline?
+- *Concept to Revisit*: profiler scope and measurement intrusion.
 
 **Learning Outcome:** Select profiler scope from a hypothesis and account for the profiler as an intervention.
 
-*(Effort: 50m instruction, 30m practice)*
+*(Effort: 55m instruction, 35m practice)*
 
 ---
 
@@ -379,45 +431,53 @@ Observed behavior at that revision:
 - block-size estimation acts as warmup and attempts to amortize timer overhead;
 - `blocked_autorange` collects repeated timed blocks and returns raw times with the repetition count.
 
-Generalizable? **PARTIAL.** Synchronization, warmup, and replicates are general measurement concerns. The exact thresholds, call graph, and accelerator abstraction are PyTorch-revision-specific. This path does not measure an end-to-end serving request and its synchronization suppresses overlap outside the timed statement.
+(**O**, CLM-011) Generalizable? **PARTIAL.** Synchronization, warmup, and replicates are general measurement concerns. The exact thresholds, call graph, and accelerator abstraction are PyTorch-revision-specific. This path does not measure an end-to-end serving request and its synchronization suppresses overlap outside the timed statement.
 
-**Worked Example:** `blocked_autorange` returning raw block times and repetitions supports operator timing at this boundary; it does not include request queueing or prove production overlap.
+**Worked Example:**
+- *Input*: a `Measurement` from `blocked_autorange` reporting `number_per_run=100` and raw times for 5 blocks.
+- *Steps*: each raw time covers 100 executions bracketed by accelerator synchronization, so per-call time = raw time / 100; the spread across the 5 blocks is block-level variation.
+- *Result*: an operator-level, synchronized, amortized estimate.
+- *Interpretation / limits*: the synchronization spreads launch overhead over 100 calls and removes overlap with other work. It does not include request queueing, and it is not evidence about production overlap.
 
 **Knowledge Check:** Where does synchronization occur, and which surrounding asynchronous work falls outside the statement?
 
 **Independent Practice:** Execute the pinned trace on one operator, compare it with device events and manual synchronized wall time, and mark unexecuted paths `TODO_VERIFY`.
 
-**Feedback Contract:** Require revision, path, symbols, call path, configuration, static-versus-executed status, exact commands, and generalizability limits.
+**Feedback Contract:**
+- *Expected Evidence*: revision, path, symbols, call path, configuration, static-versus-executed status, exact commands, and a comparison table of utility, event, and manual synchronized timings for one operator with an explanation of each difference.
+- *Common Failure*: describing `blocked_autorange` as measuring end-to-end latency, or omitting that it synchronizes.
+- *Diagnostic Hint*: where in the call path is `torch.accelerator.synchronize` invoked relative to `timeit.default_timer`?
+- *Concept to Revisit*: utility-specific timing semantics.
 
 **Learning Outcome:** Verify benchmark timing behavior from source without turning utility-specific semantics into a universal definition.
 
-*(Effort: 35m instruction, 30m source trace)*
+*(Effort: 45m instruction; trace practice counted in LAB E source trace)*
 
 ## 05 Literature & Production Source Map
 
 **REFERENCE / BASELINE**
 
-- Williams, Waterman, and Patterson (2009), *Roofline: An Insightful Visual Performance Model for Multicore Architectures* — original bound and optimization model.
-- NVIDIA, *CUDA Programming Guide* — current execution, synchronization, and architecture semantics.
-- NVIDIA, *CUDA C++ Best Practices Guide* — correctness, timing, bandwidth, coalescing, and execution-configuration guidance.
+- Williams, Waterman, and Patterson (2009), [*Roofline: An Insightful Visual Performance Model for Multicore Architectures*](https://escholarship.org/uc/item/78h8v7mr) — original bound and optimization model (CLM-004).
+- NVIDIA, [*CUDA Programming Guide*](https://docs.nvidia.com/cuda/cuda-programming-guide/) — execution, synchronization, and architecture semantics (CLM-001, CLM-003, CLM-007; accessed 2026-09-25).
+- NVIDIA, [*CUDA C++ Best Practices Guide*](https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/) — correctness, timing, bandwidth, coalescing, and execution-configuration guidance (CLM-002, CLM-007, CLM-013; accessed 2026-09-25).
 
 **CURRENT OPERATIONAL DOCUMENTATION**
 
-- NVIDIA, *Nsight Systems User Guide* — CPU/GPU application timelines and CUDA tracing.
-- NVIDIA, *Nsight Compute Profiling Guide* — metrics, replay, overhead, reproducibility, and Roofline analysis.
-- NVIDIA, *GPU Performance Background* and *Matrix Multiplication Background* — shape-dependent math/memory/latency intuition with explicitly historical hardware examples.
-- PyTorch, *CUDA semantics* — framework-facing asynchronous execution and timing boundaries.
+- NVIDIA, [*Nsight Systems User Guide*](https://docs.nvidia.com/nsight-systems/UserGuide/) — CPU/GPU application timelines and CUDA tracing (CLM-008).
+- NVIDIA, [*Nsight Compute Profiling Guide*](https://docs.nvidia.com/nsight-compute/ProfilingGuide/) — metrics, replay, overhead, reproducibility, and Roofline analysis (CLM-004, CLM-008, CLM-009).
+- NVIDIA, [*GPU Performance Background*](https://docs.nvidia.com/deeplearning/performance/dl-performance-gpu-background/index.html) and [*Matrix Multiplication Background*](https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html) — shape-dependent math/memory/latency intuition with explicitly historical hardware examples (CLM-006).
+- PyTorch, [*CUDA semantics*](https://docs.pytorch.org/docs/main/notes/cuda.html) — framework-facing asynchronous execution and timing boundaries (CLM-003).
 
 **CURRENT SOURCE SNAPSHOT**
 
-- PyTorch commit `7ee5406f6686d190efc6571475f074ba1bc9a8c0`, `torch/utils/benchmark/utils/timer.py`, symbols `timer`, `Timer._estimate_block_size`, and `Timer.blocked_autorange`, verified 2026-09-25.
+- PyTorch commit `7ee5406f6686d190efc6571475f074ba1bc9a8c0`, `torch/utils/benchmark/utils/timer.py`, symbols `timer`, `Timer._estimate_block_size`, and `Timer.blocked_autorange`, statically verified 2026-09-25; symbol presence and the `torch.accelerator.synchronize` call re-checked 2026-09-30 (CLM-011).
 
 **Currentness classification**
 
 - **REFERENCE / BASELINE**: SIMT reasoning, explicit synchronization, effective bandwidth, and basic Roofline.
-- **CURRENT DEFAULT PRACTICE**: synchronized/warmed replicated benchmarks followed by timeline-first and targeted-kernel profiling; this is a workflow, not one tool mandate.
+- **RECOMMENDED BASELINE WORKFLOW (this curriculum's recommendation, not a measured industry default)**: synchronized/warmed replicated benchmarks followed by timeline-first and targeted-kernel profiling. It is supported by the asynchrony, scope, and replay semantics documented in CLM-003, CLM-008, and CLM-009; how widely teams follow it is not claimed.
 - **WORKLOAD-DEPENDENT**: compute-, memory-, latency-, launch-, occupancy-, or dependency-limited behavior; useful batch/shape; overlap; cache benefit.
-- **FRONTIER / GENERATION-SPECIFIC**: new tensor instructions, asynchronous copy/memory engines, cluster-level features, graph/device launch, and hierarchy-specific optimizations.
+- **FRONTIER / GENERATION-SPECIFIC**: new tensor instructions, asynchronous copy/memory engines, cluster-level features, graph/device launch, and hierarchy-specific optimizations. No source for these was opened in this revision, so they are topic pointers, not claims (`TODO_VERIFY`).
 - **LEGACY WHEN UNIVERSALIZED**: fixed transaction rules from old compute capabilities, implicit warp-synchronous assumptions, and a single device's nameplate ridge used for every kernel.
 
 ---
@@ -495,7 +555,7 @@ All labs follow $\text{PREDICT}\to\text{BUILD}\to\text{MEASURE}\to\text{EXPLAIN}
 - **Break & Falsify**: Add asynchronous work outside the timed statement and explain why each boundary reports a different result.
 - **Artifact**: repository, commit, verification date, file, symbols, entry point, execution path, exact run commands, and `TODO_VERIFY` for any path not executed locally.
 - **Alignment**: Lessons 2.3 and 2.7.
-- **Effort Estimate**: 2h source trace, 1h comparison.
+- **Effort Estimate**: 2h source trace (counted under `source_trace`), 1h comparison (3h total).
 
 ## 07 Break / Incident Scenarios
 
@@ -517,16 +577,14 @@ Competing hypotheses:
 
 **Diagnostic Protocol (Task):**
 
-Required response:
-
-- freeze inputs, shape, dtype, seed, correctness tolerance, and software/hardware manifest;
-- reproduce with synchronized unprofiled distributions;
-- align old/new Systems timelines and identify changed gaps, kernels, copies, and sync;
-- profile only representative changed kernels with the smallest discriminating metric set;
-- verify source/backend selection;
-- run one-variable interventions;
-- remeasure unprofiled latency and numerical parity.
-- separate immediate rollback from the long-term correction and define quantitative recovery criteria.
+1. Freeze inputs, shape, dtype, seed, correctness tolerance, and software/hardware manifest.
+2. Reproduce with synchronized unprofiled distributions.
+3. Align old/new Systems timelines and identify changed gaps, kernels, copies, and sync.
+4. Profile only representative changed kernels with the smallest discriminating metric set.
+5. Verify source/backend selection.
+6. Run one-variable interventions.
+7. Remeasure unprofiled latency and numerical parity.
+8. Separate immediate rollback from the long-term correction and define quantitative recovery criteria.
 
 The aggregate utilization signal is useful for detecting change but insufficient to establish cause.
 
@@ -559,26 +617,30 @@ Submit the pinned PyTorch benchmark trace from Lesson 2.7/Lab E, including repos
 
 ### Rubric Dimensions
 
-| Dimension | Evidence required | Failure condition |
-|---|---|---|
-| Correctness | oracle, shape assertions, dtype/tolerance, numerical-difference distribution | speed reported without parity |
-| Measurement | clocks, boundaries, warmup, repetitions, raw samples, sync/stream semantics | asynchronous submission timed as execution |
-| Modeling | work/byte equations, units, precision/path, hierarchy boundary, ceilings | Roofline assembled from mismatched quantities |
-| Profiling | unprofiled baseline, application timeline, targeted kernel metrics, capture settings | counter dump without a question |
-| Diagnosis | alternatives, discriminating tests, ranked explanation, falsifier | exactly-one bottleneck from utilization |
-| Reproducibility | hardware, compute capability, driver/toolkit/framework, source revision, commands | environment cannot be reconstructed |
-| Remeasurement | same representative workload after intervention, including variance | profiled improvement only |
+A submission is **Competent** overall only if every dimension is at least Competent. Strong on one dimension does not offset Insufficient on another.
+
+| Dimension (evidence) | Insufficient | Competent | Strong |
+|---|---|---|---|
+| **Correctness** (D8, Labs A/C) | Speed reported without parity, or tolerance unstated | Oracle, shape assertions, dtype/tolerance, and error distribution reported | Tolerance justified from precision/reduction order; parity checked on the changed and unchanged paths |
+| **Timing boundary** (D1, Lab B) | Asynchronous submission timed as execution; clock/stream unstated | Clock, stream, synchronization, warmup, repetitions, and raw samples declared; boundary matches the question | Shows how each alternative boundary changes the number and which one production overlap needs |
+| **Modeling: bandwidth/compute inference** (D3, Lab C) | Intensity computed without a named byte boundary or with mismatched peak/path; units mixed (e.g., MiB/ms labeled GiB/s) | Unit-consistent $W$, $Q$, $I$, ceilings, and bounds at one named boundary with exclusions | Compares optimistic and measured traffic/ceilings and predicts where the classification will flip |
+| **Profiler intrusion** (D5, Lab D) | Counter dump without a question; profiled times reported as results | Timeline first, targeted metrics, capture settings (replay, cache control) recorded, unprofiled baseline kept | Demonstrates a case where the capture changed behavior and adjusts the method |
+| **Diagnosis** (D4, D7, Incident) | One bottleneck named from utilization or from intensity alone | At least three alternatives, two ruled down by aligned evidence, ranked explanation | Ranks by discriminating power, including interacting causes, and states what remains unresolved |
+| **Falsifier** (D7, all labs) | No condition stated under which the explanation fails | A falsifying observation stated before the intervention and checked | A falsifier that actually fired on one hypothesis and changed the ranking |
+| **Reproducibility & remeasurement** (D6, D8, required artifact) | Environment cannot be reconstructed; only profiled improvement | Hardware/driver/toolkit/framework/revision/commands; unprofiled remeasurement with variance | Independent rerun or second device reproduces the direction of the effect |
+
+*Calibration cases*: (a) a submission that computes arithmetic intensity correctly but never names the byte boundary or checks the hierarchy traffic is at most Competent on Modeling if its units are right, and Insufficient on Diagnosis if its bottleneck label rests only on that intensity; (b) a submission that times with an unsynchronized host timer is Insufficient on Timing boundary regardless of other work.
 
 ## 10 Capability Traceability Matrix
 
 | Capability | Taught | Practiced | Assessed | Evidence |
 |---|---|---|---|---|
-| Explain GPU execution and residency | Lesson 2.1 | LAB A / LAB D | Incident / Mastery | M02-CLM-001, 007; launch/resource trace |
-| Diagnose memory transactions | Lesson 2.2 | LAB A | Mastery | M02-CLM-002, 010; traffic report |
-| Time asynchronous work correctly | Lessons 2.3, 2.7 | LAB B / LAB E | Mastery | M02-CLM-003, 011; timing/source trace |
-| Build and qualify a Roofline model | Lessons 2.4–2.5 | LAB C | Mastery | M02-CLM-004–006; bound/measurement table |
-| Select profiler scope and control intrusion | Lesson 2.6 | LAB D | Incident | M02-CLM-008, 009, 012; diagnosis matrix |
-| Preserve numerical validity | Lessons 2.5–2.6 | LAB C / LAB D | Mastery | M02-CLM-013; parity report |
+| Explain GPU execution and residency | Lesson 2.1 | 2.1 Guided Practice; LAB A / LAB D | Mastery D2; Incident steps 3–5 | Launch/resource table (CLM-001, CLM-007); rubric: Diagnosis |
+| Diagnose memory transactions | Lesson 2.2 | 2.2 Guided Practice; LAB A | Mastery D1, D3 | Useful-vs-transferred traffic report (CLM-002, CLM-010); rubric: Modeling |
+| Time asynchronous work correctly | Lessons 2.3, 2.7 | LAB B / LAB E | Mastery D1; required source trace | Timing contract + pinned trace (CLM-003, CLM-011); rubric: Timing boundary |
+| Build and qualify a Roofline model | Lessons 2.4–2.5 | LAB C | Mastery D3, D10 | Analytical-vs-measured table (CLM-004, CLM-005, CLM-006); rubric: Modeling |
+| Select profiler scope and control intrusion | Lesson 2.6 | 2.6 Guided Practice; LAB D | Mastery D4–D5, D7; Incident steps 2–4, 7 | Diagnosis matrix with capture settings (CLM-008, CLM-009, CLM-012); rubric: Profiler intrusion, Falsifier |
+| Preserve numerical validity | Lessons 2.5–2.6 | LAB C / LAB D | Mastery D8; Incident step 7 | Parity report (CLM-013); rubric: Correctness |
 
 ## 11 Exit Criteria & Module Wrap-Up
 

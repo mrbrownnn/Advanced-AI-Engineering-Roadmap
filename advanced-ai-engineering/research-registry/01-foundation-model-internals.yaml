@@ -1,15 +1,18 @@
 module: "01-foundation-model-internals"
-registry_version: "1.0.0"
-research_cutoff: "2026-09-25"
-change_reason: "Initial evidence registry for decoder-only foundation-model internals, with tensor shapes, accounting conventions, architectural variants, and a pinned current Transformers source trace."
+registry_version: "1.1.0"
+previous_version: "1.0.0"
+research_cutoff: "2026-09-30"
+change_reason: "WP-F1 (AUD-01-01): add the logits-to-token sampling contract (factorization, temperature, top-k/top-p, pinned Transformers generation path and defaults) and the MLA latent-state model required by Modules 03, 05, 06, and 07; lessons renumbered after inserting Lesson 1.2; claim IDs aligned to the curriculum-wide CLM-### form (M01-CLM-004b renamed CLM-019 so README citations parse unambiguously). Claims CLM-001 to CLM-012 were not re-read in this revision and keep their 2026-09-25 access dates."
+changed_claims: ["CLM-007", "CLM-010", "CLM-019", "CLM-013", "CLM-014", "CLM-015", "CLM-016", "CLM-017", "CLM-018"]
 
 out_of_scope_candidates:
+  - "Test-time compute policies built on sampling (Module 06) and calibration of token probabilities (Module 07)"
   - "KV-cache allocation, paging, reuse, and eviction (Module 03)"
   - "Kernel fusion, FlashAttention implementation, quantization, and speculative decoding (Module 05)"
   - "Tensor, pipeline, expert, and context parallel execution (Module 20)"
 
 claims:
-  - id: "M01-CLM-001"
+  - id: "CLM-001"
     claim: "Scaled dot-product attention maps queries, keys, and values to softmax(QK^T/sqrt(d_k)+mask)V; multi-head attention applies this mechanism in parallel learned subspaces and combines the head outputs."
     provenance: "VERIFIED_FACT"
     domain: "attention"
@@ -29,11 +32,11 @@ claims:
       - "The equation defines semantics, not a required kernel materialization strategy."
     applicability: "Reference attention semantics and tensor-shape derivation."
     curriculum_usage:
-      lessons: ["1.1", "1.2"]
+      lessons: ["1.1", "1.3"]
       labs: ["LAB-A"]
       assessments: ["Mastery-01"]
 
-  - id: "M01-CLM-002"
+  - id: "CLM-002"
     claim: "RMSNorm normalizes by the root mean square without subtracting the feature mean; implementations also choose epsilon placement and accumulation dtype, so the mathematical form and numerical implementation must both be recorded."
     provenance: "VERIFIED_FACT"
     domain: "normalization"
@@ -62,11 +65,11 @@ claims:
       - "The original paper's empirical speedups do not transfer automatically to fused modern GPU kernels or every model."
     applicability: "Normalization equations, precision tests, and current Llama-family source tracing."
     curriculum_usage:
-      lessons: ["1.1", "1.4"]
+      lessons: ["1.1", "1.5"]
       labs: ["LAB-A", "LAB-C"]
       assessments: ["Mastery-01"]
 
-  - id: "M01-CLM-003"
+  - id: "CLM-003"
     claim: "RoPE applies position-dependent rotations to query and key coordinates so their inner product can encode relative position; extrapolation beyond training context is not guaranteed by the base construction and depends on model training and scaling method."
     provenance: "VERIFIED_FACT"
     domain: "position_encoding"
@@ -95,11 +98,11 @@ claims:
       - "Pairing convention, rotated fraction, base frequencies, scaling, and precision vary across architectures."
     applicability: "Position-dependent attention mechanics and long-context failure analysis."
     curriculum_usage:
-      lessons: ["1.3"]
+      lessons: ["1.4"]
       labs: ["LAB-B"]
       assessments: ["Mastery-01"]
 
-  - id: "M01-CLM-004"
+  - id: "CLM-004"
     claim: "A SwiGLU feed-forward block uses two input projections, applies SiLU/Swish to one branch, multiplies the branches elementwise, and projects back to model width."
     provenance: "VERIFIED_FACT"
     domain: "feed_forward"
@@ -128,11 +131,11 @@ claims:
       - "The current source reads the activation and bias choices from configuration; not every Llama-compatible config is necessarily bias-free SwiGLU."
     applicability: "Dense decoder MLP implementation and accounting."
     curriculum_usage:
-      lessons: ["1.4", "1.5"]
+      lessons: ["1.5", "1.6"]
       labs: ["LAB-A"]
       assessments: ["Mastery-01"]
 
-  - id: "M01-CLM-004b"
+  - id: "CLM-019"
     claim: "For a bias-free SwiGLU block with model width d and intermediate width m, the gate, up, and down weight matrices contain 3*d*m scalar parameters."
     provenance: "DERIVED"
     domain: "parameter_accounting"
@@ -145,13 +148,13 @@ claims:
     limitations:
       - "A non-gated two-matrix FFN, shared expert, MoE, or architecture-specific MLP requires a different count."
     applicability: "Dense SwiGLU layer accounting."
-    related_claims: ["M01-CLM-004"]
+    related_claims: ["CLM-004"]
     curriculum_usage:
-      lessons: ["1.4", "1.5"]
+      lessons: ["1.5", "1.6"]
       labs: ["LAB-A", "LAB-C"]
       assessments: ["Mastery-01"]
 
-  - id: "M01-CLM-005"
+  - id: "CLM-005"
     claim: "MQA shares one key/value head across query heads, while GQA uses an intermediate number of key/value heads; these designs reduce K/V projection and cache dimensions but do not remove per-query-head attention outputs or guarantee an end-to-end speedup."
     provenance: "VERIFIED_FACT"
     domain: "attention_variants"
@@ -178,11 +181,11 @@ claims:
       - "Quality, latency, and throughput effects depend on training, batch, sequence length, kernels, cache implementation, and hardware."
     applicability: "Architectural comparison and downstream KV/cache reasoning."
     curriculum_usage:
-      lessons: ["1.2", "1.5"]
+      lessons: ["1.3", "1.6"]
       labs: ["LAB-B"]
       assessments: ["Mastery-01"]
 
-  - id: "M01-CLM-006"
+  - id: "CLM-006"
     claim: "For a bias-free attention block with model width d=H_q*d_h and H_kv key/value heads, Q and output projections contribute 2*d^2 parameters and K/V contribute 2*d*H_kv*d_h, totaling 2*d^2*(1+H_kv/H_q)."
     provenance: "DERIVED"
     domain: "parameter_accounting"
@@ -197,11 +200,11 @@ claims:
       - "Storage can include biases, padding, scales, optimizer state, quantization metadata, or tied/shared tensors not counted here."
     applicability: "MHA/MQA/GQA projection accounting before implementation-specific adjustments."
     curriculum_usage:
-      lessons: ["1.2", "1.5"]
+      lessons: ["1.3", "1.6"]
       labs: ["LAB-B", "LAB-C"]
       assessments: ["Mastery-01"]
 
-  - id: "M01-CLM-007"
+  - id: "CLM-007"
     claim: "With one multiply and one add counted as two FLOPs, dense bias-free projections cost approximately two FLOPs per weight use per token; full-sequence QK^T and AV each scale with B*H_q*S^2*d_h, while a causal or fused implementation may avoid materializing or computing parts of the nominal dense matrix."
     provenance: "DERIVED"
     domain: "compute_accounting"
@@ -217,11 +220,11 @@ claims:
       - "Different tools count FMA as one operation, so the convention must accompany every number."
     applicability: "Analytical screening and profiler cross-checks."
     curriculum_usage:
-      lessons: ["1.5"]
+      lessons: ["1.2", "1.6"]
       labs: ["LAB-C"]
       assessments: ["Mastery-01"]
 
-  - id: "M01-CLM-008"
+  - id: "CLM-008"
     claim: "Sparse Mixture-of-Experts layers route each token to a subset of experts, so total parameter count and parameters activated per token differ; routing imbalance, expert capacity, dropped or rerouted tokens, communication, and batching prevent active-parameter count from being a wall-clock cost model."
     provenance: "VERIFIED_FACT"
     domain: "mixture_of_experts"
@@ -240,11 +243,11 @@ claims:
       - "Switch uses top-1 routing; other MoE families use different top-k, shared experts, losses, capacity policies, and placement."
     applicability: "MoE mental models and parameter/compute accounting."
     curriculum_usage:
-      lessons: ["1.6"]
+      lessons: ["1.7"]
       labs: ["LAB-C"]
       assessments: ["Mastery-01"]
 
-  - id: "M01-CLM-009"
+  - id: "CLM-009"
     claim: "DeepSeek-V2 reports Multi-head Latent Attention, which compresses attention state into latent representations, and a sparse DeepSeekMoE architecture; its reported cache and throughput gains are specific to the evaluated model, training, kernels, hardware, and baselines."
     provenance: "VERIFIED_FACT"
     domain: "frontier_architecture"
@@ -264,11 +267,11 @@ claims:
       - "Detailed cache layout belongs to Module 03 and distributed placement to Module 20."
     applicability: "Frontier comparison showing that modern decoder internals are not exhausted by the MHA-to-GQA continuum."
     curriculum_usage:
-      lessons: ["1.6"]
+      lessons: ["1.7"]
       labs: ["LAB-B"]
       assessments: ["Mastery-01"]
 
-  - id: "M01-CLM-010"
+  - id: "CLM-010"
     claim: "At Transformers commit 11c16613d93911300c38ec8c9c2460567be53281, LlamaForCausalLM.forward delegates to LlamaModel.forward; LlamaModel embeds inputs, builds a causal mask and rotary embeddings, iterates LlamaDecoderLayer, and applies a final RMSNorm; each decoder layer performs pre-normalized self-attention and MLP residual updates."
     provenance: "VERIFIED_FACT"
     domain: "runtime_implementation"
@@ -292,11 +295,11 @@ claims:
       - "This is a current upstream snapshot, not every released Transformers version or every Llama-family model."
     applicability: "Required production source trace and comparison against a minimal implementation."
     curriculum_usage:
-      lessons: ["1.1", "1.7"]
+      lessons: ["1.1", "1.7", "1.8"]
       labs: ["LAB-D"]
       assessments: ["Production-Source-Trace", "Mastery-01"]
 
-  - id: "M01-CLM-011"
+  - id: "CLM-011"
     claim: "The current pinned Transformers LlamaRMSNorm casts hidden states to float32 to compute the mean square and reciprocal square root, then casts normalized activations back to the input dtype before multiplying by the learned weight."
     provenance: "VERIFIED_FACT"
     domain: "numerical_implementation"
@@ -317,11 +320,11 @@ claims:
       - "Kernel substitutions enabled by decorators may use numerically equivalent but implementation-specific paths."
     applicability: "Mixed-precision reproduction and source-versus-equation comparisons."
     curriculum_usage:
-      lessons: ["1.4", "1.7"]
+      lessons: ["1.5", "1.8"]
       labs: ["LAB-A", "LAB-D"]
       assessments: ["Production-Source-Trace"]
 
-  - id: "M01-CLM-012"
+  - id: "CLM-012"
     claim: "A tensor-shape or parameter-count model can predict logical dimensions, but exact peak memory and OOM boundaries require empirical measurement because allocators, workspaces, backend selection, padding, cache state, graph capture, and concurrent activity contribute additional state."
     provenance: "HYPOTHESIS"
     domain: "diagnostic_methodology"
@@ -335,6 +338,159 @@ claims:
       - "The hypothesis does not imply that analytical accounting is useless; it identifies the additional evidence required for an exact deployment limit."
     applicability: "OOM prediction, model loading, and activation-memory diagnosis."
     curriculum_usage:
-      lessons: ["1.5", "1.7"]
+      lessons: ["1.6", "1.8"]
       labs: ["LAB-C"]
       assessments: ["Incident-01.1", "Mastery-01"]
+
+  - id: "CLM-013"
+    claim: "Left-to-right language-model generation uses the chain-rule decomposition P(x_1:n)=prod_i P(x_i|x_<i) and draws tokens one at a time under a decoding strategy; temperature re-estimates the softmax as exp(u_l/t)/sum exp(u_l'/t), top-k samples from the renormalized k most probable tokens, and nucleus (top-p) samples from the renormalized smallest set whose probability mass is at least p."
+    provenance: "VERIFIED_FACT"
+    domain: "decoding"
+    concepts: ["autoregressive_factorization", "softmax_temperature", "top_k", "top_p", "sampling"]
+    confidence: "high"
+    evidence:
+      - source_type: "paper"
+        tier: 1
+        title: "The Curious Case of Neural Text Degeneration"
+        authors: "Ari Holtzman, Jan Buys, Li Du, Maxwell Forbes, Yejin Choi"
+        year: "2020"
+        version: "arXiv:1904.09751v2 (ICLR 2020)"
+        url: "https://arxiv.org/abs/1904.09751"
+        section: "Section 2 (Language Model Decoding, Eq. 1); Sections 3.1-3.3 (Eqs. 2-4)"
+        accessed_at: "2026-09-30"
+    limitations:
+      - "The paper's quality and diversity findings concern its evaluated models, data, and metrics; they do not establish a best sampling setting for other models or tasks."
+      - "The factorization is over token IDs from one tokenizer; it is not a probability of a text string with multiple tokenizations."
+    applicability: "Definitions used by the Lesson 1.2 sampling contract and by Modules 05, 06, and 07."
+    curriculum_usage:
+      lessons: ["1.2"]
+      labs: ["LAB-A"]
+      assessments: ["Mastery-01"]
+
+  - id: "CLM-014"
+    claim: "For finite logits z and temperature T>0, softmax(z/T) preserves the ordering of token probabilities, so greedy argmax is unchanged by T; T<1 concentrates and T>1 spreads probability mass; and applying T changes the next-token distribution without changing the cost of the forward pass that produced z."
+    provenance: "DERIVED"
+    domain: "decoding"
+    concepts: ["softmax_temperature", "greedy_decoding", "forward_cost"]
+    confidence: "high"
+    assumptions:
+      - "Logits are finite real numbers computed before any temperature or truncation processor."
+      - "T is a strictly positive scalar applied identically to all vocabulary entries."
+      - "Forward-pass cost is measured for one fixed input sequence; the number of generated tokens may differ across sampling settings."
+    derivation: "exp(z/T) is strictly increasing in z for T>0, so the ordering and argmax are preserved. Dividing logit gaps by T<1 enlarges them and by T>1 shrinks them, concentrating or spreading mass. Temperature is applied to the output vector after the forward pass, adding O(V) elementwise work and no change to projection or attention work. Example: z=[2,1,0,-1] gives p=[0.6439,0.2369,0.0871,0.0321] at T=1 and [0.8650,0.1171,0.0158,0.0021] at T=0.5."
+    limitations:
+      - "T=0 is not defined by this formula; greedy decoding is a separate branch."
+      - "Different sampled tokens can change sequence length and therefore total generation cost."
+    applicability: "Separating distribution effects from compute effects in sampling-based policies."
+    related_claims: ["CLM-013", "CLM-007"]
+    curriculum_usage:
+      lessons: ["1.2"]
+      labs: ["LAB-A"]
+      assessments: ["Mastery-01"]
+
+  - id: "CLM-015"
+    claim: "At Transformers commit 11c16613d93911300c38ec8c9c2460567be53281, GenerationMixin._sample copies the last-position logits to float32, applies the logits-processor list, then samples with torch.multinomial over softmax(scores) when do_sample is true or takes torch.argmax otherwise; when sampling, _get_logits_processor appends temperature, then top-k, then top-p warpers if those fields are set away from neutral values; TopKLogitsWarper removes scores strictly below the k-th value, TopPLogitsWarper removes ascending-sorted entries whose cumulative probability is at most 1-top_p while keeping at least min_tokens_to_keep, and TemperatureLogitsWarper rejects temperature 0 with a message pointing to do_sample=False."
+    provenance: "VERIFIED_FACT"
+    domain: "runtime_implementation"
+    concepts: ["sampling_contract", "logits_processor", "processor_order", "greedy_decoding"]
+    confidence: "high"
+    evidence:
+      - source_type: "source_code"
+        tier: 1
+        title: "Transformers generation sampling loop and logits warpers"
+        repository: "https://github.com/huggingface/transformers"
+        commit: "11c16613d93911300c38ec8c9c2460567be53281"
+        verification_date: "2026-09-30"
+        file: "src/transformers/generation/utils.py; src/transformers/generation/logits_process.py"
+        symbol: "GenerationMixin._sample; GenerationMixin._get_logits_processor; TemperatureLogitsWarper; TopKLogitsWarper; TopPLogitsWarper"
+        entry_point: "GenerationMixin._sample"
+        execution_path: "_sample -> outputs.logits[:, -1] (float32) -> logits_processor(input_ids, next_token_logits) -> softmax + torch.multinomial (do_sample) or torch.argmax -> append token -> stopping_criteria"
+        url: "https://github.com/huggingface/transformers/blob/11c16613d93911300c38ec8c9c2460567be53281/src/transformers/generation/utils.py"
+        accessed_at: "2026-09-30"
+    limitations:
+      - "Static inspection of one upstream revision; user-supplied processors are merged before the sampling warpers and other decoding modes (beam search, assisted generation) take different paths."
+      - "The effective processor list for a call must be confirmed by executing it."
+    applicability: "Reference sampling path for Lesson 1.2, Lab A, and Lab D."
+    curriculum_usage:
+      lessons: ["1.2", "1.8"]
+      labs: ["LAB-A", "LAB-D"]
+      assessments: ["Production-Source-Trace", "Mastery-01"]
+
+  - id: "CLM-016"
+    claim: "At the same Transformers commit, the GenerationConfig docstring states that fields still None are overridden by GenerationConfig._get_default_generation_params() during generation, and that function returns defaults including do_sample False, temperature 1.0, top_k 50, and top_p 1.0; a sampled call that never sets top_k can therefore be truncated to the top 50 tokens unless the checkpoint or caller overrides it."
+    provenance: "VERIFIED_FACT"
+    domain: "runtime_implementation"
+    concepts: ["sampling_contract", "library_defaults", "top_k"]
+    confidence: "medium"
+    evidence:
+      - source_type: "source_code"
+        tier: 1
+        title: "Transformers GenerationConfig defaults"
+        repository: "https://github.com/huggingface/transformers"
+        commit: "11c16613d93911300c38ec8c9c2460567be53281"
+        verification_date: "2026-09-30"
+        file: "src/transformers/generation/configuration_utils.py"
+        symbol: "GenerationConfig; GenerationConfig._get_default_generation_params"
+        url: "https://github.com/huggingface/transformers/blob/11c16613d93911300c38ec8c9c2460567be53281/src/transformers/generation/configuration_utils.py"
+        accessed_at: "2026-09-30"
+    limitations:
+      - "The call site that applies these defaults was not traced; confidence is medium until a sampled call's processor list is printed (Lab D)."
+      - "A checkpoint's generation_config.json can set different values."
+    applicability: "Why a sampling contract must record effective values, not only caller arguments."
+    curriculum_usage:
+      lessons: ["1.2"]
+      labs: ["LAB-D"]
+      assessments: ["Mastery-01"]
+
+  - id: "CLM-017"
+    claim: "DeepSeek-V2 defines Multi-head Latent Attention with a joint key-value latent c_t^KV=W^DKV h_t of width d_c, per-head keys and values up-projected by W^UK and W^UV, and a decoupled RoPE key k_t^R of width d_h^R shared across heads; during inference only c_t^KV and k_t^R need to be cached, (d_c+d_h^R) elements per token per layer, and W^UK and W^UV can be absorbed into W^Q and W^O. The paper sets 60 layers, n_h=128, d_h=128, d_c=512, and d_h^R=64; the released config at revision 4461458f186c35188585855f28f77af5661ad489 lists kv_lora_rank 512, qk_rope_head_dim 64, num_hidden_layers 60, and also num_key_value_heads 128."
+    provenance: "VERIFIED_FACT"
+    domain: "attention_variants"
+    concepts: ["mla", "latent_attention", "retained_state", "decoupled_rope"]
+    confidence: "high"
+    evidence:
+      - source_type: "paper"
+        tier: 1
+        title: "DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model"
+        authors: "DeepSeek-AI"
+        year: "2024"
+        version: "arXiv:2405.04434v5"
+        url: "https://arxiv.org/abs/2405.04434"
+        section: "Sections 2.1.1-2.1.4 (Eqs. 1-19, Table 1); Section 3.1.2 Model Hyper-Parameters"
+        accessed_at: "2026-09-30"
+      - source_type: "official_docs"
+        tier: 2
+        title: "DeepSeek-V2 released model configuration (config.json)"
+        authors: "DeepSeek-AI"
+        version: "Hugging Face revision 4461458f186c35188585855f28f77af5661ad489"
+        url: "https://huggingface.co/deepseek-ai/DeepSeek-V2/blob/4461458f186c35188585855f28f77af5661ad489/config.json"
+        section: "kv_lora_rank; qk_rope_head_dim; qk_nope_head_dim; v_head_dim; num_attention_heads; num_key_value_heads; num_hidden_layers"
+        accessed_at: "2026-09-30"
+    limitations:
+      - "The paper also adds normalization after compressed latents; whether a runtime caches the latent before or after it, and in what dtype and padding, is implementation-specific and not established here."
+      - "Absorption is stated as possible; whether a given runtime materializes per-head keys and values is TODO_VERIFY per runtime."
+    applicability: "Retained-state model that Module 03 uses to size MLA KV bytes."
+    related_claims: ["CLM-009"]
+    curriculum_usage:
+      lessons: ["1.7"]
+      labs: ["LAB-C"]
+      assessments: ["Mastery-01"]
+
+  - id: "CLM-018"
+    claim: "With the DeepSeek-V2 values l=60, n_h=128, d_h=128, d_c=512, and d_h^R=64, MLA retains 576 elements per token per layer and 34,560 per token, while the MHA formula 2*n_h*d_h*l gives 1,966,080; the MLA state equals a GQA state with 576/(2*128)=2.25 groups, so applying the GQA formula with the configured num_key_value_heads=128 over-counts retained elements by about 56.9x."
+    provenance: "DERIVED"
+    domain: "memory_accounting"
+    concepts: ["mla", "retained_state", "kv_payload_accounting", "config_field_trap"]
+    confidence: "high"
+    assumptions:
+      - "Retained state per token per layer is c^KV plus k^R as defined in CLM-017, with no per-head K/V cached."
+      - "Element counts only; bytes per element, alignment padding, and runtime layout are excluded."
+    derivation: "(512+64)=576; 576*60=34,560. 2*128*128*60=1,966,080. 576/(2*128)=2.25. 1,966,080/34,560=56.89."
+    limitations:
+      - "The ratio compares element counts, not measured memory, throughput, or quality."
+    applicability: "Rejecting GQA-style sizing for MLA configurations."
+    related_claims: ["CLM-017"]
+    curriculum_usage:
+      lessons: ["1.7"]
+      labs: ["LAB-C"]
+      assessments: ["Mastery-01"]

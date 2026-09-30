@@ -4,25 +4,37 @@
 
 Serving, caching, profiling, quantization, and distributed placement all depend on model geometry. An engineer who cannot reconstruct the forward pass will miscount parameters, confuse logical FLOPs with latency, allocate the wrong KV shape, or optimize an implementation detail that the selected architecture does not have.
 
-This module builds a mechanistic decoder-only model while refusing the common shortcut that every modern model is “basically Llama.” Llama-style pre-norm RMSNorm, RoPE, GQA, and SwiGLU form a useful current reference, not a universal definition. Sparse experts and latent-attention families extend the model and change the accounting.
+This module builds a mechanistic decoder-only model while refusing the common shortcut that every modern model is “basically Llama.” The pinned Llama implementation (pre-norm RMSNorm, RoPE, grouped K/V heads, gated MLP) is a useful reference, not a universal definition. Sparse experts and latent-attention families extend the model and change the accounting.
 
 **Module Orientation**
 
-- **Engineering Problem**: Translate a model configuration into correct tensor shapes, equations, parameter counts, leading FLOP terms, numerical behavior, and downstream systems constraints.
-- **What You Will Do**: Implement a minimal decoder layer, prove its shape invariants, test causal isolation and RoPE, compare MHA/MQA/GQA, reconcile analytical counts with real parameters, profile deviations from the model, and trace a pinned Transformers Llama forward path.
-- **Environment**: Python 3.10+ and PyTorch; a GPU is optional for profiler studies but not for shape, accounting, or invariant tests.
-- **Research Cutoff**: 2026-09-27. Current implementation claims remain pinned to the verified revision below.
+- **Engineering Problem**: Translate a model configuration into correct tensor shapes, equations, parameter counts, leading FLOP terms, numerical behavior, next-token distributions, and downstream systems constraints.
+- **What You Will Do**: Implement a minimal decoder layer, prove its shape invariants, turn logits into a documented sampling contract, test causal isolation and RoPE, compare MHA/MQA/GQA with MLA latent state, reconcile analytical counts with real parameters, profile deviations from the model, and trace a pinned Transformers forward and sampling path.
+- **Environment**: Python 3.10+ and PyTorch; a GPU is optional for profiler studies but not for shape, accounting, sampling, or invariant tests.
+- **Research Cutoff**: Evidence registry updated 2026-09-30 (WP-F1 review). Implementation claims remain pinned to the revisions in §05.
 
 ## 01 Baseline Assumptions
 
-Prerequisites: linear algebra, matrix multiplication, softmax, basic PyTorch, and Module 00 claim discipline.
+Prerequisites: linear algebra, matrix multiplication, the definition of the softmax function, basic PyTorch, and Module 00 claim discipline. Temperature, truncation, and sampling are taught here (Lesson 1.2), not assumed.
 
-This module owns architecture semantics and logical accounting. It cross-references but does not replace:
+This module owns architecture semantics, the logits-to-token contract, and logical accounting. It cross-references but does not replace:
 
-- KV-cache lifecycle, paging, reuse, and eviction — Module 03;
+- KV-cache bytes, layout, lifecycle, paging, reuse, and eviction — Module 03 (this module supplies the retained-state geometry, including MLA's latent state in Lesson 1.7);
 - GPU execution, memory hierarchy, and profiler reasoning — Module 02;
 - kernel optimization, quantization, and speculative decoding — Module 05;
+- test-time compute policies built on sampling (best-of-N, self-consistency) — Module 06;
+- calibration and uncertainty interpretation of token probabilities — Module 07;
 - tensor/pipeline/expert/context parallelism — Module 20.
+
+**Prerequisite contract exported to later modules** (what downstream owners may assume was taught, and where):
+
+| Contract item | Taught in | Scope limit |
+|---|---|---|
+| Autoregressive factorization over token IDs and sequence log-likelihood | Lesson 1.2 | Probability of a token-ID sequence under one tokenizer and context policy, not of a text string |
+| Softmax with temperature; greedy, top-k, top-p; renormalization | Lesson 1.2 | Definitions and one pinned implementation; quality effects are empirical |
+| Sampling contract fields (processor order, library defaults, seed, stop rules, context limit) | Lesson 1.2 | Reproducibility across batch composition or kernels is not guaranteed |
+| MHA/MQA/GQA K/V head geometry | Lesson 1.3 | Head counts only; bytes and layout in Module 03 |
+| MLA latent state: cached $c^{KV}$ plus decoupled RoPE key $k^R$, $(d_c+d_h^R)$ elements per token per layer | Lesson 1.7 | Paper equations and one released config; runtime cache layout is Module 03 / `TODO_VERIFY` |
 
 ## 02 Target Mastery
 
@@ -54,6 +66,8 @@ estimated_effort:
   total: 26h
 ```
 
+*Effort reconciliation*: lesson instruction sums to 360 min and lesson practice to 180 min. Labs are A 5h + B 3h + C 3h + D's 1h execution = 12h; LAB D's 2h source trace (which includes Lesson 1.8's trace practice) is counted once, under `source_trace`.
+
 ---
 
 ### LAYER 1: KNOWLEDGE / INSTRUCTIONAL LAYER
@@ -65,7 +79,7 @@ token IDs [B,S]
   → embeddings [B,S,d]
   → repeated decoder blocks
        RMSNorm
-       Q/K/V projections + position transform
+       Q/K/V projections (or latent projections) + position transform
        causal attention + output projection
        residual add
        RMSNorm
@@ -74,6 +88,10 @@ token IDs [B,S]
   → final norm
   → vocabulary projection
   → logits [B,S,V]
+  → last-position logits [B,V]
+  → logits processors (temperature, top-k, top-p, …)
+  → greedy argmax or seeded multinomial draw
+  → next token appended; stop rule checked; repeat
 ```
 
 Each arrow has four views that must agree:
@@ -106,7 +124,7 @@ After $L$ layers, a final normalization and language-model head produce logits:
 
 $$Z=\mathrm{LMHead}(\mathrm{RMSNorm}(X_L))\in\mathbb{R}^{B\times S\times V}.$$
 
-This is a reference architecture. Other decoders may use post-norm, parallel attention/MLP branches, additional norms, convolution or state-space blocks, different residual scaling, or shared layers.
+The pinned Transformers Llama implementation follows this order (**O**, CLM-010). It is a reference architecture: other decoders may use post-norm, parallel attention/MLP branches, additional norms, convolution or state-space blocks, different residual scaling, or shared layers.
 
 **Invariants**
 
@@ -114,13 +132,21 @@ This is a reference architecture. Other decoders may use post-norm, parallel att
 - The causal dependency of position $i$ must not change when only tokens at positions $>i$ change.
 - Vocabulary projection and input embedding may be tied or independent; parameter counting must inspect configuration and actual tensors.
 
-**Worked Example:** For $B=2$, $S=8$, and $d=64$, every standard residual add consumes logical tensors shaped $[2,8,64]$; an axis permutation can preserve element count while violating semantics.
+**Worked Example:**
+- *Input*: $B=2$, $S=8$, $d=64$, $V=1000$, two layers.
+- *Steps*: embedding $[2,8]\to[2,8,64]$; each attention and MLP branch returns $[2,8,64]$, so both residual adds are $[2,8,64]+[2,8,64]$; final norm keeps $[2,8,64]$; LM head maps the last axis $64\to1000$.
+- *Result*: logits $[2,8,1000]$, i.e. one next-token score vector for every position of every sequence.
+- *Interpretation / limits*: a `view` that reorders $[B,S,d]$ as $[B,d,S]$ preserves all $2\cdot8\cdot64=1024$ elements per add yet mixes features across positions. Element count is necessary, not sufficient; axis names must be checked.
 
 **Knowledge Check:** Which shapes must match at residual additions, and which perturbation tests causal isolation?
 
 **Guided Practice:** Install hooks around every layer of a small model. Record shape, dtype, device, contiguity, min/max, finite count, and residual norm. Compare the trace with the equations before profiling speed.
 
-**Feedback Contract:** Require a forward graph, named axes, residual boundaries, causal-invariance result, and first-divergence location.
+**Feedback Contract:**
+- *Expected Evidence*: a forward graph with named axes at every arrow; both residual boundaries per layer; a future-token perturbation showing logits at positions $\le i$ unchanged within tolerance; the first layer where any recorded statistic diverges from the reference.
+- *Common Failure*: treating “the output shape is $[B,S,V]$” as proof of a correct forward pass.
+- *Diagnostic Hint*: change only the last token of the input. Which positions' logits are allowed to move?
+- *Concept to Revisit*: residual-stream invariants and causal isolation.
 
 **Learning Outcome:** Reconstruct and instrument a decoder block as an executable tensor contract.
 
@@ -128,7 +154,62 @@ This is a reference architecture. Other decoders may use post-norm, parallel att
 
 ---
 
-### Lesson 1.2 — Causal Attention and MHA/MQA/GQA Geometry
+### Lesson 1.2 — Logits, Autoregressive Factorization, and the Sampling Contract
+
+**Engineering Question:** How does a vector of logits become the next token, and which choices must be recorded so that a generation, a likelihood, or a sampling-based policy can be reproduced and compared?
+
+**Concepts & Definitions:**
+
+- **Autoregressive factorization**: for a token-ID sequence $x_{1:n}$ produced by one fixed tokenizer, the chain rule gives
+  $$P(x_{1:n})=\prod_{i=1}^{n}P(x_i\mid x_{<i}),\qquad \log P(x_{1:n})=\sum_{i=1}^{n}\log P(x_i\mid x_{<i}).$$
+  Decoder language models are trained and used to produce these conditionals left to right, and generation draws tokens one at a time from them (**O**, CLM-013). The chain rule itself is exact; the model's conditionals are learned approximations.
+- **Scope of the factorization**: it assigns probability to a sequence of token IDs under a stated tokenizer, context (prompt, system text, truncation), and position policy. It is not the probability of a text string (one string can have several tokenizations), and it changes if the context is truncated at the context limit.
+- **Logits and softmax**: the LM head's last-position output $z\in\mathbb{R}^V$ defines $p_j=\exp(z_j)/\sum_{k}\exp(z_k)$.
+- **Temperature** $T>0$: $p_j(T)=\exp(z_j/T)/\sum_k\exp(z_k/T)$ (**O**, CLM-013). $T<1$ sharpens, $T>1$ flattens. Dividing by $T$ preserves the order of logits, so the argmax does not change (**D**, CLM-014).
+- **Greedy decoding**: choose $\arg\max_j z_j$. It is not “sampling at $T=0$”: $T=0$ divides by zero, and the pinned Transformers warper rejects it and points users to `do_sample=False` (**O**, CLM-015).
+- **Top-k**: keep the $k$ highest-probability tokens, renormalize, sample. **Top-p (nucleus)**: keep the smallest high-probability set whose mass is at least $p$, renormalize, sample (**O**, CLM-013).
+- **Sampling contract**: the full list of choices that determine the next-token distribution and the draw—logit source position and dtype, processor chain and order, $T$, $k$, $p$, other processors, library and checkpoint defaults, greedy versus sampled, RNG seed/generator/device, stop tokens and maximum new tokens, tokenizer/detokenizer versions, and context-limit/truncation policy.
+
+**Mechanism Explanation:**
+
+At Transformers commit `11c16613d93911300c38ec8c9c2460567be53281`, `GenerationMixin._sample` takes the last-position logits, copies them to float32, applies the logits-processor list, and then either draws with `torch.multinomial(softmax(scores))` when `do_sample=True` or takes `torch.argmax` otherwise (**O**, CLM-015). When sampling, `_get_logits_processor` appends temperature, then top-k, then top-p warpers when those fields are set away from their neutral values. The generation-config docstring states that unset fields are filled from `_get_default_generation_params()`, which lists `top_k: 50`; a sampled call that never mentions `top_k` may therefore still truncate (**O**, CLM-016). Confirm the effective processor list at runtime before claiming what a run used (`TODO_VERIFY` until executed).
+
+Two further boundary facts at this revision: the top-k warper removes scores strictly below the $k$-th value, so ties at the boundary can keep more than $k$ tokens; the top-p warper always keeps at least `min_tokens_to_keep` tokens (**O**, CLM-015).
+
+**Quantitative Model / Derivation:**
+
+The forward pass that produces $z$ is independent of the sampling choice. For a dense decoder, projection and MLP work is roughly $2$ FLOPs per weight use per token under the FMA-as-two convention (**D**, CLM-007). Temperature adds $V$ divisions and the softmax adds $O(V)$ elementwise work to the same logits. Changing $T$, $k$, or $p$ changes the distribution and therefore which tokens are generated, which can change how many tokens are generated. It does not change the cost of one forward pass.
+
+**Worked Example (synthetic logits):**
+- *Input*: vocabulary $\{A,B,C,D\}$, last-position logits $z=[2,1,0,-1]$.
+- *Step 1 — softmax, $T=1$*: $e^{z}=[7.3891,2.7183,1,0.3679]$, sum $11.4752$, so $p=[0.6439,0.2369,0.0871,0.0321]$.
+- *Step 2 — temperature*: $T=0.5$ uses $z/T=[4,2,0,-2]$, giving $[0.8650,0.1171,0.0158,0.0021]$; $T=2$ gives $[0.4551,0.2760,0.1674,0.1015]$. The entropy is $0.455$, $0.947$, and $1.245$ nats for $T=0.5,1,2$. Greedy chooses $A$ at every $T$.
+- *Step 3 — top-k=2 at $T=1$*: keep $\{A,B\}$ with mass $0.8808$; renormalized $[0.7311,0.2689]$.
+- *Step 4 — top-p=0.9 at $T=1$*: cumulative mass from the top is $0.6439$, $0.8808$, $0.9679$. The smallest set reaching $0.9$ is $\{A,B,C\}$; renormalized $[0.6652,0.2447,0.0900]$. The pinned implementation reaches the same set from the other direction: sorted ascending, cumulative $[0.0321,0.1192,0.3561,1]$, and it removes only entries $\le 1-0.9=0.1$, which is $D$.
+- *Step 5 — likelihood*: if the next step's model probability of $B$ after $A$ is $0.5$ (a second synthetic value), then $\log P(A,B\mid\text{ctx})=\ln0.6439+\ln0.5=-1.1333$ nats. Compute that score from unprocessed logits unless the evaluation explicitly defines a processed distribution.
+- *Result*: the same logits yield different next-token distributions under different contracts, while greedy output and the forward-pass FLOPs are unchanged.
+- *Interpretation / limits*: $A$ with probability $0.6439$ is not a calibrated statement about the world (Module 07). Whether $T=0.5$ or top-p$=0.9$ improves task quality is an empirical question for the target model and workload.
+
+**Knowledge Check:**
+1. Why does lowering $T$ from 1 to 0.5 change sampled outputs but not the FLOPs of the forward pass that produced $z$?
+2. A run reports `do_sample=True, temperature=0.7` and nothing else. Which additional field could still be truncating the distribution at the pinned revision, and how would you prove what actually ran?
+3. Why is $\sum_i \log P(x_i\mid x_{<i})$ not the probability of the *text* “New York” in general?
+
+**Guided Practice:** For logits $z=[3,1,1,0]$ compute $p$ at $T=1$; the set kept by top-k=2 (watch the tie); the set kept by top-p=0.8; and the renormalized distribution in each case. Then write the complete sampling contract for this toy run.
+
+**Feedback Contract:**
+- *Expected Evidence*: $p\approx[0.7573,0.1025,0.1025,0.0377]$. For top-k=2, the second-largest value is tied: a strict “exactly $k$” rule must break the tie by a stated rule, while the pinned threshold rule `scores < kth_value` removes only index 3 and keeps three tokens, renormalized to $[0.7870,0.1065,0.1065]$. For top-p=0.8, the smallest set from the top is index 0 plus *one* tied token (mass $0.8598$, renormalized $[0.8808,0.1192]$). The ascending-cumulative implementation (cumulative $[0.0377,0.1402,0.2427,1]$, remove $\le0.2$) drops index 3 and whichever tied token sorts first, so the survivor depends on sort order—record it as implementation behavior. A contract lists processor order, defaults, seed, stop rule, and context policy.
+- *Common Failure*: renormalizing over the whole vocabulary after truncation, applying top-p before temperature when the contract says the opposite, or recording only `temperature`.
+- *Diagnostic Hint*: print the processor list and the post-processing scores for one step; count how many entries are $-\infty$.
+- *Concept to Revisit*: temperature-scaled softmax, truncation sets, and implementation defaults.
+
+**Learning Outcome:** Derive next-token distributions from logits under a stated sampling contract, separate distribution changes from forward-pass cost, and record every choice needed to reproduce a sampled or greedy generation.
+
+*(Effort: 50m instruction, 30m practice)*
+
+---
+
+### Lesson 1.3 — Causal Attention and MHA/MQA/GQA Geometry
 
 **Engineering Question:** Which axes are shared, and which remain per query head?
 
@@ -139,7 +220,7 @@ For hidden states $X\in\mathbb{R}^{B\times S\times d}$, define query heads $H_q$
 $$Q\in\mathbb{R}^{B\times H_q\times S\times d_h},$$
 $$K,V\in\mathbb{R}^{B\times H_{kv}\times S_k\times d_h}.$$
 
-If $g=H_q/H_{kv}$ is an integer, query head $h$ uses K/V group $\lfloor h/g\rfloor$. The logical attention for a query head is
+If $g=H_q/H_{kv}$ is an integer, query head $h$ uses K/V group $\lfloor h/g\rfloor$. The logical attention for a query head is (**O**, CLM-001)
 
 $$A_h=\mathrm{softmax}\left(\frac{Q_hK_{group(h)}^\top}{\sqrt{d_h}}+M\right),$$
 $$O_h=A_hV_{group(h)}.$$
@@ -148,21 +229,29 @@ For a simple no-prefix causal mask,
 
 $$M_{ij}=\begin{cases}0,&j\le i\\-\infty,&j>i.\end{cases}$$
 
-With cached prefixes, padding, packed sequences, sliding windows, or special attention patterns, absolute positions and valid-key boundaries require a richer mask.
+The mask is what makes the per-position logits of Lesson 1.2 conditionals on $x_{<i}$ only. With cached prefixes, padding, packed sequences, sliding windows, or special attention patterns, absolute positions and valid-key boundaries require a richer mask.
 
 - **MHA**: $H_{kv}=H_q$.
 - **MQA**: $H_{kv}=1$.
 - **GQA**: $1<H_{kv}<H_q$ in the intermediate case.
 
-Fewer KV heads reduce K/V projection width and logical KV payload. They do not remove query heads, output projection work, softmax, or attention over context. A runtime can map groups without physically repeating K/V; a naive `repeat` may create avoidable memory traffic.
+Fewer KV heads reduce K/V projection width and logical KV payload. They do not remove query heads, output projection work, softmax, or attention over context (**O**, CLM-005). A runtime can map groups without physically repeating K/V; a naive `repeat` may create avoidable memory traffic.
 
-**Worked Example:** With $H_q=32$ and $H_{kv}=8$, four query heads map to each KV head; this does not require physically repeating stored K/V.
+**Worked Example:**
+- *Input*: $H_q=32$, $H_{kv}=8$, $d_h=128$, $d=4096$.
+- *Steps*: $g=32/8=4$; query heads 0–3 read KV head 0, heads 4–7 read KV head 1, …, heads 28–31 read KV head 7. K and V projections map $4096\to8\cdot128=1024$ each, instead of $4096\to4096$ for MHA.
+- *Result*: K/V projection width and per-token K/V elements shrink by $H_{kv}/H_q=1/4$; Q, the 32 score matrices, and the output projection are unchanged.
+- *Interpretation / limits*: the mapping does not require physically repeating stored K/V. Whether decode latency falls depends on kernels, batch, and context (Lab B); quality depends on training (**O**, CLM-005).
 
 **Knowledge Check:** Which dimensions shrink under GQA, and why does attention over prior positions remain?
 
 **Guided Practice:** Flip the mask orientation or permute head and sequence axes while preserving the element count. A prefix-invariance test and reference comparison should fail.
 
-**Feedback Contract:** Show named axes, group mapping, mask semantics, parity tolerance, and a counterexample missed by a smoke test.
+**Feedback Contract:**
+- *Expected Evidence*: named axes, the explicit head→group map, mask semantics including the diagonal, parity tolerance, and one corrupted variant that passes a shape-only smoke test but fails prefix invariance.
+- *Common Failure*: mapping query head $h$ to group $h \bmod H_{kv}$ (interleaved) when the checkpoint expects contiguous blocks, or vice versa.
+- *Diagnostic Hint*: compare per-head outputs against a reference that materializes the repeat; which heads diverge first?
+- *Concept to Revisit*: head grouping and causal masking.
 
 **Learning Outcome:** Derive MHA/MQA/GQA geometry and detect mask or grouping corruption.
 
@@ -170,7 +259,7 @@ Fewer KV heads reduce K/V projection width and logical KV payload. They do not r
 
 ---
 
-### Lesson 1.3 — Rotary Position Embedding
+### Lesson 1.4 — Rotary Position Embedding
 
 **Engineering Question:** How can a position transformation alter attention scores without adding a position vector to the residual stream?
 
@@ -184,17 +273,25 @@ Queries and keys are rotated before their dot product. Orthogonality gives
 
 $$\left(R(p\theta)q\right)^\top\left(R(r\theta)k\right)=q^\top R((r-p)\theta)k,$$
 
-so the score can depend on relative displacement. Real models choose a frequency schedule, rotary fraction, coordinate pairing convention, maximum training positions, and possibly a scaling method.
+so the score can depend on relative displacement (**O**, CLM-003). Real models choose a frequency schedule, rotary fraction, coordinate pairing convention, maximum training positions, and possibly a scaling method.
 
 **Do not infer:** “RoPE supports unlimited context.” Mathematical rotations can be evaluated at new positions, but quality and numerical behavior beyond training length are empirical properties of the trained model and scaling scheme.
 
-**Worked Example:** Rotating $q$ and $k$ at the same position preserves their dot product under the stated orthogonal rotation; relative displacement changes the composed rotation.
+**Worked Example:**
+- *Input*: one 2-D pair, $q=k=(1,0)$, $\theta=\pi/6$; positions $(p,r)=(3,5)$ and then $(13,15)$.
+- *Steps*: $q^\top R((r-p)\theta)k=\cos(2\cdot\pi/6)=\cos(\pi/3)$ in both cases; $\|R(p\theta)q\|=1$.
+- *Result*: score $0.5$ for both pairs; norms preserved.
+- *Interpretation / limits*: the identity shows relative-position dependence for one frequency. It says nothing about quality at positions never seen in training, and at large $p$ low-precision angle computation can break the identity numerically.
 
 **Knowledge Check:** Why does norm preservation not prove extrapolation quality, and which pairing convention can break parity while preserving shape?
 
 **Guided Practice:** Test norm preservation of rotated vectors, relative-shift behavior, dtype sensitivity at large positions, and parity with the pinned reference. Include an intentionally wrong pairing convention.
 
-**Feedback Contract:** Report frequencies, coordinate pairing, position IDs, dtype/tolerance, and tested position range.
+**Feedback Contract:**
+- *Expected Evidence*: frequency schedule, coordinate pairing (adjacent versus half-split), position IDs, dtype/tolerance, tested position range, and the shift-invariance error as a function of position.
+- *Common Failure*: pairing features $(2i,2i{+}1)$ when the reference rotates $(i,i{+}d/2)$—shapes and norms stay correct while scores differ.
+- *Diagnostic Hint*: rotate a one-hot vector and compare which coordinate receives the sine term.
+- *Concept to Revisit*: rotary pairing conventions and relative-position identity.
 
 **Learning Outcome:** Test RoPE mechanics without converting a mathematical identity into a quality guarantee.
 
@@ -202,7 +299,7 @@ so the score can depend on relative displacement. Real models choose a frequency
 
 ---
 
-### Lesson 1.4 — RMSNorm, SwiGLU, and Numerical Details
+### Lesson 1.5 — RMSNorm, SwiGLU, and Numerical Details
 
 **Engineering Question:** Which normalization, gating, accumulation, and casting contracts must match for numerical parity?
 
@@ -212,13 +309,13 @@ so the score can depend on relative displacement. Real models choose a frequency
 
 $$\mathrm{RMSNorm}(x)=\gamma\odot\frac{x}{\sqrt{\frac{1}{d}\sum_{j=1}^{d}x_j^2+\epsilon}}.$$
 
-Unlike LayerNorm, the expression does not subtract the feature mean. The current pinned Transformers Llama implementation converts hidden states to float32 for the mean-square and reciprocal-square-root calculation, casts normalized values back to the input dtype, and multiplies by the learned weight. A substituted fused kernel may realize equivalent semantics through a different execution path.
+Unlike LayerNorm, the expression does not subtract the feature mean (**O**, CLM-002). The pinned Transformers Llama implementation converts hidden states to float32 for the mean-square and reciprocal-square-root calculation, casts normalized values back to the input dtype, and multiplies by the learned weight (**O**, CLM-011). A substituted fused kernel may realize equivalent semantics through a different execution path.
 
-**SwiGLU** with intermediate width $m$:
+**SwiGLU** with intermediate width $m$ (**O**, CLM-004):
 
 $$\mathrm{SwiGLU}(x)=W_{down}\left(\mathrm{SiLU}(W_{gate}x)\odot(W_{up}x)\right).$$
 
-Bias and orientation notation depend on the framework. In row-major PyTorch notation, `nn.Linear(d,m)` stores a weight shaped $[m,d]`; the scalar parameter count is still $dm$.
+Bias and orientation notation depend on the framework. In row-major PyTorch notation, `nn.Linear(d,m)` stores a weight shaped $[m,d]$; the scalar parameter count is still $dm$.
 
 **Failure modes**
 
@@ -229,13 +326,21 @@ Bias and orientation notation depend on the framework. In row-major PyTorch nota
 - applying normalization after rather than before the sublayer;
 - comparing outputs without aligning dtype and tolerance.
 
-**Worked Example:** On $[B,S,d]$, RMSNorm reduces over $d$. Reducing over $S$ can broadcast successfully while incorrectly coupling token positions.
+**Worked Example:**
+- *Input*: $x=(3,4)$, $\gamma=(1,1)$, $\epsilon=10^{-6}$, reduction over the feature axis $d=2$.
+- *Steps*: mean square $=(9+16)/2=12.5$; $\sqrt{12.5+10^{-6}}\approx3.5355$; divide.
+- *Result*: $(0.8485,1.1314)$, whose RMS is 1.
+- *Interpretation / limits*: on $[B,S,d]$, reducing over $S$ instead of $d$ still broadcasts and returns the same shape, but each output now depends on other positions, which also breaks causal isolation. In FP16, $x_j^2$ overflows above $|x_j|\approx 256$ (since $256^2=65536$ exceeds the FP16 maximum 65504), which is one reason the pinned path squares in float32.
 
 **Knowledge Check:** Where is epsilon applied, which axis is reduced, and why can accumulation dtype matter?
 
 **Guided Practice:** Inject a wrong reduction axis, epsilon placement, and low-precision square path into transparent references.
 
-**Feedback Contract:** Require intermediate statistics, cast boundaries, finite counts, tolerance justification, and first-mismatch localization.
+**Feedback Contract:**
+- *Expected Evidence*: intermediate mean-square statistics per position, cast boundaries, finite counts, tolerance justification, and the first mismatching operation for each injected defect.
+- *Common Failure*: declaring parity from final logits only, which hides a defect that a later norm partly compensates.
+- *Diagnostic Hint*: compare the mean square at one position against a hand calculation before looking at the output.
+- *Concept to Revisit*: reduction axes and accumulation dtype.
 
 **Learning Outcome:** Implement and diagnose normalization and gated-MLP numerical contracts.
 
@@ -243,7 +348,7 @@ Bias and orientation notation depend on the framework. In row-major PyTorch nota
 
 ---
 
-### Lesson 1.5 — Parameter and FLOP Accounting
+### Lesson 1.6 — Parameter and FLOP Accounting
 
 **Engineering Question:** Which parts are exact logical counts, and which parts are performance hypotheses?
 
@@ -251,32 +356,21 @@ Bias and orientation notation depend on the framework. In row-major PyTorch nota
 
 Assume dense, bias-free projections, $d=H_qd_h$, and no padding or adapters.
 
-**Attention projection parameters**
+**Attention projection parameters** (**D**, CLM-006)
 
 $$P_Q=d(H_qd_h)=d^2,$$
 $$P_K=P_V=d(H_{kv}d_h),\qquad P_O=d^2,$$
 $$P_{attn}=2d^2+2dH_{kv}d_h=2d^2\left(1+\frac{H_{kv}}{H_q}\right).$$
 
-**SwiGLU parameters**
+**SwiGLU parameters** (**D**, CLM-019)
 
 $$P_{mlp}=dm+dm+md=3dm.$$
 
 Two RMSNorm weights contribute $2d$ per standard block. Add embeddings, final norm, LM head, biases, adapters, expert/router tensors, and any untied output head separately.
 
-**Worked Example:**
-
-For $d=4096$, $H_q=32$, $H_{kv}=8$, $d_h=128$, and $m=11008$:
-
-- attention projections: $41,943,040$ parameters;
-- dense SwiGLU: $135,266,304$ parameters;
-- two RMSNorm weights: $8,192$ parameters;
-- reference block subtotal: $177,217,536$ parameters.
-
-This subtotal excludes embeddings, final norm, LM head, biases, storage padding, and all runtime memory.
-
 **FLOP convention**
 
-State whether one fused multiply-add counts as one or two operations. This module uses two:
+State whether one fused multiply-add counts as one or two operations. This module uses two (**D**, CLM-007):
 
 $$\mathrm{GEMM}(m\times k,k\times n)\approx2mkn\text{ FLOPs}.$$
 
@@ -284,15 +378,26 @@ For a dense full-sequence attention calculation, QK and AV together have a nomin
 
 $$4BH_qS^2d_h=4BS^2d.$$
 
-A causal-aware implementation may avoid part of the nominal square, and a fused kernel may never materialize the score matrix. Projections and MLP scale linearly with $S$ but can dominate at common dimensions. Logical FLOPs do not determine latency without shapes, backend, precision, achieved compute/bandwidth, and memory traffic.
+For one decode token attending to $S_k$ retained positions, the corresponding term is $4H_qS_kd_h=4dS_k$ per layer. A causal-aware implementation may avoid part of the nominal square, and a fused kernel may never materialize the score matrix. Projections and MLP scale linearly with $S$ but can dominate at common dimensions. Logical FLOPs do not determine latency without shapes, backend, precision, achieved compute/bandwidth, and memory traffic.
 
-**OOM discipline:** Logical tensors provide component estimates, not an exact OOM boundary. Measure allocated and reserved peaks across fresh processes and record workspaces, backend, cache state, graph capture, padding, and concurrent allocations.
+**Worked Example:**
+- *Input*: $d=4096$, $H_q=32$, $H_{kv}=8$, $d_h=128$, $m=11008$, one decode token with $S_k=4096$ retained positions.
+- *Steps (parameters)*: attention $2\cdot4096^2\cdot(1+8/32)=41{,}943{,}040$; SwiGLU $3\cdot4096\cdot11008=135{,}266{,}304$; two norms $8{,}192$.
+- *Result (parameters)*: block subtotal $177{,}217{,}536$, excluding embeddings, final norm, LM head, biases, storage padding, and all runtime memory.
+- *Steps (FLOPs per decode token per layer)*: projections and MLP $2\times(41{,}943{,}040+135{,}266{,}304)=354{,}418{,}688$; attention QK+AV $4\cdot4096\cdot4096=67{,}108{,}864$.
+- *Interpretation / limits*: at this context the weight-proportional term is about $5.3\times$ the attention term, but the attention term grows with $S_k$ while the weight term does not. Neither number predicts decode latency, which also depends on bytes moved per token (Module 02).
+
+**OOM discipline:** Logical tensors provide component estimates, not an exact OOM boundary. Measure allocated and reserved peaks across fresh processes and record workspaces, backend, cache state, graph capture, padding, and concurrent allocations (**H**, CLM-012).
 
 **Knowledge Check:** Which assumptions yield $3dm$ for SwiGLU, and why do fewer FLOPs not guarantee lower latency?
 
 **Guided Practice:** Reconcile the analytical manifest with named unique tensor storage, profiler shapes, and peak memory after toggling tying or bias.
 
-**Feedback Contract:** State FMA, bias, tying, padding, sparsity, workspace, and allocator conventions; explain every discrepancy.
+**Feedback Contract:**
+- *Expected Evidence*: a manifest row per parameter group with formula, assumptions, analytical count, `named_parameters` count, and delta with a named cause (tying, bias, padding, adapter, expert); the FMA convention stated beside every FLOP number.
+- *Common Failure*: double-counting a tied embedding/LM head, or quoting “2× parameters FLOPs per token” while silently dropping the context-dependent attention term.
+- *Diagnostic Hint*: sum `p.numel()` over unique storage pointers and compare with the sum over names.
+- *Concept to Revisit*: scoped logical accounting versus measured execution.
 
 **Learning Outcome:** Derive scoped architecture counts and reconcile them with execution evidence.
 
@@ -300,13 +405,13 @@ A causal-aware implementation may avoid part of the nominal square, and a fused 
 
 ---
 
-### Lesson 1.6 — Sparse Experts and Latent Attention
+### Lesson 1.7 — Sparse Experts and Latent Attention
 
-**Engineering Question:** How do sparse experts and latent attention change total, resident, selected, executed, and cached quantities?
+**Engineering Question:** How do sparse experts and latent attention change total, resident, selected, executed, and retained quantities?
 
-**Concepts & Definitions:** Total expert parameters, selected experts, capacity/padding, routing locality, latent state, and decompression are distinct accounting dimensions.
+**Concepts & Definitions:** Total expert parameters, selected experts, capacity/padding, routing locality, latent state, and up-projection/absorption are distinct accounting dimensions.
 
-**Sparse MoE** replaces a dense MLP with a router and multiple expert MLPs. For $E$ bias-free SwiGLU experts of width $m$, a simplified total expert count is
+**Sparse MoE** replaces a dense MLP with a router and multiple expert MLPs (**O**, CLM-008). For $E$ bias-free SwiGLU experts of width $m$, a simplified total expert count is
 
 $$P_{experts,total}=3Edm.$$
 
@@ -319,37 +424,67 @@ Always distinguish:
 - parameters selected per token;
 - operations actually executed after padding/capacity decisions.
 
-**MLA** uses architecture-specific latent projections to compress attention state. It is not merely GQA with a smaller $H_{kv}$. Study its projection/decompression equations separately and defer concrete cache layout to Module 03.
+**Multi-head Latent Attention (MLA)** as defined in DeepSeek-V2 (**O**, CLM-017). For attention input $h_t\in\mathbb{R}^d$, $n_h$ heads of width $d_h$:
+
+$$c_t^{KV}=W^{DKV}h_t\in\mathbb{R}^{d_c},\qquad k_t^{C}=W^{UK}c_t^{KV},\qquad v_t^{C}=W^{UV}c_t^{KV},$$
+$$k_t^{R}=\mathrm{RoPE}(W^{KR}h_t)\in\mathbb{R}^{d_h^R}\ \text{(one key shared by all heads)},$$
+$$q_{t,i}=[q_{t,i}^C;q_{t,i}^R],\qquad k_{t,i}=[k_{t,i}^C;k_t^R],\qquad \text{score scale } 1/\sqrt{d_h+d_h^R}.$$
+
+Queries are also produced through a latent $c_t^Q\in\mathbb{R}^{d_c'}$, but the paper states this reduces training activation memory, not KV cache.
+
+**State model — what must be retained per token per layer:** $c_t^{KV}$ ($d_c$ elements) and $k_t^R$ ($d_h^R$ elements). Per-head $k^C$ and $v^C$ are recomputable from $c^{KV}$. The paper states that at inference $W^{UK}$ can be absorbed into $W^Q$ and $W^{UV}$ into $W^O$, so per-head keys and values need not be materialized (**O**, CLM-017). The RoPE part is decoupled because a position-dependent rotation between $W^Q$ and $W^{UK}$ would block that absorption.
+
+**Why MLA is not GQA with a smaller $H_{kv}$:** GQA retains full-width $K$ and $V$ for each of $H_{kv}$ groups ($2H_{kv}d_h$ elements per token per layer). MLA retains one joint latent plus one shared RoPE key, $(d_c+d_h^R)$ elements, and reconstructs per-head keys and values by learned up-projections, with every query head keeping its own reconstructed key/value. Configuration field names can mislead: the released DeepSeek-V2 config sets `num_key_value_heads: 128` alongside `kv_lora_rank: 512` and `qk_rope_head_dim: 64` (**O**, CLM-017).
+
+**Worked Example (DeepSeek-V2 paper values and pinned config):**
+- *Input*: $l=60$ layers, $n_h=128$, $d_h=128$, $d_c=512$ (`kv_lora_rank`), $d_h^R=64$ (`qk_rope_head_dim`).
+- *Step 1 — MLA retained elements*: $(512+64)=576$ per token per layer; $\times60=34{,}560$ per token.
+- *Step 2 — MHA reference with the same heads*: $2n_hd_hl=2\cdot128\cdot128\cdot60=1{,}966{,}080$ per token.
+- *Step 3 — GQA-equivalent group count*: $576/(2\cdot128)=2.25$ groups, matching the paper's Table 1 statement (**D**, CLM-018).
+- *Step 4 — the trap*: plugging `num_key_value_heads=128` into the GQA formula reproduces the MHA figure, a $1{,}966{,}080/34{,}560\approx56.9\times$ over-count of retained elements.
+- *Result*: retained state is set by $d_c+d_h^R$, not by the configured KV-head count.
+- *Interpretation / limits*: these are element counts from the paper's equations. Bytes per element, whether a runtime caches the latent before or after the paper's additional latent normalization, padding of 576 to alignment, and page layout belong to Module 03 and remain runtime-specific. The paper's reported 93.3% KV reduction and throughput gains are relative to its own DeepSeek 67B baseline and setup, not general multipliers (**O**, CLM-009).
 
 **Currentness classification**
 
-- **REFERENCE / BASELINE**: scaled causal MHA and dense decoder blocks.
-- **COMMON CURRENT PATTERN, NOT UNIVERSAL**: pre-norm RMSNorm, RoPE, SwiGLU, and GQA in many open decoder families.
+- **REFERENCE / BASELINE**: scaled causal MHA and dense decoder blocks (Vaswani et al.).
+- **OBSERVED IN PINNED SOURCE, NOT A PREVALENCE CLAIM**: the Transformers Llama path at the pinned commit uses pre-norm RMSNorm, RoPE, configurable K/V head count, and a gated MLP (**O**, CLM-010). How many current open-weight families share this combination is `TODO_VERIFY` (requires a dated survey of released configs).
 - **WORKLOAD- AND MODEL-DEPENDENT**: MQA versus GQA versus MHA; dense versus sparse experts.
-- **FRONTIER / ARCHITECTURE-SPECIFIC**: MLA and newer hybrid attention/state-space designs.
+- **FRONTIER / ARCHITECTURE-SPECIFIC**: MLA as defined by DeepSeek-V2 (paper read 2026-09-30). Newer hybrid attention/state-space designs are `TODO_VERIFY` in this module: no source for them was opened in this revision.
 - **REJECT AS A MODEL**: “all current LLMs are Llama with different weights.”
 
-**Worked Example:** For $E$ experts with top-$k$ routing and $k<E$, total and selected expert parameters differ by construction; padding, capacity, and communication determine executed cost.
+**Worked Example (MoE, illustrative configuration, not a specific model):**
+- *Input*: $E=8$ experts, top-$k=2$, $d=4096$, $m=14336$, bias-free SwiGLU experts.
+- *Steps*: total $3\cdot8\cdot4096\cdot14336=1{,}409{,}286{,}144$; selected per token $3\cdot2\cdot4096\cdot14336=352{,}321{,}536$.
+- *Result*: a $4\times$ ratio of total to selected expert weights for this layer.
+- *Interpretation / limits*: every expert still has to be resident somewhere. Executed work depends on capacity padding and routing balance, and latency depends on communication and batching.
 
-**Knowledge Check:** Why are total, resident, selected, and executed quantities not interchangeable?
+**Knowledge Check:**
+1. Why are total, resident, selected, and executed quantities not interchangeable?
+2. Which two tensors must an MLA decoder retain per token per layer, and why can per-head $K$ and $V$ be recomputed?
+3. A colleague sizes an MLA model's KV with $2\cdot L\cdot$`num_key_value_heads`$\cdot d_h$. What is wrong, and which config fields should they use?
 
-**Guided Practice:** Build an accounting table for dense, top-$k$ expert, and latent-attention configurations; mark architecture-specific formulas `TODO_VERIFY` until source/configuration confirms them.
+**Guided Practice:** Build an accounting table for dense, top-$k$ expert, and latent-attention configurations. For MLA, derive retained elements from $d_c$ and $d_h^R$ and list which config fields map to them. Mark any formula you have not confirmed against the released config or source as `TODO_VERIFY`.
 
-**Feedback Contract:** Reject any table that equates selected parameters with wall-clock cost or treats MLA as renamed GQA.
+**Feedback Contract:**
+- *Expected Evidence*: separate total/resident/selected/executed rows for MoE; for MLA, $(d_c+d_h^R)$ elements per token per layer with the config field for each symbol, a stated storage precision left to Module 03, and an explicit statement that the GQA formula does not apply.
+- *Common Failure*: equating selected parameters with wall-clock cost; treating MLA as renamed GQA; using `num_key_value_heads` for MLA state.
+- *Diagnostic Hint*: which tensors does the paper say must be cached, and which are reconstructed by $W^{UK}$ and $W^{UV}$?
+- *Concept to Revisit*: total versus active parameters; retained state versus reconstructed state.
 
-**Learning Outcome:** Extend decoder accounting without forcing incompatible architecture families into one formula.
+**Learning Outcome:** Extend decoder accounting to sparse experts and latent attention without forcing incompatible architecture families into one formula, and hand Module 03 a correct retained-state model.
 
-*(Effort: 45m instruction, 25m practice)*
+*(Effort: 55m instruction, 20m practice)*
 
 ---
 
-### Lesson 1.7 — Production Source Trace and Diagnosis
+### Lesson 1.8 — Production Source Trace and Diagnosis
 
-**Engineering Question:** How does a pinned implementation turn the abstract decoder graph into a backend-dispatched execution path?
+**Engineering Question:** How does a pinned implementation turn the abstract decoder graph and sampling contract into a backend-dispatched execution path?
 
 **Concepts & Definitions:** A source trace records repository, revision, path, symbol, entry point, configuration conditions, execution path, and static-versus-executed status.
 
-At Transformers commit `11c16613d93911300c38ec8c9c2460567be53281`, trace:
+At Transformers commit `11c16613d93911300c38ec8c9c2460567be53281`, trace (**O**, CLM-010):
 
 ```text
 LlamaForCausalLM.forward
@@ -371,6 +506,13 @@ LlamaForCausalLM.forward
           → residual add
       → final LlamaRMSNorm
   → lm_head
+generation (same commit, CLM-015):
+GenerationMixin._sample
+  → outputs.logits[:, -1] copied to float32
+  → logits_processor(input_ids, next_token_logits)
+  → softmax + torch.multinomial   (do_sample=True)
+    or torch.argmax               (do_sample=False)
+  → append token; stopping_criteria
 ```
 
 The source file defines orchestration and an eager reference path, but configured attention may dispatch to a different backend. Record the selected backend before making a kernel claim.
@@ -379,7 +521,7 @@ Use a diagnostic chain:
 
 ```text
 SYMPTOM
-  → competing shape / mask / position / dtype / backend / memory hypotheses
+  → competing shape / mask / position / dtype / backend / memory / sampling-contract hypotheses
   → missing tensor and timeline evidence
   → discriminating invariant or intervention
   → ranked explanation
@@ -394,38 +536,50 @@ Examples of discriminating tests:
 - Eager backend matches reference but optimized backend diverges → backend path strengthened.
 - Analytical parameters differ from named unique storage → tying, sharing, padding, or omitted tensors.
 - OOM boundary shifts across fresh processes with unchanged shapes → allocator/workspace/state hypothesis.
+- Greedy outputs match but sampled outputs differ between two stacks with the same seed → compare effective processor lists and defaults before blaming the model.
 
-**Worked Example:** The verified Python orchestration reaches an attention-backend interface; it does not prove which compiled kernel a particular configuration selected.
+**Worked Example:**
+- *Input*: the pinned source above, read statically.
+- *Steps*: `LlamaAttention.forward` selects an attention function through `ALL_ATTENTION_FUNCTIONS` according to configuration; `_sample` applies whatever processor list `_get_logits_processor` assembled.
+- *Result*: the source proves the orchestration and the sampling order at this revision.
+- *Interpretation / limits*: it does not prove which compiled attention kernel ran or which processors a given call used; both require an executed trace with the configuration recorded.
 
-**Knowledge Check:** Which configuration selects the backend, and what evidence is required before making a kernel claim?
+**Knowledge Check:** Which configuration selects the attention backend, and what evidence is required before making a kernel claim or a claim about the effective sampling processors?
 
-**Independent Practice:** Execute the pinned path with hooks, record backend selection, and map symbols to equations and invariants. Mark unexecuted branches `TODO_VERIFY`.
+**Independent Practice:** Execute the pinned path with hooks, record backend selection and the processor list for one sampled call, and map symbols to equations and invariants. Mark unexecuted branches `TODO_VERIFY`.
 
-**Feedback Contract:** Require exact revision/path/symbols, dynamic configuration, first-divergence evidence, and generalizability limits.
+**Feedback Contract:**
+- *Expected Evidence*: exact revision/path/symbols, dynamic configuration (attention implementation, dtype, cache use, generation config), the printed processor list, first-divergence evidence, and generalizability limits.
+- *Common Failure*: citing the eager attention code as the kernel that ran, or citing `generate()` arguments as the effective sampling contract.
+- *Diagnostic Hint*: log `config._attn_implementation` (or the equivalent field at your revision) and `type(p).__name__` for every processor.
+- *Concept to Revisit*: static source reading versus executed trace.
 
-**Learning Outcome:** Trace and diagnose a production forward path without generalizing revision-specific behavior.
+**Learning Outcome:** Trace and diagnose a production forward and sampling path without generalizing revision-specific behavior.
 
-*(Effort: 40m instruction, 30m source trace)*
+*(Effort: 30m instruction; trace practice counted in LAB D source trace)*
 
 ## 05 Literature & Production Source Map
 
 **REFERENCE / BASELINE**
 
-- Vaswani et al. (2017), *Attention Is All You Need* — scaled dot-product and multi-head attention.
-- Zhang and Sennrich (2019), *Root Mean Square Layer Normalization* — RMSNorm mechanism.
-- Shazeer (2020), *GLU Variants Improve Transformer* — SwiGLU family.
-- Su et al. (2021), *RoFormer* — rotary position embedding.
+- Vaswani et al. (2017), [*Attention Is All You Need*](https://proceedings.neurips.cc/paper/2017/hash/3f5ee243547dee91fbd053c1c4a845aa-Abstract.html) — scaled dot-product and multi-head attention (CLM-001).
+- Zhang and Sennrich (2019), [*Root Mean Square Layer Normalization*](https://proceedings.neurips.cc/paper/2019/hash/1e8a19426224ca89e83cef47f1e7f53b-Abstract.html) — RMSNorm mechanism (CLM-002).
+- Shazeer (2020), [*GLU Variants Improve Transformer*](https://arxiv.org/abs/2002.05202) — SwiGLU family (CLM-004).
+- Su et al. (2021), [*RoFormer*](https://arxiv.org/abs/2104.09864) — rotary position embedding (CLM-003).
+- Holtzman et al. (ICLR 2020), [*The Curious Case of Neural Text Degeneration*](https://arxiv.org/abs/1904.09751) — left-to-right factorization (Section 2), nucleus, top-k, and temperature sampling definitions (Sections 3.1–3.3); read 2026-09-30 (CLM-013). Its quality findings are specific to its models and tasks.
 
 **CURRENT ARCHITECTURE EXTENSIONS**
 
-- Shazeer (2019), *Fast Transformer Decoding: One Write-Head is All You Need* — MQA.
-- Ainslie et al. (2023), *GQA* — grouped-query attention and uptraining study.
-- Fedus, Zoph, and Shazeer (2022), *Switch Transformers* — sparse routing reference.
-- DeepSeek-AI (2024), *DeepSeek-V2* — MLA and a modern MoE family; empirical results remain setup-specific.
+- Shazeer (2019), [*Fast Transformer Decoding: One Write-Head is All You Need*](https://arxiv.org/abs/1911.02150) — MQA (CLM-005).
+- Ainslie et al. (2023), [*GQA*](https://aclanthology.org/2023.emnlp-main.298/) — grouped-query attention and uptraining study (CLM-005).
+- Fedus, Zoph, and Shazeer (2022), [*Switch Transformers*](https://www.jmlr.org/papers/v23/21-0998.html) — sparse routing reference (CLM-008).
+- DeepSeek-AI (2024), [*DeepSeek-V2*](https://arxiv.org/abs/2405.04434) v5 — MLA equations and cache comparison (Sections 2.1.1–2.1.4) and model hyper-parameters (Section 3.1.2), read 2026-09-30; plus the released [`config.json`](https://huggingface.co/deepseek-ai/DeepSeek-V2/blob/4461458f186c35188585855f28f77af5661ad489/config.json) at revision `4461458f186c35188585855f28f77af5661ad489` (CLM-009, CLM-017). Empirical results remain setup-specific.
 
 **CURRENT SOURCE SNAPSHOT**
 
-- Hugging Face Transformers commit `11c16613d93911300c38ec8c9c2460567be53281`, `src/transformers/models/llama/modeling_llama.py`, verified 2026-09-25.
+- Hugging Face Transformers commit `11c16613d93911300c38ec8c9c2460567be53281`:
+  - `src/transformers/models/llama/modeling_llama.py` — statically verified 2026-09-25; symbol presence re-checked 2026-09-30 (CLM-010, CLM-011).
+  - `src/transformers/generation/utils.py` (`GenerationMixin._sample`, `_get_logits_processor`), `generation/logits_process.py` (`TemperatureLogitsWarper`, `TopKLogitsWarper`, `TopPLogitsWarper`), and `generation/configuration_utils.py` (`GenerationConfig._get_default_generation_params`) — statically verified 2026-09-30 (CLM-015, CLM-016).
 
 ---
 
@@ -435,17 +589,17 @@ Examples of discriminating tests:
 
 All labs follow $\text{PREDICT}\to\text{BUILD}\to\text{MEASURE}\to\text{EXPLAIN}\to\text{BREAK}\to\text{IMPROVE}\to\text{FALSIFY}$.
 
-### LAB A — Minimal Decoder and Numerical Parity
+### LAB A — Minimal Decoder, Numerical Parity, and Sampling Contract
 
-- **Objective**: Implement RMSNorm, RoPE, causal attention, GQA mapping, SwiGLU, residuals, final norm, and logits without using a high-level decoder block.
-- **Pre-Registered Hypothesis**: The transparent implementation will match the reference within declared tolerances until an injected invariant violation reaches the affected layer.
-- **Independent Variables**: Injected defect, dtype, sequence length, and attention family.
-- **Dependent Variables**: Layerwise error, prefix invariance, finite counts, gradients where applicable, and final-logit parity.
-- **Controls**: fixed tiny configuration, deterministic weights/inputs, explicit dtype and tolerance, no dropout.
-- **Required tests**: shape assertions, finite outputs, future-token prefix invariance, norm/rotation properties, gradient check where applicable, and output parity with a transparent reference.
-- **Break & Falsify**: Inject wrong mask orientation, wrong RMSNorm axis, epsilon outside the root, and a head/sequence transpose that preserves element count; each must fail the relevant invariant.
-- **Alignment**: Lessons 1.1–1.4.
-- **Effort Estimate**: 3h implementation, 1h analysis.
+- **Objective**: Implement RMSNorm, RoPE, causal attention, GQA mapping, SwiGLU, residuals, final norm, logits, and a sampling step without using a high-level decoder block or `generate()`.
+- **Pre-Registered Hypothesis**: The transparent implementation will match the reference within declared tolerances until an injected invariant violation reaches the affected layer; with a fixed seed and identical processor chain, its sampled tokens will match the pinned reference on CPU for a short sequence.
+- **Independent Variables**: Injected defect, dtype, sequence length, attention family, temperature, top-k, top-p, and processor order.
+- **Dependent Variables**: Layerwise error, prefix invariance, finite counts, gradients where applicable, final-logit parity, post-processing distributions, and sampled-token agreement.
+- **Controls**: fixed tiny configuration, deterministic weights/inputs, explicit dtype and tolerance, no dropout, fixed RNG generator and device.
+- **Required tests**: shape assertions, finite outputs, future-token prefix invariance, norm/rotation properties, gradient check where applicable, output parity with a transparent reference, argmax invariance under temperature, top-k/top-p kept sets equal to hand calculation on the Lesson 1.2 logits, and a printed sampling contract.
+- **Break & Falsify**: Inject wrong mask orientation, wrong RMSNorm axis, epsilon outside the root, and a head/sequence transpose that preserves element count; each must fail the relevant invariant. Swap temperature and top-p order and show which synthetic logits change the kept set; set $T=0$ and show the required error path.
+- **Alignment**: Lessons 1.1–1.5.
+- **Effort Estimate**: 3.5h implementation, 1.5h analysis (5h total).
 
 ### LAB B — MHA/MQA/GQA and RoPE Boundary Study
 
@@ -454,8 +608,8 @@ All labs follow $\text{PREDICT}\to\text{BUILD}\to\text{MEASURE}\to\text{EXPLAIN}
 - **Independent Variables**: $H_{kv}$, batch, prompt length, decode context, backend, and position range.
 - **Dependent Variables**: Projection counts, tensor shapes, backend identity, allocated/reserved memory, kernel timeline, and quality/parity limitations.
 - **Break & Falsify**: Find a workload where fewer KV heads do not improve end-to-end latency, or a position range where a naive RoPE extrapolation claim fails.
-- **Alignment**: Lessons 1.2–1.3.
-- **Effort Estimate**: 2h implementation, 1h analysis.
+- **Alignment**: Lessons 1.3–1.4.
+- **Effort Estimate**: 2h implementation, 1h analysis (3h total).
 
 ### LAB C — Accounting Versus Real Execution
 
@@ -463,28 +617,28 @@ All labs follow $\text{PREDICT}\to\text{BUILD}\to\text{MEASURE}\to\text{EXPLAIN}
 - **Pre-Registered Hypothesis**: Exact logical counts will reconcile only after tying, biases, adapters, experts, padding, and unique storage are represented explicitly.
 - **Independent Variables**: $B$, $S$, $d$, $m$, $H_q$, $H_{kv}$, tying, bias, adapter, backend, and workspace state.
 - **Dependent Variables**: Count deltas, profiler-shape deltas, allocated/reserved peaks, and latency across the sweep.
-- **Design**: sweep $B$, $S$, $d$, $m$, $H_q$, and $H_{kv}$ on configurations small enough to reproduce.
+- **Design**: sweep $B$, $S$, $d$, $m$, $H_q$, and $H_{kv}$ on configurations small enough to reproduce. Add one MLA configuration read from a released config: derive retained elements per token from $d_c$ and $d_h^R$ and record why the `num_key_value_heads` formula is rejected.
 - **Break & Falsify**: Enable biases, tie/untie embeddings, add an adapter, change backend/workspace, introduce an MoE layer, and find a case where lower logical work does not yield proportional latency or memory savings.
-- **Alignment**: Lessons 1.5–1.6.
-- **Effort Estimate**: 2h implementation, 1h analysis.
+- **Alignment**: Lessons 1.6–1.7.
+- **Effort Estimate**: 2h implementation, 1h analysis (3h total).
 
 ### LAB D — Pinned Transformers Source Trace
 
-- **Objective**: Execute the pinned Llama path with hooks and map every source symbol to the mathematical operation and tensor contract.
-- **Pre-Registered Hypothesis**: Backend selection and numerical casts visible at runtime will explain at least one difference from a purely abstract decoder graph.
-- **Independent Variables**: Attention backend, dtype, cache use, and short/long position range.
-- **Dependent Variables**: Selected symbols/backend, layerwise parity, finite counts, and trace completeness.
-- **Required trace**: entry point, configuration fields, causal-mask construction, RoPE, layer order, cache call boundary, attention backend dispatch, final norm, and LM head.
-- **Artifact**: repository, commit, verification date, file, symbol, entry point, execution path, selected backend, exact commands, and `TODO_VERIFY` for paths not run.
-- **Break & Falsify**: Force an alternative backend or incompatible configuration and determine which assumed path no longer executes.
-- **Alignment**: Lesson 1.7.
-- **Effort Estimate**: 2h source trace, 1h execution.
+- **Objective**: Execute the pinned Llama forward and sampling path with hooks and map every source symbol to the mathematical operation and tensor contract.
+- **Pre-Registered Hypothesis**: Backend selection, numerical casts, and library generation defaults visible at runtime will explain at least one difference from a purely abstract decoder graph and hand-written sampling contract.
+- **Independent Variables**: Attention backend, dtype, cache use, short/long position range, and generation config (explicit versus defaulted fields).
+- **Dependent Variables**: Selected symbols/backend, effective processor list, layerwise parity, finite counts, and trace completeness.
+- **Required trace**: entry point, configuration fields, causal-mask construction, RoPE, layer order, cache call boundary, attention backend dispatch, final norm, LM head, `_sample` logits position/dtype, and processor order.
+- **Artifact**: repository, commit, verification date, file, symbol, entry point, execution path, selected backend, printed processor list, exact commands, and `TODO_VERIFY` for paths not run.
+- **Break & Falsify**: Force an alternative backend or incompatible configuration and determine which assumed path no longer executes; call `generate(do_sample=True)` with and without an explicit `top_k` and show whether the effective processor list changes.
+- **Alignment**: Lesson 1.8 (and Lesson 1.2's contract).
+- **Effort Estimate**: 2h source trace (counted under `source_trace`), 1h execution (3h total).
 
 ## 07 Break / Incident Scenarios
 
 ### Incident 01.1: Plausible Logits, Corrupt Long Context
 
-A converted model matches short-prompt top-1 tokens but loses quality beyond 8K tokens and occasionally produces non-finite activations in low precision. Parameter count appears close to the source checkpoint.
+A converted model matches short-prompt top-1 tokens but loses quality beyond 8K tokens and occasionally produces non-finite activations in low precision. Parameter count appears close to the source checkpoint. Sampled outputs from the converted stack also “feel more random” than the source stack at the same stated temperature.
 
 Investigate competing explanations:
 
@@ -494,19 +648,19 @@ Investigate competing explanations:
 4. RMSNorm epsilon or accumulation dtype mismatch;
 5. tied versus untied output weights or missing parameters;
 6. optimized attention backend discrepancy;
-7. checkpoint/config mismatch unrelated to the suspected mechanism.
+7. a different effective sampling contract (defaults, processor order, or missing top-k/top-p) rather than a model defect;
+8. checkpoint/config mismatch unrelated to the suspected mechanism.
 
 **Diagnostic Protocol (Task):**
 
-Required response:
-
-- localize the first layer and position where parity diverges;
-- compare eager and optimized backends;
-- run future-token perturbation and relative-position invariants;
-- inspect norms, finite counts, shapes, dtypes, and configuration;
-- rank explanations and state what remains unresolved;
-- fix one mechanism and rerun the same short- and long-context tests.
-- define immediate rollback, long-term prevention, and quantitative parity/quality evidence required before redeployment.
+1. Localize the first layer and position where parity diverges, using greedy decoding so sampling cannot mask the comparison.
+2. Compare eager and optimized backends.
+3. Run future-token perturbation and relative-position invariants.
+4. Inspect norms, finite counts, shapes, dtypes, and configuration.
+5. Print both stacks' effective processor lists and compare post-processing distributions on identical logits.
+6. Rank explanations and state what remains unresolved.
+7. Fix one mechanism and rerun the same short- and long-context tests.
+8. Define immediate rollback, long-term prevention, and quantitative parity/quality evidence required before redeployment.
 
 ---
 
@@ -521,39 +675,49 @@ Given an unfamiliar decoder configuration and a pinned implementation, produce:
 1. a forward-pass graph with exact logical shapes and residual boundaries;
 2. attention, MLP, norm, embedding, head, router/expert, and total parameter counts with exclusions;
 3. leading FLOP equations with a declared FMA convention;
-4. MHA/MQA/GQA or MLA classification without forcing incompatible formulas;
+4. MHA/MQA/GQA or MLA classification without forcing incompatible formulas, including retained elements per token per layer;
 5. a causal-mask and position-encoding invariant test suite;
 6. a minimal executable reference for one layer;
 7. a source trace showing backend dispatch and numerical dtype choices;
 8. a profiler comparison explaining where analytical work and measured latency diverge;
 9. an OOM prediction expressed as a component estimate plus empirical boundary, not fake exactness;
-10. downstream implications for Modules 02–05 and 20 with scope boundaries preserved.
+10. downstream implications for Modules 02–06 and 20 with scope boundaries preserved;
+11. a sampling contract for the checkpoint's default generation, including the effective processor chain and defaults, verified on one step against a hand calculation.
 
 ## 09 Required Evidence & Rubric
 
 ### Required Artifact: Production Source Trace
 
-Submit the pinned Transformers trace from Lesson 1.7/Lab D with exact revision, paths, symbols, runtime configuration, backend selection, static-versus-executed status, commands, and `TODO_VERIFY` markers.
+Submit the pinned Transformers trace from Lesson 1.8/Lab D with exact revision, paths, symbols, runtime configuration, backend selection, effective processor list, static-versus-executed status, commands, and `TODO_VERIFY` markers.
 
 ### Rubric Dimensions
 
-- **Mechanistic reasoning**: Strong work explains axes, grouping, residual order, mask semantics, and position transforms without relying on architecture names alone.
-- **Quantitative reasoning**: Strong work derives counts from matrices, states bias/tie/padding/FMA conventions, and reconciles formulas with actual tensors.
-- **Implementation**: Strong work passes invariants and parity checks and records dtype/backend details.
-- **Failure analysis**: Strong work uses competing hypotheses and localizes the first divergence instead of guessing from final logits.
-- **Transfer**: Strong work explains which conclusions generalize across decoders and which are Llama-, MoE-, MLA-, backend-, or workload-specific.
+A submission is **Competent** overall only if every dimension is at least Competent. Strong on one dimension does not offset Insufficient on another.
+
+| Dimension (evidence) | Insufficient | Competent | Strong |
+|---|---|---|---|
+| **Shape & mechanism** (D1, D4, Lab A) | Names components; axes missing or checked by element count only | Named axes at every arrow; head→group map and mask semantics stated; MLA/GQA distinguished | Predicts which silent reshape/mask defects each invariant catches and demonstrates one missed by a smoke test |
+| **Parameter & FLOP accounting** (D2–D3, Lab C) | Formula quoted without bias/tie/padding/FMA conventions, or unreconciled | Counts derived from matrices with conventions; deltas to `named_parameters` explained | Separates weight-proportional and context-dependent terms and predicts where the accounting will diverge from measured latency or memory |
+| **Numerical correctness** (D5–D6, Lab A) | Code runs and output shape is right, but mask, norm axis, dtype path, or backend is unverified or wrong — **this fails regardless of runtime success** | Invariants and parity pass at a justified tolerance; first divergence localized for injected defects | Tolerance derived from dtype/accumulation analysis; parity checked across two backends |
+| **Sampling contract** (D11, Lab A, Lab D) | Records only `temperature` or `generate()` arguments | Complete contract; hand-computed step matches implementation's kept set | Shows one case where defaults, ties, or processor order change the distribution and records it |
+| **Source dispatch** (D7, Lab D, required artifact) | Cites eager code as “the kernel”; no revision | Pinned revision/symbols; selected backend and processors recorded; static vs executed marked | Forces an alternate path and shows which assumed branch stops executing |
+| **Architecture trade-off & transfer** (D4, D8–D10) | Treats the model as Llama-like by name | States which conclusions are Llama-, MoE-, MLA-, backend-, or workload-specific | Hands later modules correct inputs (e.g., MLA retained state) with explicit limits |
+| **Failure analysis** (Incident 01.1) | Guesses from final logits | Competing hypotheses and a discriminating test, including sampling-contract drift | Ranks hypotheses by evidence, fixes one, and remeasures short and long context |
+
+*Calibration cases*: (a) a submission whose decoder produces correctly shaped logits but fails the future-token perturbation test is Insufficient on Numerical correctness; (b) a submission that computes KV for an MLA config with `num_key_value_heads` is Insufficient on Shape & mechanism even if its arithmetic is correct.
 
 ## 10 Capability Traceability Matrix
 
 | Capability | Taught | Practiced | Assessed | Evidence |
 |---|---|---|---|---|
-| Decoder forward path | 1.1 | Labs A/D | Mastery 1, 6-7 | Shape/source trace |
-| Attention geometry | 1.2 | Labs A/B | Mastery 1, 4-5 | Tensor invariants |
-| RoPE mechanics | 1.3 | Labs A/B | Mastery 5 | Rotation/position tests |
-| RMSNorm and SwiGLU | 1.4 | Lab A | Mastery 6-7 | Numerical parity |
-| Parameter/FLOP accounting | 1.5 | Lab C | Mastery 2-3, 8-9 | Analytical manifest |
-| MoE and MLA distinctions | 1.6 | Labs B/C | Mastery 4, 10 | Architecture comparison |
-| Source-based diagnosis | 1.7 | Lab D / Incident | Mastery 7-8 | Pinned source trace |
+| Decoder forward path | 1.1 | 1.1 Guided Practice; Lab A; Lab D | Mastery D1, D6–D7; Incident step 1 | Named-axis graph; hook trace; rubric: Shape & mechanism |
+| Logits → sampling contract | 1.2 | 1.2 Guided Practice; Lab A sampling tests; Lab D processor list | Mastery D11; Incident step 5 | Contract + hand-computed kept sets; rubric: Sampling contract |
+| Attention geometry | 1.3 | 1.3 Guided Practice; Labs A/B | Mastery D1, D4–D5 | Head→group map; prefix-invariance test; rubric: Shape & mechanism |
+| RoPE mechanics | 1.4 | 1.4 Guided Practice; Labs A/B | Mastery D5; Incident step 3 | Rotation/relative-shift tests; rubric: Numerical correctness |
+| RMSNorm and SwiGLU | 1.5 | 1.5 Guided Practice; Lab A | Mastery D6–D7; Incident step 4 | Parity report with cast boundaries; rubric: Numerical correctness |
+| Parameter/FLOP accounting | 1.6 | 1.6 Guided Practice; Lab C | Mastery D2–D3, D8–D9 | Analytical manifest vs `named_parameters`; rubric: Accounting |
+| MoE and MLA distinctions | 1.7 | 1.7 Guided Practice; Lab C MLA row | Mastery D4, D10 | Retained-state table; rubric: Shape & mechanism, Transfer |
+| Source-based diagnosis | 1.8 | Lab D | Required source trace; Mastery D7; Incident steps 1–8 | Pinned trace with backend + processors; rubric: Source dispatch, Failure analysis |
 
 ## 11 Exit Criteria & Module Wrap-Up
 
@@ -563,16 +727,17 @@ A learner can exit Module 01 when they can:
 
 1. reconstruct an unfamiliar decoder from configuration and source;
 2. preserve token, head, sequence, and feature axes through every operation;
-3. detect future-token leakage and position-transform errors with invariants;
-4. distinguish MHA, MQA, GQA, sparse experts, and latent attention;
-5. derive scoped parameter and FLOP estimates and state every exclusion;
-6. explain why logical work, active parameters, memory footprint, and latency are different quantities;
-7. localize numerical or backend divergence before proposing a fix;
-8. hand accurate architectural inputs to GPU, KV-cache, serving, optimization, and distributed-inference modules.
+3. turn logits into a next-token distribution under a written sampling contract and compute its effect by hand on a small example;
+4. detect future-token leakage and position-transform errors with invariants;
+5. distinguish MHA, MQA, GQA, sparse experts, and latent attention, including MLA's retained state;
+6. derive scoped parameter and FLOP estimates and state every exclusion;
+7. explain why logical work, active parameters, memory footprint, sampling settings, and latency are different quantities;
+8. localize numerical or backend divergence before proposing a fix;
+9. hand accurate architectural and sampling inputs to GPU, KV-cache, serving, optimization, reasoning, and distributed-inference modules.
 
 ### Module Wrap-Up (Final Mental Model Reconstruction)
 
-The final invariant: **model architecture is an executable tensor contract, not a bag of component names.**
+The final invariant: **model architecture is an executable tensor contract, and generation is that contract plus a recorded sampling contract—not a bag of component names and a temperature.**
 
 ## 12 Competency Targets
 

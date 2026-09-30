@@ -1,7 +1,9 @@
 module: "07-model-behavior-uncertainty"
-registry_version: "1.0.0"
+registry_version: "1.1.0"
+previous_version: "1.0.0"
 research_cutoff: "2026-09-26"
-change_reason: "Replace generated placeholders with scoped failure semantics, calibrated uncertainty models, selective prediction, regression controls, and a pinned generation-score source trace."
+change_reason: "WP-D1 (AUD-07-01, AUD-07-02, AUD-G04): make the conformal outcome executable by teaching a split-conformal claim filter with its scores, rank, tie rule, output rule, and required test; distinguish that construction from the conformal-factuality paper; replace the generic 2025-2026 frontier line with sources opened on 2026-09-30 plus an explicit TODO_VERIFY. New and changed claims were searched through 2026-09-30. Unchanged claims keep their 2026-09-26 cutoff and were not re-verified in this revision."
+changed_claims: ["CLM-012", "CLM-016", "CLM-017", "CLM-018", "CLM-019", "CLM-020"]
 
 claims:
   - id: CLM-001
@@ -244,7 +246,7 @@ claims:
     curriculum_usage: { lessons: ["7.4"], labs: ["LAB-C"], assessments: ["Mastery-07"] }
 
   - id: CLM-012
-    claim: "Conformal factuality provides finite-sample marginal guarantees for its defined entailment-set correctness under exchangeability and a fixed calibration procedure; the guarantee does not imply per-prompt correctness, semantic completeness, subgroup coverage, or validity after uncontrolled shift."
+    claim: "Conformal factuality (Mohri and Hashimoto) splits an LM output into sub-claims, backs off by removing sub-claims whose score falls below a threshold calibrated at the ceil((n+1)(1-alpha))/n empirical quantile of per-example minimal safe thresholds, and states (Theorem 4.1) that under exchangeability and alpha in [1/(n+1),1] the reference entails the backed-off output with probability at least 1-alpha; the guarantee is marginal and does not imply per-prompt correctness, semantic completeness, subgroup coverage, or validity after uncontrolled shift."
     provenance: VERIFIED_FACT
     domain: conformal_prediction
     concepts: [conformal_factuality, marginal_coverage, exchangeability]
@@ -257,12 +259,16 @@ claims:
         authors: "Christopher Mohri, Tatsunori Hashimoto"
         year: "2024"
         url: "https://arxiv.org/abs/2402.10978"
-        section: "Conformal factuality framework, guarantees, and experiments"
-        accessed_at: "2026-09"
+        version: "arXiv v1 (2024-02-15)"
+        section: "Section 3 (entailment sets and conformal setup), Algorithm 1, Section 4 Theorem 4.1, Section 5 Assumption 5.1 (arXiv HTML rendering)"
+        accessed_at: "2026-09-30"
     limitations:
       - "Guarantee semantics inherit the entailment relation, back-off construction, annotations, and exchangeability assumptions."
+      - "The paper's decomposer, scorers, merge step, and annotation protocol were not re-implemented; the module's claim filter (CLM-017) is a related construction, not a reproduction."
+      - "The theorem was read from the arXiv HTML rendering; the proof was not independently checked."
     applicability: "Systems able to return less-specific answers or sets and maintain a representative calibration stream."
     curriculum_usage: { lessons: ["7.5"], labs: ["LAB-D"], assessments: ["Mastery-07"] }
+    related_claims: ["CLM-016", "CLM-017"]
 
   - id: CLM-013
     claim: "Kalai and Vempala prove a hallucination lower bound for a specified class of arbitrary facts under their generative calibration assumptions; it does not prove that all factual errors are unavoidable or that calibration causes every practical hallucination."
@@ -327,3 +333,105 @@ claims:
       - "No finite suite proves absence of unknown behavior failures."
     applicability: "Pre-release gates, canaries, and post-release incident diagnosis."
     curriculum_usage: { lessons: ["7.6"], labs: ["LAB-D"], assessments: ["Incident-07.1", "Mastery-07"] }
+
+  - id: CLM-016
+    claim: "Split conformal prediction takes the ceil((n+1)(1-alpha))/n empirical quantile of n calibration nonconformity scores; if calibration and test points are exchangeable, the test score is at most that quantile with probability at least 1-alpha, marginally over calibration and test draws, and an upper bound of 1-alpha+1/(n+1) additionally requires tie-free scores or randomized tie-breaking."
+    provenance: VERIFIED_FACT
+    domain: conformal_prediction
+    concepts: [split_conformal, finite_sample_quantile, exchangeability, marginal_coverage]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "A Gentle Introduction to Conformal Prediction and Distribution-Free Uncertainty Quantification"
+        authors: "Anastasios N. Angelopoulos, Stephen Bates"
+        year: "2022"
+        version: "arXiv v6 (2022-12-07)"
+        url: "https://arxiv.org/abs/2107.07511"
+        section: "Section 1.1 quantile rule and Theorem 1; Equation (1) upper bound; tie-breaking footnote; proof in Appendix D"
+        accessed_at: "2026-09-30"
+    limitations:
+      - "The guarantee is marginal, not conditional on the input, subgroup, or calibration set actually drawn."
+      - "When ceil((n+1)(1-alpha)) > n the quantile is set to infinity; that convention is a derivation used in the module, not a quoted statement from the source."
+    applicability: "Any split-conformal construction whose covered event can be written as r_test <= q_hat."
+    curriculum_usage: { lessons: ["7.5"], labs: ["LAB-D"], assessments: ["Mastery-07"] }
+    related_claims: ["CLM-012", "CLM-017"]
+
+  - id: CLM-017
+    claim: "The module's conformal claim filter defines r_i as the highest score among false claims of calibration output i (negative infinity if none), sets q_hat to the k-th smallest r_i with k=ceil((n+1)(1-alpha)) (positive infinity if k>n), and keeps exactly the test claims with score strictly greater than q_hat; because 'all kept claims are true' is equivalent to r_test <= q_hat, split-conformal exchangeability gives P(all kept claims true) >= 1-alpha, including when scores tie."
+    provenance: DERIVED
+    domain: conformal_prediction
+    concepts: [conformal_claim_filter, nonconformity_score, tie_handling, abstention]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    assumptions:
+      - "Calibration and test outputs are exchangeable and the decomposer, scorer, and label guide are frozen before calibration."
+      - "Every claim receives a binary true/false label under the frozen guide, and the covered event is per-claim truth of every kept claim."
+      - "An empty kept set is replaced by abstention or escalation, which counts as covered but is not useful."
+    derivation: "Some kept claim is false iff a false claim has score > q_hat iff r_test > q_hat. Hence the covered event equals r_test <= q_hat, and CLM-016 applies with r as the nonconformity score. The strict inequality makes the equivalence exact when a test score equals q_hat. The lower bound needs no tie-free assumption; the upper bound is not claimed."
+    limitations:
+      - "It corresponds to Mohri and Hashimoto's event only when entailment of the kept set reduces to per-claim truth; it is not a reproduction of their implementation."
+      - "Label error changes the covered event; the guarantee is about labels, not ground truth."
+      - "A synthetic simulation (seed 7, 20,000 trials) supports but does not prove the derivation, and no real-model coverage is reported."
+    applicability: "Long-form answers that can be decomposed into independently labeled claims and safely shortened or abstained."
+    curriculum_usage: { lessons: ["7.5"], labs: ["LAB-D"], assessments: ["Mastery-07"] }
+    related_claims: ["CLM-012", "CLM-016"]
+
+  - id: CLM-018
+    claim: "Kossen et al. propose semantic entropy probes that approximate semantic entropy from the hidden states of a single generation, avoiding multi-sample cost, and report in their abstract that the probes retain hallucination-detection performance and generalize better out of distribution than probes that directly predict accuracy; these are author-reported results on their models and tasks."
+    provenance: VERIFIED_FACT
+    domain: semantic_uncertainty
+    concepts: [semantic_entropy_probes, hidden_state_probe, uncertainty_cost]
+    confidence: medium
+    currentness_status: "FRONTIER / WORKLOAD-DEPENDENT"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "Semantic Entropy Probes: Robust and Cheap Hallucination Detection in LLMs"
+        authors: "Jannik Kossen, Jiatong Han, Muhammed Razzak, Lisa Schut, Shreshth Malik, Yarin Gal"
+        year: "2024"
+        version: "arXiv v1 (2024-06-22)"
+        url: "https://arxiv.org/abs/2406.15927"
+        section: "Abstract only"
+        accessed_at: "2026-09-30"
+    limitations:
+      - "Abstract-level inspection only; methods, datasets, and numbers were not read."
+      - "Requires white-box hidden-state access and a labeled training signal; not reproduced here."
+    applicability: "Frontier option when multi-sample semantic entropy is too expensive and hidden states are available."
+    curriculum_usage: { lessons: ["7.4"], labs: ["LAB-C"], assessments: ["Mastery-07"] }
+
+  - id: CLM-019
+    claim: "Kalai, Nachum, Vempala, and Zhang (2025) argue that hallucinations persist partly because common evaluations grade answers in a way that rewards guessing over acknowledging uncertainty, and propose changing the scoring of existing benchmarks; this is an argument about evaluation incentives, not a measured deployment result."
+    provenance: VERIFIED_FACT
+    domain: hallucination_theory
+    concepts: [evaluation_incentives, abstention_scoring, hallucination]
+    confidence: medium
+    currentness_status: "FRONTIER / ARGUMENT"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "Why Language Models Hallucinate"
+        authors: "Adam Tauman Kalai, Ofir Nachum, Santosh S. Vempala, Edwin Zhang"
+        year: "2025"
+        version: "arXiv v1 (2025-09-04)"
+        url: "https://arxiv.org/abs/2509.04664"
+        section: "Abstract only"
+        accessed_at: "2026-09-30"
+    limitations:
+      - "Abstract-level inspection only; the statistical analysis was not checked."
+    applicability: "Motivation for scoring abstention explicitly in selective-prediction utility (Lesson 7.3)."
+    curriculum_usage: { lessons: ["7.1", "7.3"], labs: ["LAB-C"], assessments: ["Mastery-07"] }
+    related_claims: ["CLM-013"]
+
+  - id: CLM-020
+    claim: "TODO_VERIFY: the 2025-2026 landscape of efficient uncertainty estimators and reasoning-trace or trajectory-based detectors for LLM outputs has not been surveyed from primary sources in this revision; no specific result from it is asserted."
+    provenance: TODO_VERIFY
+    domain: semantic_uncertainty
+    concepts: [frontier_uncertainty, trajectory_detectors]
+    confidence: low
+    currentness_status: "FRONTIER / UNVERIFIED"
+    limitations:
+      - "Placeholder for a primary-source survey; must not support any required outcome."
+    applicability: "Research backlog for Lesson 7.4 and the frontier source map."
+    curriculum_usage: { lessons: ["7.4"], labs: [], assessments: [] }

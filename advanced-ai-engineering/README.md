@@ -9,12 +9,13 @@ A structured curriculum for engineers at Junior+ / SFIA Level 4 targeting strong
 The program covers the complete chain from scientific experimentation through production AI systems:
 
 ```
-Scientific Experimentation → LLM Internals → GPU / Inference Fundamentals
+Scientific Experimentation → Foundation Model Internals → Inference GPU Fundamentals
 → KV Cache Engineering → Serving / Scheduling / Capacity → Inference Optimization
-→ Model Behaviour / Uncertainty → AI Data Engineering → Retrieval → RAG
-→ Context / Memory → Durable Agent Runtime → Evaluation → Falsification
-→ AI Security → Model Adaptation → Distributed Inference → AI Economics
-→ Observability / Reliability → Model-System Co-design → Capstone
+→ Reasoning / Test-Time Compute → Model Behavior / Uncertainty → AI Data Engineering
+→ Retrieval → Advanced RAG → Context / Memory → Agent Loops → Harnesses
+→ Durable Agent Runtime → Evaluation → Falsification → Harness Evolution
+→ AI Security → Model Adaptation → Distributed Inference → Multimodal Systems
+→ AI Economics → Observability / Reliability → Model-System Co-design → Capstone
 ```
 
 ### Central Principle
@@ -61,42 +62,51 @@ The learner should repeatedly answer:
 
 ```
 advanced-ai-engineering/
-├── 00-foundations/          Scientific engineering baseline
-├── 01-llm-internals/       Decoder architecture deep dive
-├── 02-inference-fundamentals/  GPU execution and profiling
-├── 03-kv-cache-engineering/    Memory management for KV
-├── 04-serving-scheduling-capacity/  Batching and queueing
-├── 05-inference-optimization/  Bottleneck-driven optimization
-├── 06-model-behavior-uncertainty/  Failure modes and calibration
-├── 07-ai-data-engineering/     Data quality and lifecycle
-├── 08-retrieval-engineering/   Search and ranking systems
-├── 09-advanced-rag/            Retrieval lifecycle engineering
-├── 10-context-memory-engineering/  Context selection and memory
-├── 11-durable-agent-runtime/   Stateful agent execution
-├── 12-evaluation-engineering/  Measurement and regression
-├── 13-falsification-engineering/  Adversarial testing
-├── 14-ai-security/             Threat modeling and defense
-├── 15-model-adaptation/        Fine-tuning and data flywheel
-├── 16-distributed-inference/   Parallelism and communication
-├── 17-ai-economics/            Cost optimization and routing
-├── 18-observability-reliability/  Tracing and incident response
-├── 19-model-system-codesign/   Architecture-model coupling
-├── capstone/                   AI Runtime Platform project
-├── graduation/                 Final architecture review
-├── papers/                     Curated paper index
-├── source-reading/             Source code study methodology
-├── benchmarks/                 Benchmark methodology and results
-├── incidents/                  Diagnostic scenario templates
-├── templates/                  Checkpoint, report, experiment templates
-└── references/                 Supplementary reference material
+├── 00-scientific-ai-engineering/     Evidence discipline and experimental design
+├── 01-foundation-model-internals/    Decoder architecture and accounting
+├── 02-inference-gpu-fundamentals/    GPU execution, timing, and profiling
+├── 03-kv-cache-engineering/          KV memory lifecycle
+├── 04-serving-scheduling-capacity/   Batching, queueing, capacity (golden reference module)
+├── 05-inference-optimization/        Kernels, quantization, speculative decoding
+├── 06-reasoning-test-time-compute/   Test-time search, verification, budgets
+├── 07-model-behavior-uncertainty/    Calibration, abstention, behavior regression
+├── 08-ai-data-engineering/           Data lifecycle, lineage, contamination
+├── 09-retrieval-engineering/         Search, ANN, fusion, reranking
+├── 10-advanced-rag/                  Versioned evidence systems
+├── 11-context-memory-engineering/    Context accounting and memory policy
+├── 12-agent-loop-engineering/        Bounded agent controllers
+├── 13-harness-engineering/           Model I/O contracts and validation
+├── 14-durable-agent-runtime/         Durable execution and effects
+├── 15-evaluation-engineering/        Evaluation as decision system
+├── 16-falsification-engineering/     Systematic counterexample search
+├── 17-harness-evolution/             Migration, optimization, rollout
+├── 18-ai-security/                   Threat models and authority controls
+├── 19-model-adaptation/              Fine-tuning decisions, data, and gates
+├── 20-distributed-inference/         (outline) Parallelism and communication
+├── 21-multimodal-ai-systems/         (outline) Multimodal pipelines
+├── 22-ai-economics/                  (outline) Cost and routing
+├── 23-observability-reliability/     (outline) Tracing, SLOs, incidents
+├── 24-model-system-codesign/         (outline) Architecture-system coupling
+├── capstone/                         AI Runtime Platform project
+├── graduation/                       Final architecture review
+├── research-registry/                Evidence registries per module
+├── tools/                            Static curriculum validator and fixtures
+├── source-reading/                   Source code study methodology
+├── benchmarks/                       Benchmark methodology and results
+├── incidents/                        Diagnostic scenario templates
+├── datasets/ evals/                  Supporting data and evaluation material
+└── templates/                        Checkpoint, report, experiment templates
 ```
+
+Repository-level material outside this folder: [paper library](../paper-library/), [references](../references/), and satellite tracks (speech, vision-language, generative media, world models).
 
 ## Getting Started
 
 1. Read [ROADMAP.md](ROADMAP.md) for the 26-week schedule
 2. Read [CURRICULUM.md](CURRICULUM.md) for the module index
 3. Read [COMPETENCY.md](COMPETENCY.md) for the competency framework
-4. Start with [00-foundations/](00-foundations/) before any other module
+4. Start with [00-scientific-ai-engineering/](00-scientific-ai-engineering/) before any other module
+5. Use [Module 04](04-serving-scheduling-capacity/README.md) as the structural reference and [INSTRUCTIONAL_SCHEMA.md](INSTRUCTIONAL_SCHEMA.md) for the module contract
 
 ## Conventions
 
@@ -108,4 +118,4 @@ advanced-ai-engineering/
 
 ## Status
 
-🏗️ **Repository skeleton established.** Content is being progressively developed over 26 weeks.
+Modules 00–19 are authored against the [instructional schema](INSTRUCTIONAL_SCHEMA.md), each with a research registry and knowledge model, and are being corrected under the audit in [`../audit.md`](../audit.md). Modules 20–24 are outlines and are not yet curriculum content. Run `python tools/validate_curriculum.py` for the static checks; passing them does not certify technical correctness.
