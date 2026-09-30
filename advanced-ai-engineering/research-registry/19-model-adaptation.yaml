@@ -1,0 +1,239 @@
+module: "19-model-adaptation"
+registry_version: "1.0.0"
+research_cutoff: "2026-09-30"
+change_reason: "Replace generated placeholders with an evidence-backed adaptation model covering the adapt-versus-alternatives decision, training memory, LoRA/QLoRA mechanics, SFT data, preference optimization, forgetting, and regression/safety gates, with 2025-2026 LoRA-capacity, RL-forgetting, GRPO-bias, and safety-evaluation-variance evidence scoped as frontier."
+claims:
+  - id: CLM-001
+    claim: "Weight adaptation changes the model's conditional distribution for all future inputs, whereas prompting, retrieval, and routing change inputs or model choice per request; adaptation suits persistent behavior, format, or skill gaps, while retrieval suits knowledge that changes or must be cited."
+    provenance: DERIVED
+    domain: adaptation_decision
+    concepts: [adapt_vs_retrieve, persistent_behavior, knowledge_freshness]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["The gap has been localized by error analysis to behavior, knowledge, or capability."]
+    derivation: "Updating weights requires retraining to change what was learned and cannot attach provenance per answer; retrieval updates by index change and supplies citable evidence. Prompting and routing need no training but pay per-request context or model cost."
+    limitations: ["Hybrid designs (adapted model plus retrieval) are common; the decision is per failure class."]
+    applicability: "Choosing among prompt, RAG, routing, SFT, and preference tuning."
+    curriculum_usage: { lessons: ["19.1"], labs: ["LAB-A"], assessments: ["Mastery-19"] }
+  - id: CLM-002
+    claim: "ZeRO states that mixed-precision Adam training of a model with Ψ parameters needs 2Ψ bytes for fp16 parameters, 2Ψ for fp16 gradients, and 12Ψ for fp32 parameter copy, momentum, and variance—16Ψ bytes of model states before activations."
+    provenance: VERIFIED_FACT
+    domain: training_memory
+    concepts: [model_states, optimizer_states, mixed_precision]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "ZeRO: Memory Optimizations Toward Training Trillion Parameter Models", authors: "Samyam Rajbhandari, Jeff Rasley, Olatunji Ruwase, Yuxiong He", year: "2019", url: "https://arxiv.org/abs/1910.02054", section: "Section 3.1 Model States (mixed-precision Adam, K=12)", accessed_at: "2026-09-27" }]
+    limitations: ["Excludes activations, temporary buffers, and fragmentation; other optimizers and precisions change K."]
+    applicability: "Full fine-tuning memory estimates."
+    curriculum_usage: { lessons: ["19.2"], labs: ["LAB-B"], assessments: ["Mastery-19"] }
+  - id: CLM-003
+    claim: "LoRA freezes pretrained weights and injects trainable rank-decomposition matrices into Transformer layers; its authors report up to 10,000x fewer trainable parameters and 3x lower GPU memory than Adam fine-tuning of GPT-3 175B, quality on par or better on evaluated tasks, and no added inference latency unlike adapters."
+    provenance: VERIFIED_FACT
+    domain: parameter_efficient_finetuning
+    concepts: [lora, low_rank_update, frozen_base]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    evidence: [{ source_type: paper, tier: 1, title: "LoRA: Low-Rank Adaptation of Large Language Models", authors: "Edward J. Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, Weizhu Chen", year: "2021", url: "https://arxiv.org/abs/2106.09685", section: "Abstract", accessed_at: "2026-09-27" }]
+    limitations: ["No-latency claim applies when weights are merged; unmerged multi-adapter serving adds compute. Quality parity is task-dependent (see CLM-006)."]
+    applicability: "Default parameter-efficient adaptation."
+    curriculum_usage: { lessons: ["19.2", "19.3"], labs: ["LAB-B"], assessments: ["Mastery-19"] }
+  - id: CLM-004
+    claim: "QLoRA backpropagates through a frozen 4-bit quantized model into LoRA adapters using 4-bit NormalFloat, double quantization of quantization constants, and paged optimizers, and reports fine-tuning a 65B model on a single 48GB GPU while preserving 16-bit fine-tuning task performance on evaluated tasks."
+    provenance: VERIFIED_FACT
+    domain: quantized_finetuning
+    concepts: [qlora, nf4, double_quantization, paged_optimizer]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "QLoRA: Efficient Finetuning of Quantized LLMs", authors: "Tim Dettmers, Artidoro Pagnoni, Ari Holtzman, Luke Zettlemoyer", year: "2023", url: "https://arxiv.org/abs/2305.14314", section: "Abstract", accessed_at: "2026-09-27" }]
+    limitations: ["Performance preservation is reported for evaluated setups; serving the base in another precision creates a train/serve mismatch to test."]
+    applicability: "Memory-constrained adaptation."
+    curriculum_usage: { lessons: ["19.2"], labs: ["LAB-B"], assessments: ["Mastery-19"] }
+  - id: CLM-005
+    claim: "At PEFT commit b8674c86183a5dee38d0c3ede392e189593025e5, LoraLayer.update_layer sets scaling to lora_alpha/r (or lora_alpha/sqrt(r) with use_rslora), default initialization zeroes lora_B so the initial update is zero, Linear.forward adds lora_B(lora_A(dropout(x)))*scaling to the base output, and get_delta_weight returns (B@A)*scaling for merging."
+    provenance: VERIFIED_FACT
+    domain: lora_runtime
+    concepts: [peft, lora_scaling, merge, rslora]
+    confidence: high
+    currentness_status: "CURRENT SOURCE SNAPSHOT"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "PEFT LoRA layer", repository: "https://github.com/huggingface/peft", commit: "b8674c86183a5dee38d0c3ede392e189593025e5", verification_date: "2026-09-30", file: "src/peft/tuners/lora/layer.py", symbol: "LoraLayer.update_layer; LoraLayer.reset_lora_parameters; Linear.forward; Linear.get_delta_weight; Linear.merge; Linear.unmerge", entry_point: "get_peft_model(model, LoraConfig(...)) wrapping target nn.Linear modules", execution_path: "update_layer creates lora_A/lora_B and scaling -> reset_lora_parameters zeroes lora_B -> forward: base_layer(x) + lora_B(lora_A(dropout(x)))*scaling -> merge adds get_delta_weight=transpose(B@A)*scaling into base weight; unmerge subtracts it", url: "https://github.com/huggingface/peft/blob/b8674c86183a5dee38d0c3ede392e189593025e5/src/peft/tuners/lora/layer.py", accessed_at: "2026-09-30" }
+    limitations: ["Static inspection only; variants (DoRA, PiSSA, LoftQ) change initialization or forward paths."]
+    applicability: "Source-reading example for LoRA arithmetic and merging."
+    curriculum_usage: { lessons: ["19.3"], labs: ["LAB-B"], assessments: ["Production-Source-Trace"] }
+  - id: CLM-006
+    claim: "Biderman et al. report that in code and math instruction tuning and continued pretraining, standard low-rank LoRA substantially underperforms full fine-tuning on the target domain but better preserves performance outside it, and that full fine-tuning learns perturbations with 10-100x higher rank than typical LoRA configurations."
+    provenance: VERIFIED_FACT
+    domain: forgetting
+    concepts: [catastrophic_forgetting, learning_forgetting_tradeoff, update_rank]
+    confidence: high
+    currentness_status: "CURRENT / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "LoRA Learns Less and Forgets Less", authors: "Dan Biderman, Jacob Portes, Jose Javier Gonzalez Ortiz, Mansheej Paul, Philip Greengard, Connor Jennings, Daniel King, Sam Havens, Vitaliy Chiley, Jonathan Frankle, Cody Blakeney, John P. Cunningham", year: "2024", url: "https://arxiv.org/abs/2405.09673", section: "Abstract; TMLR 2024", accessed_at: "2026-09-27" }]
+    limitations: ["Domains, data scale, and ranks are those evaluated; the trade-off must be measured per task."]
+    applicability: "Choosing LoRA rank and full versus parameter-efficient tuning."
+    curriculum_usage: { lessons: ["19.3", "19.6"], labs: ["LAB-D"], assessments: ["Mastery-19"] }
+  - id: CLM-007
+    claim: "Supervised fine-tuning data quality is governed by the same lineage, deduplication, contamination, and leakage controls as any dataset; an adaptation set mined from production failures must be separated from the evaluation set by source and time to avoid training on the test."
+    provenance: DERIVED
+    domain: adaptation_data
+    concepts: [failure_mining, data_flywheel, train_test_separation]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Failures are mined from logs that also feed evaluation sets."]
+    derivation: "If near-duplicates of evaluation items enter training, measured gains reflect memorization of those items rather than generalization; separation by source/time and near-duplicate filtering removes that path (Module 08)."
+    limitations: ["Some leakage via paraphrase or shared templates can survive filtering."]
+    applicability: "SFT and preference data construction."
+    curriculum_usage: { lessons: ["19.4"], labs: ["LAB-C"], assessments: ["Mastery-19"] }
+  - id: CLM-008
+    claim: "InstructGPT fine-tuned GPT-3 with supervised demonstrations, trained a reward model on human rankings, and optimized the policy with reinforcement learning; labelers preferred outputs of the 1.3B InstructGPT model to the 175B GPT-3."
+    provenance: VERIFIED_FACT
+    domain: preference_optimization
+    concepts: [rlhf, reward_model, sft]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "Training language models to follow instructions with human feedback", authors: "Long Ouyang, Jeff Wu, Xu Jiang, Diogo Almeida, Carroll L. Wainwright, Pamela Mishkin, Chong Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, John Schulman, Jacob Hilton, Fraser Kelton, Luke Miller, Maddie Simens, Amanda Askell, Peter Welinder, Paul Christiano, Jan Leike, Ryan Lowe", year: "2022", url: "https://arxiv.org/abs/2203.02155", section: "Abstract", accessed_at: "2026-09-27" }]
+    limitations: ["Preference results are for the paper's labelers and prompt distribution."]
+    applicability: "Reference RLHF pipeline."
+    curriculum_usage: { lessons: ["19.5"], labs: ["LAB-C"], assessments: ["Mastery-19"] }
+  - id: CLM-009
+    claim: "DPO replaces reward-model fitting plus RL with a classification loss on preference pairs that implicitly defines a reward relative to a reference policy, with a coefficient beta controlling deviation from that reference."
+    provenance: VERIFIED_FACT
+    domain: preference_optimization
+    concepts: [dpo, implicit_reward, reference_policy, beta]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    evidence: [{ source_type: paper, tier: 1, title: "Direct Preference Optimization: Your Language Model is Secretly a Reward Model", authors: "Rafael Rafailov, Archit Sharma, Eric Mitchell, Stefano Ermon, Christopher D. Manning, Chelsea Finn", year: "2023", url: "https://arxiv.org/abs/2305.18290", section: "Abstract; DPO objective", accessed_at: "2026-09-27" }]
+    limitations: ["Offline preference data limits exploration; label noise and length bias propagate into the implicit reward."]
+    applicability: "Preference tuning without an explicit reward model."
+    curriculum_usage: { lessons: ["19.5"], labs: ["LAB-C"], assessments: ["Mastery-19"] }
+  - id: CLM-010
+    claim: "GRPO forgoes PPO's value model and estimates the baseline from the rewards of a group of sampled outputs for the same prompt, normalizing each reward by the group mean and standard deviation, and adds a KL estimator directly to the loss."
+    provenance: VERIFIED_FACT
+    domain: rl_finetuning
+    concepts: [grpo, group_baseline, verifiable_reward]
+    confidence: high
+    currentness_status: "CURRENT / FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models", authors: "Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junxiao Song, Xiao Bi, Haowei Zhang, Mingchuan Zhang, Y.K. Li, Y. Wu, Daya Guo", year: "2024", url: "https://arxiv.org/abs/2402.03300", section: "GRPO section (outcome supervision advantage; KL estimator)", accessed_at: "2026-09-27" }]
+    limitations: ["When all group rewards are equal the normalized advantage carries no signal; results depend on reward validity."]
+    applicability: "RL fine-tuning with programmatic or model-based rewards."
+    curriculum_usage: { lessons: ["19.5"], labs: ["LAB-C"], assessments: ["Mastery-19"] }
+  - id: CLM-011
+    claim: "Qi et al. report that fine-tuning GPT-3.5 Turbo on 10 adversarial examples for under $0.20 through the provider API removed much of its safety behavior, and that benign fine-tuning on common datasets can also degrade safety alignment, to a lesser extent."
+    provenance: VERIFIED_FACT
+    domain: adaptation_safety
+    concepts: [safety_regression, harmful_finetuning, benign_drift]
+    confidence: high
+    currentness_status: "REFERENCE / CURRENT RISK"
+    evidence: [{ source_type: paper, tier: 1, title: "Fine-tuning Aligned Language Models Compromises Safety, Even When Users Do Not Intend To!", authors: "Xiangyu Qi, Yi Zeng, Tinghao Xie, Pin-Yu Chen, Ruoxi Jia, Prateek Mittal, Peter Henderson", year: "2023", url: "https://arxiv.org/abs/2310.03693", section: "Abstract", accessed_at: "2026-09-27" }]
+    limitations: ["Provider fine-tuning safeguards have changed since; the risk class, not the specific cost, is the lesson."]
+    applicability: "Safety gates for every adapted model."
+    curriculum_usage: { lessons: ["19.6"], labs: ["LAB-D"], assessments: ["Mastery-19", "Incident-19.1"] }
+  - id: CLM-012
+    claim: "An adapted model must pass a three-part gate—target-task gain, retained general capability on held-out suites, and safety/refusal behavior—each measured with paired comparison against the base model, because gains on the target can coincide with regressions elsewhere."
+    provenance: DERIVED
+    domain: adaptation_evaluation
+    concepts: [regression_gate, retained_capability, safety_eval]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Target, general, and safety suites are fixed before training."]
+    derivation: "CLM-006 and CLM-011 show target gains, forgetting, and safety degradation can co-occur; a single target metric cannot detect the latter two."
+    limitations: ["Held-out suites are finite; production canary (Module 17) remains required."]
+    applicability: "Release of any fine-tuned model or adapter."
+    curriculum_usage: { lessons: ["19.6"], labs: ["LAB-D"], assessments: ["Mastery-19", "Incident-19.1"] }
+  - id: CLM-013
+    claim: "For a failure class caused by missing or changing facts, retrieval will outperform supervised fine-tuning on accuracy for facts updated after training at lower update cost, whereas for a failure class caused by output format or procedure, fine-tuning will match or beat prompting at lower per-request token cost."
+    provenance: HYPOTHESIS
+    domain: adaptation_decision
+    concepts: [adapt_vs_retrieve, per_request_cost, update_cost]
+    confidence: medium
+    currentness_status: "WORKLOAD-DEPENDENT"
+    hypothesis:
+      prediction: "On a split of fact-freshness versus format failures, RAG wins fresh-fact accuracy and SFT wins format compliance per token cost."
+      measurement_target: "Accuracy on post-cutoff facts, format validity, tokens per request, training and index update cost, and regression suites."
+      falsifying_observation: "SFT matches RAG on post-training facts without retraining, or prompting matches SFT on format at equal token cost."
+    limitations: ["Model family and data size affect both sides."]
+    applicability: "Adaptation decision records."
+    curriculum_usage: { lessons: ["19.1"], labs: ["LAB-A"], assessments: ["Mastery-19"] }
+  - id: CLM-014
+    claim: "Ovadia et al. compare unsupervised fine-tuning with retrieval-augmented generation on knowledge-intensive tasks and report that RAG consistently outperforms unsupervised fine-tuning for both knowledge seen during pretraining and entirely new knowledge, and that models struggle to learn new facts through unsupervised fine-tuning unless exposed to many variations of the same fact."
+    provenance: VERIFIED_FACT
+    domain: adaptation_decision
+    concepts: [adapt_vs_retrieve, knowledge_injection]
+    confidence: high
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "Fine-Tuning or Retrieval? Comparing Knowledge Injection in LLMs", authors: "Oded Ovadia, Menachem Brief, Moshik Mishaeli, Oren Elisha", year: "2023", url: "https://arxiv.org/abs/2312.05934", section: "Abstract (abstract-level inspection)", accessed_at: "2026-09-30" }]
+    limitations: ["Unsupervised (continued-pretraining style) fine-tuning on evaluated tasks and models; supervised or paraphrase-augmented fine-tuning can narrow the gap.", "Does not cover format, style, or procedure adaptation."]
+    applicability: "Evidence for routing fact-freshness failures to retrieval (CLM-001, CLM-013)."
+    related_claims: [CLM-001, CLM-013]
+    curriculum_usage: { lessons: ["19.1"], labs: ["LAB-A"], assessments: ["Mastery-19"] }
+  - id: CLM-015
+    claim: "Thinking Machines' LoRA Without Regret (Schulman and collaborators, September 2025) reports that LoRA matched full fine-tuning for supervised fine-tuning on small-to-medium instruction and reasoning datasets and for reinforcement learning even at small ranks, that attention-only LoRA significantly underperformed MLP-only LoRA, and that the optimal LoRA learning rate was consistently about 10x the full fine-tuning rate in their experiments."
+    provenance: VERIFIED_FACT
+    domain: parameter_efficient_finetuning
+    concepts: [lora, lora_capacity, target_modules, learning_rate]
+    confidence: medium
+    currentness_status: "FRONTIER / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: official_blog, tier: 2, title: "LoRA Without Regret", authors: "John Schulman and collaborators, Thinking Machines Lab", year: "2025", url: "https://thinkingmachines.ai/blog/lora/", section: "Key findings; learning-rate and layer-placement sections", accessed_at: "2026-09-30" }]
+    limitations: ["Lab research post, not peer reviewed; equivalence breaks when the dataset exceeds adapter capacity.", "Qualifies rather than refutes CLM-006: Biderman et al. used larger code/math data regimes and typical low-rank configurations."]
+    applicability: "Choosing LoRA targets, rank, and learning rate; interpreting LoRA-versus-full comparisons by data size."
+    related_claims: [CLM-003, CLM-006]
+    curriculum_usage: { lessons: ["19.3"], labs: ["LAB-B", "LAB-D"], assessments: ["Mastery-19"] }
+  - id: CLM-016
+    claim: "Shenfeld, Pari, and Agrawal (RL's Razor, 2025) report that at similar new-task performance, on-policy RL preserved prior capabilities better than SFT, and that the degree of forgetting tracked the KL divergence between the fine-tuned and base policy measured on the new task."
+    provenance: VERIFIED_FACT
+    domain: forgetting
+    concepts: [catastrophic_forgetting, kl_to_base, rl_forgetting]
+    confidence: medium
+    currentness_status: "FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "RL's Razor: Why Online Reinforcement Learning Forgets Less", authors: "Idan Shenfeld, Jyothish Pari, Pulkit Agrawal", year: "2025", url: "https://arxiv.org/abs/2509.04259", section: "Abstract (abstract-level inspection)", accessed_at: "2026-09-30" }]
+    limitations: ["Preprint; evaluated LLM and robotics settings only; KL on the new task is a predictor to validate per workload, not a guarantee."]
+    applicability: "Choosing SFT versus on-policy RL and monitoring KL-to-base as a forgetting signal."
+    related_claims: [CLM-006, CLM-010]
+    curriculum_usage: { lessons: ["19.5", "19.6"], labs: ["LAB-D"], assessments: ["Mastery-19"] }
+  - id: CLM-017
+    claim: "Liu et al. (Understanding R1-Zero-Like Training, 2025) identify two biases in GRPO—dividing by response length |o_i| favors brevity among correct answers and length among incorrect answers, and dividing by the group reward standard deviation up-weights low-variance questions—and propose Dr. GRPO, which removes both normalizations."
+    provenance: VERIFIED_FACT
+    domain: rl_finetuning
+    concepts: [grpo, grpo_bias, length_bias]
+    confidence: high
+    currentness_status: "FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "Understanding R1-Zero-Like Training: A Critical Perspective", authors: "Zichen Liu, Changyu Chen, Wenjun Li, Penghui Qi, Tianyu Pang, Chao Du, Wee Sun Lee, Min Lin", year: "2025", url: "https://arxiv.org/abs/2503.20783", section: "Sections 3.1-3.2", accessed_at: "2026-09-30" }]
+    limitations: ["Reported for math-reasoning RL on evaluated base models; benchmark numbers are not transferred."]
+    applicability: "Diagnosing response-length growth during GRPO-style training."
+    related_claims: [CLM-010]
+    curriculum_usage: { lessons: ["19.5"], labs: ["LAB-C"], assessments: ["Mastery-19"] }
+  - id: CLM-018
+    claim: "DAPO (Yu et al., 2025) combines Clip-Higher, Dynamic Sampling, token-level policy-gradient loss, and overlong reward shaping; Dynamic Sampling over-samples and filters out prompts whose sampled outputs are all correct or all incorrect so that every prompt in the batch carries a non-zero gradient."
+    provenance: VERIFIED_FACT
+    domain: rl_finetuning
+    concepts: [grpo, zero_advantage, dynamic_sampling]
+    confidence: high
+    currentness_status: "FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "DAPO: An Open-Source LLM Reinforcement Learning System at Scale", authors: "Qiying Yu, Zheng Zhang, Ruofei Zhu, Yufeng Yuan, et al.", year: "2025", url: "https://arxiv.org/abs/2503.14476", section: "Section 1; Section 3.2 Dynamic Sampling (Eq. 11)", accessed_at: "2026-09-30" }]
+    limitations: ["Filtering changes the effective training distribution and sampling cost; reported AIME results are specific to the paper's model and data."]
+    applicability: "Handling the zero-advantage case of MATH-04."
+    related_claims: [CLM-010, CLM-017]
+    curriculum_usage: { lessons: ["19.5"], labs: ["LAB-C"], assessments: ["Mastery-19"] }
+  - id: CLM-019
+    claim: "Fraser et al. (2025) report surprising variance in safety-benchmark results for fine-tuned models under seemingly inconsequential changes to the fine-tuning setup and LLM stochasticity, and argue that reliable, reproducible safety evaluation is a prerequisite for comparing mitigations."
+    provenance: VERIFIED_FACT
+    domain: adaptation_safety
+    concepts: [safety_regression, evaluation_variance]
+    confidence: medium
+    currentness_status: "FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "Fine-Tuning Lowers Safety and Disrupts Evaluation Consistency", authors: "Kathleen C. Fraser, Hillary Dawkins, Isar Nejadgholi, Svetlana Kiritchenko", year: "2025", url: "https://arxiv.org/abs/2506.17209", section: "Abstract (abstract-level inspection)", accessed_at: "2026-09-30" }]
+    limitations: ["Preprint reporting initial experiments; magnitudes are not transferred."]
+    applicability: "Requiring repeated seeds and fixed procedures in safety gates (CLM-012)."
+    related_claims: [CLM-011, CLM-012]
+    curriculum_usage: { lessons: ["19.6"], labs: ["LAB-D"], assessments: ["Mastery-19", "Incident-19.1"] }
+  - id: CLM-020
+    claim: "Huang, Chen, and Dong (Alignment Dynamics in LLM Fine-Tuning, May 2026) decompose alignment change during fine-tuning into a rebound force and a driving force, predict that prior alignment can be reversed by later fine-tuning and re-acquired faster on re-exposure, and report consistent reversal and accelerated re-alignment across safety, emergent-misalignment, and sentiment settings."
+    provenance: VERIFIED_FACT
+    domain: adaptation_safety
+    concepts: [safety_regression, alignment_dynamics]
+    confidence: medium
+    currentness_status: "FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "Alignment Dynamics in LLM Fine-Tuning", authors: "Yuhan Huang, Huanran Chen, Yinpeng Dong", year: "2026", url: "https://arxiv.org/abs/2605.18309", section: "Abstract (abstract-level inspection)", accessed_at: "2026-09-30" }]
+    limitations: ["Recent preprint; a theoretical framework with author-reported validation, not an operational safety control."]
+    applicability: "Research framing for why safety must be re-gated after every adaptation."
+    related_claims: [CLM-011, CLM-019]
+    curriculum_usage: { lessons: ["19.6"], labs: [], assessments: ["Mastery-19"] }
