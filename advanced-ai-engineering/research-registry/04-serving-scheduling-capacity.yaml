@@ -1,29 +1,25 @@
 module: "04-serving-scheduling-capacity"
-registry_version: "1.1.0"
-previous_version: "1.0.0"
-research_cutoff: "2026-09"
-change_reason: "REFERENCE QA PATCH: Removed universal prefill/decode bottleneck wording, removed a false percentile-headroom implication from mean queueing theory, made the memory feedback loop explicitly conditional, distinguished overload controls, and replaced the legacy vLLM V0 scheduler trace with a directly verified V1 source path at a pinned 2026 revision."
+registry_version: "1.2.0"
+previous_version: "1.1.0"
+research_cutoff: "2026-09-30"
+change_reason: "AUDIT WP-B (AUD-B01..B04, G04/G05 for Module 04), 2026-09-30. Changes: (1) parameter-count units made explicit and the '70B FP16 = 140 GiB' error removed from CLM-012 (70e9 x 2 bytes = 140e9 bytes ~= 130.39 GiB); (2) mean-latency sizing replaced by an expectation identity with covariance term and a two-request counterexample (CLM-015); Little's Law conditions and boundary (end-to-end vs resident) added to CLM-004 with a Tier 1 source; (3) Lesson 4.5 transfer-vs-recompute worked example completed with labeled synthetic inputs (CLM-016, CLM-018); (4) Mastery fixture recorded as an exercise assumption (CLM-012 rewritten); (5) source pointers corrected after opening full texts: Orca Section 3/4.2, PagedAttention Section 4.5/7.3, DistServe Sections 2.1-2.3/3, Splitwise title ('Inference', not 'Serving'), SRE chapter author (Mike Ulrich); (6) pinned vLLM scheduler path statically re-inspected at the same commit, with the waiting-path allocation-failure nuance added."
 
 changed_claims:
   - "CLM-001"
   - "CLM-002"
-  - "CLM-002b"
-  - "CLM-003"
   - "CLM-004"
-  - "CLM-005"
   - "CLM-006"
   - "CLM-007"
-  - "CLM-008"
-  - "CLM-009"
-  - "CLM-009b"
   - "CLM-010"
-  - "CLM-011"
   - "CLM-012"
   - "CLM-013"
-  - "CLM-014"
+  - "CLM-015"
+  - "CLM-016"
+  - "CLM-017"
+  - "CLM-018"
 
 out_of_scope_candidates:
-  - "Distributed tensor/pipeline parallelism execution across multi-node fabrics (assigned to Module 16 / Module 20)"
+  - "Distributed tensor/pipeline parallelism execution across multi-node fabrics (assigned to Module 20)"
   - "FlashAttention low-level SRAM tiling kernel optimization (assigned to Module 05)"
   - "PagedAttention virtual memory translation implementation (assigned to Module 03)"
 
@@ -46,7 +42,7 @@ claims:
         authors: "Gyeong-In Yu, Joo Seong Jeong, Geon-Woo Kim, Soojeong Kim, Byung-Gon Chun"
         year: "2022"
         url: "https://www.usenix.org/conference/osdi22/presentation/yu"
-        section: "Section 3 & 4 (Iteration-Level Scheduling and Selective Batching)"
+        section: "Section 3 (Challenges and Proposed Solutions: S1 iteration-level scheduling, S2 selective batching); Section 4.2 (Scheduling Algorithm) - full text re-checked 2026-09-30"
         accessed_at: "2026-09"
     limitations:
       - "Requires per-iteration runtime scheduling overhead."
@@ -75,15 +71,15 @@ claims:
         authors: "Yinmin Zhong, Shengyu Liu, Junda Chen, Jianbo Hu, Yibo Zhu, Xuanzhe Liu, Xin Jin, Hao Zhang"
         year: "2024"
         url: "https://www.usenix.org/conference/osdi24/presentation/zhong-yinmin"
-        section: "Section 2.1 (Characterization of LLM Serving)"
+        section: "Sections 2.1-2.3 and Section 3 (Tradeoff Analysis) - full text arXiv v3 re-checked 2026-09-30"
         accessed_at: "2026-09"
       - source_type: "paper"
         tier: 1
-        title: "Splitwise: Efficient Generative LLM Serving Using Phase Splitting"
+        title: "Splitwise: Efficient Generative LLM Inference Using Phase Splitting"
         authors: "Pratyush Patel, Esha Choukse, Chaojie Zhang, Aashaka Shah, Inigo Goiri, Saeed Maleki, Ricardo Bianchini"
         year: "2024"
         url: "https://www.microsoft.com/en-us/research/publication/splitwise-efficient-generative-llm-inference-using-phase-splitting/"
-        section: "Section II & III"
+        section: "Section II (Background) & Section III (Characterization); ISCA 2024 per Microsoft Research page; arXiv v2 re-checked 2026-09-30"
         accessed_at: "2026-09"
     limitations:
       - "The realized bottleneck depends on hardware, model architecture, precision, kernels, batch size, prompt length, output length, and cache behavior."
@@ -147,7 +143,7 @@ claims:
       assessments: ["Mastery-04"]
 
   - id: CLM-004
-    claim: "For a stable observed population with consistent boundaries, Little's Law relates long-run averages as L=lambda*W. Separately, an initially empty deterministic fluid model with constant arrival and departure rates, no loss, and lambda>mu gives Q(t)=(lambda-mu)t; that transient equation is not a consequence of Little's Law and is not a universal LLM queue trajectory."
+    claim: "For a stable observed population with consistent boundaries, Little's Law relates long-run averages as L=lambda*W; over a finite window it holds exactly when the boundary is empty at both ends (or when W counts only in-window time), independent of stationarity and queue discipline. L, lambda, and W must describe the same boundary: end-to-end L counts waiting, resident, and streaming requests and is not the resident GPU-sequence count, which needs lambda_admitted*E[T_resident]. Separately, an initially empty deterministic fluid model with constant arrival and departure rates, no loss, and lambda>mu gives Q(t)=(lambda-mu)t; that transient equation is not a consequence of Little's Law and is not a universal LLM queue trajectory."
     provenance: "DERIVED"
     domain: "queueing_theory"
     concepts:
@@ -161,13 +157,24 @@ claims:
     assumptions:
       - "The steady-state form of Little's Law uses a stable population, finite long-run averages, and identical arrival/residence boundaries."
       - "The fluid backlog equation additionally assumes constant rates, an initially empty queue, no drops/cancellations, and no state-dependent service-rate change."
-    derivation: "Little's Law follows from time-average conservation of customer-time over a stable observation horizon. In the separate fluid exercise, cumulative arrivals are lambda*t and departures are mu*t while backlog remains positive, so Q(t)=max(0,(lambda-mu)t) from an initially empty queue."
+      - "lambda is the rate of requests entering the chosen boundary (admitted, not offered, when rejections occur before the boundary)."
+    derivation: "Little's Law follows from time-average conservation of customer-time over a stable observation horizon: with A the area under n(t) on [0,T], N arrivals, L=A/T, lambda=N/T, W=A/N, hence L=lambda*W (Little 2011, Theorem LL.1; LL.2 generalizes to nonempty ends with W=A/S(T)). The long-run version requires that the limits lambda and W exist and are finite. In the separate fluid exercise, cumulative arrivals are lambda*t and departures are mu*t while backlog remains positive, so Q(t)=max(0,(lambda-mu)t) from an initially empty queue."
+    evidence:
+      - source_type: "paper"
+        tier: 1
+        title: "Little's Law as Viewed on Its 50th Anniversary"
+        authors: "John D. C. Little"
+        year: "2011"
+        url: "https://pubsonline.informs.org/doi/10.1287/opre.1110.0940"
+        section: "Section 2 (Theorems LL.1 and LL.2, remarks on nonstationarity and queue discipline); Section 3 (sample-path and stationary versions). Full text read 2026-09-30 from a course-hosted copy of Operations Research 59(3):536-549."
+        accessed_at: "2026-09-30"
     limitations:
       - "A finite-window transient needs boundary corrections or a sample-path formulation; plugging instantaneous burst rates into the steady-state identity is invalid."
       - "Batching, admission, cancellations, retries, and preemption can make effective departures state-dependent and invalidate the constant-rate fluid path."
     applicability: "Capacity planning, concurrency sizing, and queue residency estimation."
+    related_claims: ["CLM-015"]
     curriculum_usage:
-      lessons: ["4.4"]
+      lessons: ["4.4", "4.7"]
       labs: ["LAB-C"]
       assessments: ["Mastery-04"]
 
@@ -215,7 +222,7 @@ claims:
         title: "vLLM V1 scheduler"
         repository: "https://github.com/vllm-project/vllm"
         commit: "25b0add7b8a1c944d5c4e364f2de6aa82497a2ad"
-        verification_date: "2026-09-25"
+        verification_date: "2026-09-30"
         file: "vllm/v1/core/sched/scheduler.py"
         symbol: "Scheduler.schedule"
         entry_point: "Scheduler.schedule(throttle_prefills=False)"
@@ -249,7 +256,7 @@ claims:
         authors: "Woosuk Kwon, Zhuohan Li, Siyuan Zhuang, Ying Sheng, Lianmin Zheng, Cody Hao Yu, Joseph E. Gonzalez, Hao Zhang, Ion Stoica"
         year: "2023"
         url: "https://arxiv.org/abs/2309.06180"
-        section: "Section 4.4 (Preemption)"
+        section: "Section 4.5 (Scheduling and Preemption); Section 7.3 (Comparing Recomputation and Swapping) - full text re-checked 2026-09-30"
         accessed_at: "2026-09"
     limitations:
       - "Current vLLM V1 at the separately pinned 2026 revision resets progress and requeues a preempted request; no PreemptionMode.SWAP branch exists in that source path."
@@ -345,10 +352,10 @@ claims:
       - source_type: "official_docs"
         tier: 2
         title: "Google SRE Book: Addressing Cascading Failures"
-        authors: "Mike Dahlin, Vivek Rau"
+        authors: "Mike Ulrich (chapter author as credited on sre.google)"
         year: "2016"
         url: "https://sre.google/sre-book/addressing-cascading-failures/"
-        section: "Queue Management and Load Shedding"
+        section: "Chapter 22: Queue Management; Load Shedding and Graceful Degradation; Retries - re-checked 2026-09-30"
         accessed_at: "2026-09"
     limitations:
       - "Client applications must implement exponential backoff and jitter to prevent thundering herd retries."
@@ -382,7 +389,7 @@ claims:
       assessments: ["Incident-04.1", "Mastery-04"]
 
   - id: CLM-012
-    claim: "For an analytical capacity planning exercise, assume an enterprise serving node: NVIDIA H100 SXM5 (80 GiB HBM3, 3.35 TB/s memory bandwidth), hosting a 70B FP16 parameter model (140 GiB across 2 GPUs via tensor parallelism TP=2, leaving ~10 GiB per GPU for KV cache and activations). Workload: mean prompt 1024 tokens, mean decode 256 tokens, target TTFT P95 < 500 ms, target ITL P95 < 35 ms."
+    claim: "SYNTHETIC MASTERY FIXTURE (exercise assumption, not a measurement): a 70B-parameter model (P=70e9, 2 bytes/param, logical weight payload 140e9 bytes ~= 130.39 GiB, evenly sharded as 130.39/t GiB per GPU at TP degree t) with 80 layers, 8 KV heads, head_dim 128, and 2-byte KV (327,680 bytes = 320 KiB per token) served on 8 H100 SXM GPUs whose usable memory is declared as 76.0 GiB per GPU, with 6.0 GiB non-KV allocations plus headroom per GPU; voice mean end-to-end/resident times 3.2 s/3.0 s, document 30 s/28 s; voice bursts of 80 req/s for 15 s; TP=8 step costs of 20 ms decode-only, 27/34/48 ms with a 512/1,024/2,048-token prefill chunk, and 175 ms with an unchunked 16,000-token prefill."
     provenance: "EXERCISE_ASSUMPTION"
     domain: "capacity_planning"
     concepts:
@@ -392,14 +399,17 @@ claims:
     confidence: "high"
     currentness_status: "WORKLOAD-DEPENDENT"
     assumptions:
-      - "TP=2 over NVLink interconnect."
-      - "Parameters consume 70 GiB per GPU."
-      - "Runtime buffers consume 2 GiB per GPU."
-      - "Net available KV pool is 8 GiB per GPU."
-    applicability: "Worked examples, capacity exercises, and mastery scenario."
+      - "All fixture values are synthetic and chosen for arithmetic; they describe no specific public model, GPU measurement, or runtime release."
+      - "Even weight and KV-head sharding under TP, ignoring replicated tensors; non-KV memory held constant across TP degrees as a declared simplification."
+      - "The vendor lists H100 SXM memory as 80GB; the fixture's 76.0 GiB usable value is an exercise input, not a derived or measured quantity."
+      - "KV-transfer bandwidth between pools, step costs at other TP degrees, and tail distributions are intentionally unspecified; learners measure them or carry them as symbols."
+    limitations:
+      - "Replaces the v1.1.0 CLM-012 fixture, which stated a 70B FP16 model as 140 GiB; 70e9 x 2 bytes is 140e9 bytes (~130.39 GiB), so that figure could only be an independently declared resident footprint, not a derivation."
+      - "Answers computed from the fixture are conditional on it and are not capacity guarantees."
+    applicability: "Module 04 Mastery transfer problem and its reference arithmetic checks."
+    related_claims: ["CLM-004", "CLM-015", "CLM-017"]
     curriculum_usage:
-      lessons: ["4.1", "4.4", "4.7"]
-      labs: ["LAB-A", "LAB-C"]
+      lessons: ["4.7"]
       assessments: ["Mastery-04"]
 
   - id: CLM-013
@@ -418,7 +428,7 @@ claims:
         title: "vLLM V1 scheduler"
         repository: "https://github.com/vllm-project/vllm"
         commit: "25b0add7b8a1c944d5c4e364f2de6aa82497a2ad"
-        verification_date: "2026-09-25"
+        verification_date: "2026-09-30"
         file: "vllm/v1/core/sched/scheduler.py"
         symbol: "Scheduler.schedule; Scheduler._preempt_request"
         entry_point: "Scheduler.schedule(throttle_prefills=False)"
@@ -426,7 +436,8 @@ claims:
         url: "https://github.com/vllm-project/vllm/blob/25b0add7b8a1c944d5c4e364f2de6aa82497a2ad/vllm/v1/core/sched/scheduler.py"
         accessed_at: "2026-09"
     limitations:
-      - "Static source inspection was completed; the path was not executed in this repository."
+      - "Static source inspection was completed (first 2026-09-25; re-inspected at the same commit 2026-09-30 by reading raw scheduler.py/kv_cache_manager.py); the path was not executed in this repository."
+      - "Victim selection happens only in the running-request loop. When allocate_slots() fails for a waiting request, Scheduler.schedule() stops admitting waiting work for that step (break) instead of preempting. Preemption also stops early when a connector has pending block frees or the candidate's blocks cannot be freed immediately (_request_blocks_can_be_freed)."
       - "The pinned revision is an upstream snapshot, not evidence of every stable vLLM release."
     applicability: "Required production source trace artifact."
     related_claims: ["CLM-006", "CLM-007"]
@@ -471,3 +482,94 @@ claims:
       lessons: ["4.3", "4.7"]
       labs: ["LAB-B"]
       assessments: ["Mastery-04"]
+
+  - id: CLM-015
+    claim: "For requests with N_out >= 2 output events observed at one boundary, T_e2e,r = TTFT_r + (N_r - 1)*TPOT_r exactly, so E[T_e2e] = E[TTFT] + E[(N_out - 1)*TPOT] = E[TTFT] + (E[N_out] - 1)*E[TPOT] + Cov(N_out, TPOT). The product of request means (mean(N_out) - 1)*mean(TPOT) is exact only when that covariance is zero or when TPOT is replaced by the gap-weighted mean sum(T_e2e - TTFT)/sum(N_out - 1) over the same population. Counterexample: requests (N=2, TPOT=10 ms) and (N=4, TPOT=2 ms) have mean post-first-output time 8 ms, while the product of request means gives 12 ms; the gap-weighted mean 4 ms times mean(N-1)=2 recovers 8 ms."
+    provenance: "DERIVED"
+    domain: "latency_metrics"
+    concepts:
+      - "ttft_itl_decomposition"
+      - "tpot_aggregation"
+      - "littles_law"
+      - "concurrency_sizing"
+    confidence: "high"
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions:
+      - "Same client- or engine-side observation boundary and population for TTFT, TPOT, and T_e2e."
+      - "Each request has N_out >= 2 output events; N_out = 1 requests are reported as a separate class with T_e2e = TTFT."
+      - "One observed event per token, or TPOT is consistently defined per event (see CLM-008)."
+    derivation: "Take expectations of the per-request identity and expand E[XY] = E[X]E[Y] + Cov(X,Y) with X = N_out - 1 and Y = TPOT. For the counterexample: post-first-output times are 1*10 = 10 ms and 3*2 = 6 ms, mean 8 ms; mean(N-1) = 2, mean(TPOT) = 6 ms, product 12 ms; population covariance ((1-2)(10-6) + (3-2)(2-6))/2 = -4 ms, and 12 - 4 = 8 ms; gap-weighted mean 16 ms / 4 gaps = 4 ms, 2 * 4 = 8 ms. Recomputed independently in Python on 2026-09-30."
+    limitations:
+      - "An identity for means only; it gives no percentile or tail information."
+      - "Stage-level TTFT and TPOT can also covary with N_out through batching and scheduling, so request-weighted means from dashboards may not satisfy the product form."
+    applicability: "Concurrency sizing (Lesson 4.7 Step 2) and interpretation of aggregated TPOT/ITL dashboards."
+    related_claims: ["CLM-004", "CLM-008"]
+    curriculum_usage:
+      lessons: ["4.1", "4.7"]
+      assessments: ["Mastery-04"]
+
+  - id: CLM-016
+    claim: "SYNTHETIC LESSON 4.5 WORKED-EXAMPLE INPUTS (exercise assumptions, not measurements): a 500 MiB preempted state (4,000 tokens at 128 KiB/token), an effective transfer bandwidth of 25 GiB/s per direction without overlap, a separately timed recomputation of 310 ms, and a declared peak of 500e12 FLOP/s used only for an analytical bound."
+    provenance: "EXERCISE_ASSUMPTION"
+    domain: "runtime_scheduling"
+    concepts:
+      - "preemption_mechanisms"
+      - "kv_swapping"
+      - "kv_recomputation"
+    confidence: "high"
+    currentness_status: "WORKLOAD-DEPENDENT"
+    assumptions:
+      - "Values are chosen for arithmetic and describe no specific GPU, interconnect, model, or runtime."
+    limitations:
+      - "The pinned vLLM V1 path recomputes rather than swaps; the comparison is a design exercise."
+    applicability: "Lesson 4.5 worked example."
+    related_claims: ["CLM-007", "CLM-018"]
+    curriculum_usage:
+      lessons: ["4.5"]
+      labs: ["LAB-D"]
+
+  - id: CLM-017
+    claim: "Logical weight payload in bytes is P*B_param with P the absolute parameter count (or 1e9*P_B when P_B is quoted in billions); 70e9 parameters at 2 bytes are 140e9 bytes = 140 GB ~= 130.39 GiB, not 140 GiB. A resident weight footprint depends on runtime, sharding, replicated tensors, and allocator behavior and must be measured or declared separately."
+    provenance: "DERIVED"
+    domain: "capacity_planning"
+    concepts:
+      - "weight_memory_footprint"
+      - "unit_conversion"
+    confidence: "high"
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions:
+      - "1 GB = 1e9 bytes; 1 GiB = 2^30 bytes."
+      - "Dense storage at B_param bytes per parameter; quantization scales, padding, and replicated tensors excluded."
+    derivation: "70e9 * 2 = 1.4e11 bytes; 1.4e11 / 1e9 = 140 GB; 1.4e11 / 2^30 = 130.385... GiB. Likewise 8e9 * 2 = 1.6e10 bytes ~= 14.90 GiB (Lesson 4.7 worked example). Recomputed in Python on 2026-09-30."
+    limitations:
+      - "Payload is not the resident footprint: with all weights on-device it is a lower bound on total resident weight memory, but the per-device share depends on sharding and replication, and offloading changes both; measure the runtime's actual allocation."
+    applicability: "Lesson 4.7 capacity model Step 1 and the Mastery fixture."
+    related_claims: ["CLM-012"]
+    curriculum_usage:
+      lessons: ["4.7"]
+      assessments: ["Mastery-04"]
+
+  - id: CLM-018
+    claim: "Given the CLM-016 synthetic inputs, the payload-only transfer round trip is bounded below by 2 * 500 MiB / (25 GiB/s) = 39.0625 ms (19.53125 ms each way); the analytical dense recompute bound 2 * 8e9 * 4,000 / 500e12 FLOP/s = 128 ms lies below the synthetic 310 ms measurement; and payload-only transfer would equal the 310 ms recompute at an effective bandwidth of about 3,226 MiB/s (~3.15 GiB/s). These are bounds and a break-even point, not latency predictions."
+    provenance: "DERIVED"
+    domain: "runtime_scheduling"
+    concepts:
+      - "preemption_mechanisms"
+      - "kv_swapping"
+      - "kv_recomputation"
+      - "unit_conversion"
+    confidence: "high"
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions:
+      - "Inputs exactly as declared in CLM-016; 1 GiB = 1,024 MiB."
+      - "Transfer time is at least payload divided by effective bandwidth; DMA setup, synchronization, gather/scatter, and contention only add time."
+      - "The 2P FLOP/token dense approximation excludes attention-score FLOPs."
+    derivation: "500 / (25 * 1024) s = 0.01953125 s; doubled = 0.0390625 s. 2 * 8e9 * 4000 = 6.4e13 FLOP; / 5e14 FLOP/s = 0.128 s. Break-even: 2 * 500 MiB / 0.310 s = 3225.8 MiB/s = 3.150 GiB/s. Ratio 310 / 39.0625 = 7.94. Recomputed in Python on 2026-09-30."
+    limitations:
+      - "A measured round trip below 39.0625 ms would indicate a wrong bandwidth figure or timing boundary."
+      - "Loaded-system recompute competes with other requests' prefill/decode; compare measured alternatives under the same load."
+    applicability: "Lesson 4.5 worked example and LAB D cost parameterization."
+    related_claims: ["CLM-007", "CLM-016"]
+    curriculum_usage:
+      lessons: ["4.5"]
+      labs: ["LAB-D"]

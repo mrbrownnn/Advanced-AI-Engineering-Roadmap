@@ -39,13 +39,14 @@ depth_contract:
   research_connection: SELECTIVE
 
 estimated_effort:
-  instruction: 5h
-  guided_practice: 3h
-  labs: 12h
-  assessment: 3h
-  source_trace: 2h
-  total: 25h
+  instruction: 5h        # sum of lesson instruction estimates: 40+40+40+45+45+40+50 min
+  guided_practice: 1.5h  # sum of in-lesson practice: 20 (4.1) + 15 (4.4) + 15 (4.5) + 20 (4.6) + 20 (4.7) min; 4.2/4.3 practice is inside Labs A/B
+  labs: 14h              # LAB A 4h + LAB B 3.5h + LAB C 3h + LAB D 3.5h
+  assessment: 3h         # Mastery transfer problem 2.5h + Incident 04.1 0.5h
+  source_trace: 2h       # Lesson 4.5 guided trace and the Section 09 Production Source Trace artifact are one activity, counted once here
+  total: 25.5h
 ```
+Each category is counted once. The source trace is not also counted as Lesson 4.5 practice or assessment time, and lab analysis is not counted again as guided practice.
 
 ---
 
@@ -65,7 +66,7 @@ How do we define client-visible latency components precisely enough to narrow co
 - **Request Lifecycle**: An incoming request can pass through client/network transit, gateway processing, tokenization and validation, admission, scheduler waiting, prompt processing, first-token sampling and emission, autoregressive decode, output buffering/streaming, and completion or cancellation. Implementations may overlap or reorder some stages, so timestamps must be defined at explicit boundaries.
 - **Time-to-First-Token (TTFT)**: The elapsed wall-clock duration between a declared request-arrival boundary and receipt of the first output event. Client-observed TTFT can include ingress and egress transit, gateway and host work, scheduler queueing, prompt processing, sampling, serialization, and buffering; engine-reported TTFT may use narrower boundaries.
 - **Inter-Token Latency (ITL)**: The elapsed duration between consecutive output events at a declared observation boundary. Client-observed ITL can include scheduling, execution, sampling, buffering, and transport; an engine-side token timestamp uses a narrower definition. In a streaming interface, the upper tail affects perceived generation smoothness.
-- **Time-Per-Output-Token (TPOT)**: The average decode latency across all generated tokens for a request: $(T_{e2e} - T_{TTFT}) / (N_{out} - 1)$. While TPOT represents the mean, ITL tracks the per-token distribution, capturing tail jitter and stalls.
+- **Time-Per-Output-Token (TPOT)**: The average decode latency across all generated tokens for a request: $(T_{e2e} - T_{TTFT}) / (N_{out} - 1)$. While TPOT represents the mean, ITL tracks the per-token distribution, capturing tail jitter and stalls. Aggregating across requests requires a declared weighting. A request-weighted mean averages each request's TPOT. A gap-weighted mean divides all post-first-output time by all inter-output gaps. These differ when output length and TPOT are correlated (see Lesson 4.7, Step 2).
 - **End-to-End Latency ($T_{e2e}$)**: Total wall-clock time from initial request arrival to final token emission.
 
 **Quantitative Model / Derivation:**
@@ -235,6 +236,11 @@ Under which assumptions does queueing delay grow nonlinearly near capacity, and 
   $$L = \lambda W$$
   The average number of requests in the system ($L$) equals arrival rate ($\lambda$) multiplied by average residence time ($W = T_{e2e}$).
   Similarly, for the waiting queue alone: $L_q = \lambda W_q$, where $L_q$ is average queue depth and $W_q$ is average queue wait time ($T_{queue}$).
+  *Conditions* ([Little, 2011, §2 and §3](https://pubsonline.informs.org/doi/10.1287/opre.1110.0940)):
+  - *Finite window $[0,T]$*: If the boundary is empty at both $0$ and $T$, then $L=\lambda W$ holds exactly, with $L$ the time-average count, $\lambda$ = arrivals$/T$, and $W$ the mean time in the boundary. If requests are present at either end, the identity still holds only when $W$ counts time accrued inside the window. The full sojourn of a request that straddles the window edge does not satisfy it.
+  - *Long run*: The identity holds when the long-run arrival rate and mean residence limits exist and are finite. It needs neither Poisson arrivals, stationarity, nor a particular queue discipline.
+  - *Boundary*: $L$, $\lambda$, and $W$ must describe the same boundary and population. Use admitted arrivals, not offered arrivals, when rejected requests never enter. $L$ for an end-to-end boundary counts waiting, resident, and still-streaming requests. It is not the number of resident GPU sequences holding KV. That count needs its own boundary: $L_{resident}=\lambda_{admitted}\,\mathbb{E}[T_{resident}]$.
+  - Little's Law is a conservation identity for averages. It says nothing about percentiles, and it does not predict $W$ from $\lambda$ without a service model.
 - **Saturation Knee**: An empirically observed workload-specific region where additional offered load causes queue delay, rejection, or SLO misses to rise sharply relative to useful completions. There is no universal safe-utilization interval.
 
 **Quantitative Model / Derivation:**
@@ -265,7 +271,7 @@ Notice: Moving from $\rho = 0.80$ to $\rho = 0.95$ (an 18% increase in arrival r
 2. If an initially empty deterministic fluid queue receives $\lambda=15$ req/s while departures remain fixed at $\mu=10$ req/s for 20 seconds, with no drops or cancellations, what backlog does that model predict?
 
 **Feedback Contract:**
-- *Expected Evidence*: (1) By Little's Law, $L = \lambda W = 40 \times 2.5 = 100$ concurrent requests. (2) Unstable queue growth: $dL_q/dt = \lambda - \mu = 15 - 10 = 5\text{ req/s}$. Over 20 seconds, accumulated queue depth $= 5 \times 20 = 100$ requests waiting.
+- *Expected Evidence*: (1) By Little's Law, $L = \lambda W = 40 \times 2.5 = 100$ concurrent requests. (2) Unstable queue growth: $dL_q/dt = \lambda - \mu = 15 - 10 = 5\text{ req/s}$. Over 20 seconds, accumulated queue depth $= 5 \times 20 = 100$ requests waiting. On the hint: the finite-window form of Little's Law still holds as an accounting identity over the burst window if $W$ counts only in-window time. The long-run form cannot be used to predict residence time during the burst, because no limit exists while backlog grows.
 - *Diagnostic Hint*: Can Little's Law be applied during the transient 20-second burst when $\lambda > \mu$?
 - *Concept to Revisit*: Steady-State Assumption in Little's Law vs Transient Accumulation.
 
@@ -307,10 +313,25 @@ This pseudocode is explanatory; the required artifact must cite the actual pinne
   $$T_{swap\_roundtrip} \ge \frac{2 \times 4\text{ GiB}}{25\text{ GiB/s}} = 0.32\text{ s} = 320\text{ ms}$$
 - *Idealized cost of recomputation*:
   $$T_{recompute} = T_{prefill}(N_{in} + N_{gen\_so\_far}) \approx \frac{2 \cdot P \cdot (N_{in} + N_{gen\_so\_far})}{\text{Peak\_Compute\_FLOPs}}$$
-These are lower-bound comparisons. Effective bandwidth, overlap, serialization, current load, kernel efficiency, and timeout/cancellation behavior must be measured.
+  Here $P$ is the absolute parameter count, not billions. $2P$ FLOP per token is the dense matrix-multiply approximation and excludes attention-score work, which grows with context length. The denominator is in FLOP/s, so the result is in seconds.
+These are lower-bound comparisons. Effective bandwidth, overlap, serialization, current load, kernel efficiency, and timeout/cancellation behavior must be measured. Keep binary and decimal units apart: 1 GiB $=2^{30}$ bytes and 1 GB $=10^9$ bytes.
 
 **Worked Example:**
-Given a hypothetical 500 MiB state payload and a **measured** 25 GiB/s effective transfer path, calculate the ideal round-trip transfer lower bound. Compare it with a separately measured recomputation time. Do not substitute peak link bandwidth or peak FLOPs for those measurements.
+*Inputs.* All values below are **synthetic exercise values**, not measurements of any system.
+- Preempted state payload: 500 MiB. At the 128 KiB/token logical KV footprint of the Lesson 4.7 8B example, that is $500\cdot2^{20}/(128\cdot2^{10})=4{,}000$ tokens.
+- Effective transfer bandwidth, stated as a synthetic "measured" value: 25 GiB/s in each direction. Transfer is not overlapped with other traffic.
+- Recomputation of those 4,000 tokens on the same device, timed separately (synthetic value): 310 ms.
+- Declared peak compute used only for an analytical bound (synthetic value): $500\times10^{12}$ FLOP/s.
+
+*Step 1: transfer lower bound.* The unit conversion is $500\text{ MiB}/(25\text{ GiB/s})=500/(25\times1024)\text{ s}=19.53125\text{ ms}$ one way. Out and back:
+$$T_{swap\_roundtrip}\ge2\times19.53125\text{ ms}=39.0625\text{ ms}$$
+This is payload only. DMA setup, synchronization, block gather/scatter, and contention can only add time. If a real round-trip measurement comes out below 39.0625 ms, the bandwidth figure or the timing boundary is wrong.
+
+*Step 2: analytical recompute lower bound.* This is for comparison, not prediction: $2\times(8\times10^9)\times4{,}000/(500\times10^{12})=0.128\text{ s}=128\text{ ms}$. The synthetic measured 310 ms lies above it, as expected, because kernels do not run at peak and attention work is excluded from the bound.
+
+*Step 3: compare like with like.* Compare the measured recompute time (310 ms) with the measured transfer time. Neither should be replaced by a bound. The transfer *lower bound* is $310/39.0625\approx7.9\times$ smaller. The break-even effective bandwidth, at which payload-only transfer equals the 310 ms recompute, is $2\times500\text{ MiB}/0.310\text{ s}\approx3{,}226\text{ MiB/s}\approx3.15\text{ GiB/s}$.
+
+*Interpretation and limits.* In this fixture, transfer wins only if its measured round trip, including overheads and contention, stays well below 310 ms. It must also not steal bandwidth that other requests need, and host memory must be available for the swapped state. The lower bound is not a latency prediction. The pinned vLLM V1 path in this lesson recomputes rather than swaps, so this comparison is a design exercise, not a description of that runtime. Recompute on a loaded device competes with other requests' prefill and decode work. Measure both alternatives under the same load before choosing.
 
 **Knowledge Check:**
 1. Under what condition does enabling CPU KV swapping degrade total cluster throughput worse than immediately aborting preempted requests?
@@ -322,12 +343,12 @@ Given a hypothetical 500 MiB state payload and a **measured** 25 GiB/s effective
 - *Concept to Revisit*: LIFO Preemption Victim Selection.
 
 **Guided Practice:**
-Trace `vllm/v1/core/sched/scheduler.py` at commit `25b0add7b8a1c944d5c4e364f2de6aa82497a2ad`: `Scheduler.schedule()` → `KVCacheManager.allocate_slots()` failure → victim selection → `Scheduler._preempt_request()`. Contrast this verified V1 path with the older V0 SWAP/RECOMPUTE design.
+Trace `vllm/v1/core/sched/scheduler.py` at commit `25b0add7b8a1c944d5c4e364f2de6aa82497a2ad`: `Scheduler.schedule()` → `KVCacheManager.allocate_slots()` failure → victim selection → `Scheduler._preempt_request()`. Contrast this verified V1 path with the older V0 SWAP/RECOMPUTE design. Also locate the separate `allocate_slots()` call for *waiting* requests, and state what happens when it fails. At the pinned revision, that failure stops admission for the step rather than selecting a victim. A trace that merges the two paths is incomplete.
 
 **Learning Outcome:**
 Analyze scheduler priority arbitration and evaluate when delay, rejection, recomputation, transfer, or reservation policies reduce useful work or create repeated preemption.
 
-*(Effort: 45m instruction, 15m practice)*
+*(Effort: 45m instruction, 15m practice on the worked example and knowledge checks. The guided source trace is counted once, under `source_trace`.)*
 
 ---
 
@@ -422,19 +443,39 @@ Given:
 - Target peak arrival rate: $\lambda_{peak}\text{ req/s}$
 - Mean prompt length: $\bar{N}_{in}$; Mean decode length: $\bar{N}_{out}$
 - TTFT SLO: $T_{TTFT\_SLO}$; ITL SLO: $T_{ITL\_SLO}$
-- Model parameters: $P\text{ billion}$; Precision: $B_{param}\text{ bytes/param}$
+- Model parameters: $P$ = absolute parameter count (a "70B" model has $P=70\times10^9$); Precision: $B_{param}\text{ bytes/param}$
 - GPU specs: HBM capacity $M_{gpu}$, Memory bandwidth $BW_{mem}$, FP16 Peak Tensor Compute $C_{peak}$
 
 *Step 1: Weight and Static Memory Footprint*:
-$$M_{weights} = P \times B_{param}$$
+$$M_{weights,payload}\,[\text{bytes}] = P \times B_{param}$$
+If $P$ is quoted in billions ($P_B$), use $M_{weights,payload}=10^9\,P_B\,B_{param}$ bytes. Convert explicitly: divide by $10^9$ for GB or by $2^{30}$ for GiB. Example: $70\times10^9\times2\text{ bytes}=140\times10^9\text{ bytes}=140\text{ GB}\approx130.39\text{ GiB}$, *not* 140 GiB. This is the logical payload. The resident weight footprint $M_{weights,resident}$ also depends on the runtime, sharding, replicated tensors, and allocator, so measure it or declare it as an exercise input.
 $$M_{KV\_available} = M_{device,usable} - M_{weights,resident} - M_{nonKV,measured} - M_{headroom}$$
 The non-KV term and allocator/headroom policy are measured for the selected runtime and configuration; they are not universal constants.
 
 *Step 2: Concurrency Sizing via Little's Law*:
-Average request duration:
-$$W = T_{TTFT} + (\bar{N}_{out} - 1) \times T_{ITL}$$
+Per request $r$ with $N_r\ge2$ output events at one observation boundary, Lesson 4.1 gives the exact identity $T_{e2e,r}=TTFT_r+(N_r-1)\,TPOT_r$. A request with $N_r=1$ has $T_{e2e,r}=TTFT_r$ and no TPOT, so report it as a separate class; do not assign it a TPOT of zero. Averaging over the same population of $N\ge2$ requests:
+$$\mathbb{E}[T_{e2e}] = \mathbb{E}[TTFT] + \mathbb{E}[(N_{out}-1)\,TPOT]$$
+$$\mathbb{E}[(N_{out}-1)\,TPOT]=(\mathbb{E}[N_{out}]-1)\,\mathbb{E}[TPOT]+\mathrm{Cov}(N_{out},TPOT)$$
+The product of means $(\bar N_{out}-1)\times\overline{TPOT}$ is therefore exact only in two cases:
+- the covariance is zero, for example when TPOT does not vary with output length; or
+- $\overline{TPOT}$ is replaced by the gap-weighted mean over the same population, $\overline{ITL}_{gap}=\sum_r (T_{e2e,r}-TTFT_r)/\sum_r (N_r-1)$.
+
+Otherwise it is an approximation, and its error is the covariance term.
+
+*Counterexample (two requests):*
+
+| Request | $N_{out}$ | $TPOT$ | Post-first-output time |
+|---|---:|---:|---:|
+| A | 2 | 10 ms | 10 ms |
+| B | 4 | 2 ms | 6 ms |
+
+- True mean post-first-output time: $(10+6)/2=8\text{ ms}$.
+- Product of request means: $\overline{N_{out}-1}=2$ and $\overline{TPOT}=6\text{ ms}$, which gives $12\text{ ms}$. That overstates the mean by 50%. The population covariance is $-4\text{ ms}$, and $12-4=8$.
+- Gap-weighted mean: $\overline{ITL}_{gap}=16\text{ ms}/4\text{ gaps}=4\text{ ms}$. Then $2\times4=8\text{ ms}$, which is correct.
+
 Target average concurrency:
-$$L = \lambda_{peak} \times W$$
+$$L = \lambda \times \mathbb{E}[T]$$
+Here $\lambda$ and $\mathbb{E}[T]$ must share the boundary of the $L$ you need, under the Lesson 4.4 conditions. Use end-to-end time to get requests in the system. For KV sizing, use admitted rate times mean *resident* time, from KV allocation to release. Queued requests usually hold no KV, so end-to-end $L$ is not the resident-sequence count. $\lambda_{peak}$ inserted into a mean identity sizes a sustained peak only if that peak lasts long enough for the averages to settle. Size bursts and tails with load tests.
 
 *Step 3: KV Cache Concurrency Ceiling*:
 Per-request peak KV memory demand:
@@ -454,8 +495,12 @@ If the rough $L_{KV\_max}$ estimate is below required resident concurrency, KV c
 - Logical KV payload per request: $2,560 \times 128\text{ KiB}=320\text{ MiB}=0.3125\text{ GiB}$, before allocator metadata, block rounding, and prefix sharing.
 - Maximum memory concurrency:
   $$L_{KV\_max,logical}=\left\lfloor\frac{60\text{ GiB}}{0.3125\text{ GiB}}\right\rfloor=192\text{ concurrent requests}$$
-If expected workload has $\lambda = 50\text{ req/s}$ and $W = 5\text{ s}$, then $L = 50 \times 5 = 250\text{ concurrent requests}$.
-Because the mean-value concurrency estimate exceeds the simplified KV ceiling, this configuration fails the analytical screening check. It does not prove a crash or prescribe one remedy; run a workload-faithful load sweep and compare admission, replication, model placement, representation, and SLO trade-offs.
+Suppose the workload has an admitted rate of $\lambda = 50\text{ req/s}$ and a mean *resident* time of $\mathbb{E}[T_{resident}] = 5\text{ s}$, measured from KV allocation to release (exercise assumption). Then $L_{resident} = 50 \times 5 = 250$ resident sequences on average. Only the resident count is comparable with the KV ceiling. An end-to-end $W$ of 5 s would include queue time and overstate the resident count. The exact time-average KV demand is $\lambda\,\mathbb{E}[\int KV_r(t)\,dt]$ over each request's residency. The screening product $L_{resident}\times KV_{req}(\bar N_{in}+\bar N_{out})$ differs from it in two opposing ways:
+- It overstates demand, because KV grows during decode and does not sit at its final size for the whole residency.
+- It can understate demand, because longer requests both hold more KV and stay resident longer (positive covariance, the same issue as in Step 2).
+
+Its direction is therefore not guaranteed. Neither form covers length tails or bursts.
+Because the mean-value resident-concurrency estimate exceeds the simplified KV ceiling, this configuration fails the analytical screening check. It does not prove a crash or prescribe one remedy; run a workload-faithful load sweep and compare admission, replication, model placement, representation, and SLO trade-offs.
 
 **Knowledge Check:**
 1. A cluster exhibits elevated P99 TTFT, low sampled SM activity, and abundant free KV blocks. Give at least three competing hypotheses and the next discriminating measurement.
@@ -463,41 +508,68 @@ Because the mean-value concurrency estimate exceeds the simplified KV ceiling, t
 
 **Feedback Contract:**
 - *Expected Evidence*: A ranked hypothesis set—not an exactly-one classifier—using queue residency, request states, host/GPU timelines, kernel counters, KV state, and client/network timing.
-- *Diagnostic Hint*: If SM utilization is 35% and memory is free, is the GPU doing work while the request waits?
-- *Concept to Revisit*: Serving Bottleneck Discrimination Matrix.
+- *Expected Evidence (Guided Practice)*:
+  - $L=20\times8=160$ requests inside the end-to-end boundary. Because resident time is at most $W$, at most 160 are resident on average, and fewer if queueing time is positive.
+  - At the stated footprint, 160 residents would need $160\times2.0=320\text{ GiB}$ of KV. This is a screening value, not a bound (see the caveats in the worked example above).
+  - Weights are the declared 140 GiB resident per model copy. Do not recompute them as $70\times10^9\times2$ bytes, which is $\approx130.39$ GiB of payload. The declared figure is an independent exercise input.
+  - The combined screening figure is $\approx460\text{ GiB}$ for one copy serving that load, before non-KV memory and headroom.
+  - A submission that turns this into a GPU count without declaring usable memory per device, sharding, and replica count is incomplete.
+- *Common Failure*: Computing $(\bar N_{out}-1)\times\overline{TPOT}$ from request-weighted means when length and TPOT covary, or comparing end-to-end $L$ with a KV ceiling.
+- *Diagnostic Hint*: If SM utilization is 35% and memory is free, is the GPU doing work while the request waits? For sizing: which boundary does your $W$ describe, and do queued requests hold KV there?
+- *Concept to Revisit*: Serving Bottleneck Discrimination Matrix; Little's Law boundary conditions (Lesson 4.4).
 
 **Guided Practice:**
-For a 70B exercise with a stated $140\text{ GiB}$ resident weight footprint, $\lambda=20\text{ req/s}$, mean response time $W=8\text{ s}$, and a stated logical $KV_{req}=2.0\text{ GiB}$, compute the mean-concurrency requirement and memory lower bounds. Then list the missing placement, parallelism, per-replica service curve, tail-latency, burst, allocator, failure-headroom, and workload-distribution measurements that prevent these averages from determining an exact H100 count.
+For a 70B exercise with a stated $140\text{ GiB}$ resident weight footprint (an independent exercise input, not derived from the parameter count), $\lambda=20\text{ req/s}$ admitted, mean end-to-end response time $W=8\text{ s}$, and a stated logical $KV_{req}=2.0\text{ GiB}$, do the following:
+1. Compute the mean-concurrency requirement, and say which boundary it describes.
+2. Compute the memory screening values.
+3. List the missing placement, parallelism, per-replica service curve, resident-time, tail-latency, burst, allocator, failure-headroom, and workload-distribution measurements that prevent these averages from determining an exact H100 count.
 
 **Learning Outcome:**
 Discriminate queueing, compute, and memory bottlenecks from production telemetry and calculate hardware provisioning requirements from workload parameters.
 
-*(Effort: 45m instruction, 15m practice)*
+*(Effort: 50m instruction, 20m practice)*
 
 ---
 
 ## 05 Literature & Production Source Map
 
+Section pointers below were re-checked against the linked full texts on 2026-09-30. Each entry's *Scope* says what the module uses it for, and nothing more.
+
 **CANONICAL**
-- *Orca: A Distributed Serving System for {Transformer-Based} Generative Models* (Yu et al., OSDI 2022). [Mechanism: Continuous Batching & Iteration-Level Scheduling]
-- *Why it matters*: Established iteration-level scheduling and selective batching as reference serving mechanisms.
-  - *Key Sections*: Section 3 (Iteration-Level Scheduling), Section 4 (Selective Batching).
-- *Efficient Memory Management for Large Language Model Serving with PagedAttention* (Kwon et al., SOSP 2023). [Mechanism: Paged KV Cache & vLLM Architecture]
+- *Orca: A Distributed Serving System for {Transformer-Based} Generative Models* (Yu et al., OSDI 2022). [Mechanism: Continuous Batching & Iteration-Level Scheduling] — [USENIX page](https://www.usenix.org/conference/osdi22/presentation/yu) · [PDF](https://www.usenix.org/system/files/osdi22-yu.pdf)
+  - *Why it matters*: Established iteration-level scheduling and selective batching as reference serving mechanisms.
+  - *Key Sections*: Section 3 (Challenges and Proposed Solutions: S1 iteration-level scheduling, S2 selective batching); Section 4.2 (Scheduling Algorithm).
+  - *Scope*: The reference mechanism for Lesson 4.2. Its evaluation numbers are specific to its models and hardware and are not used as general speedups.
+- *Efficient Memory Management for Large Language Model Serving with PagedAttention* (Kwon et al., SOSP 2023). [Mechanism: Paged KV Cache & vLLM Architecture] — [arXiv:2309.06180](https://arxiv.org/abs/2309.06180)
   - *Why it matters*: Demonstrated paged KV management and memory-aware serving; its scheduler implementation is historical, not the current vLLM V1 path.
-  - *Key Sections*: Section 4.3 (Memory-Aware Scheduling), Section 4.4 (Preemption via Swapping/Recomputation).
+  - *Key Sections*: Section 4.5 (Scheduling and Preemption: swapping vs. recomputation); Section 7.3 (Comparing Recomputation and Swapping).
+  - *Scope*: The historical swap/recompute design used for comparison in Lesson 4.5. Its Section 7.3 overhead ratios are measured on its own setup and do not transfer to other runtimes.
+- *Little's Law as Viewed on Its 50th Anniversary* (J. D. C. Little, Operations Research 59(3), 2011). — [DOI](https://pubsonline.informs.org/doi/10.1287/opre.1110.0940)
+  - *Key Sections*: Section 2 (finite-window theorems LL.1/LL.2: exactness, independence from stationarity and queue discipline); Section 3 (sample-path and stationary versions).
+  - *Scope*: The conditions on $L=\lambda W$ stated in Lessons 4.4 and 4.7. It does not supply any LLM service model.
 
 **PRODUCTION**
-- `vllm/v1/core/sched/scheduler.py` and `vllm/v1/core/kv_cache_manager.py`. Pinned commit: `25b0add7b8a1c944d5c4e364f2de6aa82497a2ad`; statically verified 2026-09-25.
+- `vllm/v1/core/sched/scheduler.py` and `vllm/v1/core/kv_cache_manager.py`. Pinned commit: `25b0add7b8a1c944d5c4e364f2de6aa82497a2ad`. Statically verified 2026-09-25 and statically re-inspected 2026-09-30; not executed. — [scheduler.py](https://github.com/vllm-project/vllm/blob/25b0add7b8a1c944d5c4e364f2de6aa82497a2ad/vllm/v1/core/sched/scheduler.py) · [kv_cache_manager.py](https://github.com/vllm-project/vllm/blob/25b0add7b8a1c944d5c4e364f2de6aa82497a2ad/vllm/v1/core/kv_cache_manager.py)
   - *Inspection Focus*: `Scheduler.schedule()`, `KVCacheManager.allocate_slots()`, and `Scheduler._preempt_request()`.
+  - *Scope*: One upstream snapshot. It says nothing about other releases or runtimes.
+- *Addressing Cascading Failures* (Google SRE Book, ch. 22, written by Mike Ulrich). — [sre.google](https://sre.google/sre-book/addressing-cascading-failures/)
+  - *Key Sections*: Queue Management; Load Shedding and Graceful Degradation; Retries.
+  - *Scope*: Generic overload-control practice for Lesson 4.6. Its thresholds, such as queue length relative to thread-pool size, are not LLM-serving constants.
 - Other production runtimes should be traced only at a pinned revision. Their queue, budgeting, and preemption semantics are comparison points, not assumed copies of vLLM; unpinned implementation claims remain `TODO_VERIFY`.
 
 **FRONTIER**
-- *Taming Throughput-Latency Tradeoff in LLM Inference with Sarathi-Serve* (Agrawal et al., OSDI 2024).
+- *Taming Throughput-Latency Tradeoff in LLM Inference with Sarathi-Serve* (Agrawal et al., OSDI 2024). — [USENIX page](https://www.usenix.org/conference/osdi24/presentation/agrawal) · [arXiv:2403.02310](https://arxiv.org/abs/2403.02310)
   - *Why it matters*: Provides measured evidence for chunked-prefill/decode-piggyback trade-offs on evaluated configurations.
-- *DistServe: Disaggregating Prefill and Decoding for Goodput-optimized Large Language Model Serving* (Zhong et al., OSDI 2024).
+  - *Key Sections*: Section 3 (Motivation: prefill/decode cost, throughput–latency trade-off); Sections 4.1–4.3 (chunked prefills, stall-free batching, token-budget selection).
+  - *Scope*: The scheduling pattern in Lesson 4.3. Its token budgets and reported gains are specific to its evaluated models, hardware, and SLOs.
+- *DistServe: Disaggregating Prefill and Decoding for Goodput-optimized Large Language Model Serving* (Zhong et al., OSDI 2024). — [USENIX page](https://www.usenix.org/conference/osdi24/presentation/zhong-yinmin) · [arXiv:2401.09670](https://arxiv.org/abs/2401.09670)
   - *Why it matters*: Evaluates phase disaggregation under explicit workloads and exposes placement and KV-transfer trade-offs.
-- *Splitwise: Efficient Generative LLM Serving Using Phase Splitting* (Patel et al., ISCA 2024).
+  - *Key Sections*: Sections 2.1–2.3 and Section 3 (prefill/decode characterization and trade-off analysis); Section 4 (placement and online scheduling).
+  - *Scope*: Evidence that phase behavior is workload- and hardware-dependent, and that disaggregation is a candidate intervention in the Mastery problem. Detailed disaggregated placement belongs to Module 20.
+- *Splitwise: Efficient Generative LLM Inference Using Phase Splitting* (Patel et al., ISCA 2024). — [Microsoft Research page](https://www.microsoft.com/en-us/research/publication/splitwise-efficient-generative-llm-inference-using-phase-splitting/) · [arXiv:2311.18677](https://arxiv.org/abs/2311.18677)
   - *Reading Priority*: DIRECTED_READ for understanding phase separation economics and network KV transfer overheads.
+  - *Key Sections*: Section III (Characterization); Section IV-C (KV-cache transfer).
+  - *Scope*: Characterization of its own production traces and hardware. It is a comparison point, not a default architecture.
 
 ---
 
@@ -571,21 +643,36 @@ $$\text{PREDICT} \to \text{BUILD} \to \text{MEASURE} \to \text{EXPLAIN} \to \tex
 ## 08 Mastery Assessment
 
 ### Enterprise Architecture Transfer Problem: Multi-Tenant Voice & Document Platform
-You are the Principal Inference Architect for an enterprise AI platform that serves two drastically different workloads on a shared cluster of 8 $\times$ NVIDIA H100 (80 GiB HBM3) GPUs running a 70B parameter model:
+You are the Principal Inference Architect for an enterprise AI platform that serves two drastically different workloads on a shared cluster of 8 $\times$ NVIDIA H100 SXM GPUs (vendor-listed as 80GB HBM3 on the [NVIDIA H100 page](https://www.nvidia.com/en-us/data-center/h100/); the usable capacity is the fixture value below, not the marketing figure) running a 70B parameter model:
 1. **Interactive Real-Time Voice Agent**: Requires strict streaming latency SLOs: P95 TTFT $< 300\text{ ms}$, P95 ITL $< 30\text{ ms}$. Average prompt: 400 tokens; average generation: 150 tokens. Traffic: 40 requests/sec with high burstiness.
 2. **Asynchronous Document Summarization**: Long-context batch jobs. Average prompt: 16,000 tokens; average generation: 800 tokens. Traffic: 2 requests/sec steady background volume.
 
-Under the current default single-engine deployment, whenever a document summarization request arrives, the voice agent experiences severe audio stuttering (P99 ITL spikes to $180\text{ ms}$), and conversational users frequently disconnect.
+Under the current baseline deployment, one engine with tensor parallelism across all 8 GPUs, the voice agent stutters badly whenever a document summarization request arrives (P99 ITL spikes to $180\text{ ms}$), and conversational users frequently disconnect.
 
 You must design a comprehensive serving architecture, scheduling configuration, and capacity allocation plan that targets the voice agent's strict SLOs while maximizing document summarization throughput, and define the load and failure tests required before making a production guarantee.
 
+**Workload Fixture (SYNTHETIC — exercise assumptions, not measurements of any real model, GPU, or runtime):**
+
+| Input | Fixture value |
+|---|---|
+| Parameters / weight precision | $P=70\times10^9$; 2 bytes/param. Logical payload is $140\times10^9$ bytes ($\approx130.39$ GiB). Assume even sharding under TP degree $t$, i.e. $130.39/t$ GiB of weights per GPU, ignoring replicated tensors. |
+| KV architecture | 80 layers, 8 KV heads, $d_{head}=128$, KV stored at 2 bytes/element on the same devices as the weights. KV heads shard evenly for $t\in\{1,2,4,8\}$. |
+| Usable device memory | 76.0 GiB per GPU after platform/runtime reservation |
+| Non-KV allocations + headroom | 6.0 GiB per GPU, the same for every $t$ (a simplification: state how a different measured value changes your answer) |
+| Measured mean times at baseline load | Voice: end-to-end 3.2 s, resident (KV allocation to release) 3.0 s. Documents: end-to-end 30 s, resident 28 s. |
+| Voice burst | 80 req/s for 15 s windows, a few times per hour |
+| Baseline step costs (TP=8 engine, synthetic) | decode-only step with ≤160 decodes: 20 ms; decode + 512-token prefill chunk: 27 ms; + 1,024: 34 ms; + 2,048: 48 ms; decode + unchunked 16,000-token prefill: 175 ms |
+| Unknown by design | Effective KV-transfer bandwidth between pools, step costs at other TP degrees, and the tail distributions. Measure them, or carry them as symbols. |
+
+You may replace any fixture value with your own measurement. If you do, record the model, hardware, runtime revision, configuration, and method. Every numerical answer is graded *conditionally on the inputs you declare*, and there is no single correct GPU count or configuration. Where an input is unknown, answer as a function of it. For example, the voice KV-transfer time is $171.875\text{ MiB}/B_{eff}$, and you must state the $B_{eff}$ at which an intervention stops meeting the ITL/TTFT budget.
+
 **Required Deliverables**:
 1. **Quantitative Workload & Resource Model**:
-   - Calculate parameter memory footprint, available KV cache memory per GPU, and per-request KV demand for both workloads.
-   - Apply Little's Law to calculate steady-state concurrency for both workloads.
+   - Calculate parameter memory footprint (bytes, GB, and GiB), available KV cache memory per GPU for each placement you consider, and per-request KV demand for both workloads.
+   - Apply Little's Law to calculate steady-state concurrency for both workloads, both end-to-end and resident. State the boundary and conditions for each, and give burst-window numbers separately from long-run means.
 2. **Bottleneck Prediction & Theoretical Analysis**:
-   - Formulate a formal hypothesis identifying the primary hardware bottleneck causing the voice agent ITL spikes.
-   - Explain why standard continuous batching fails to isolate these workloads.
+   - Formulate ranked competing hypotheses for the voice agent ITL spikes. Give the discriminating measurement for each, and say which fixture data support or weaken it.
+   - Explain why standard continuous batching does not by itself isolate these workloads.
 3. **Three Candidate Architectural Interventions**:
    - Formulate three technically distinct candidate interventions (e.g., (A) Aggressive Chunked Prefill with token budgeting; (B) Prefill-Decode Disaggregation with dedicated voice and summary pools; (C) Strict Priority Preemption with CPU KV Swapping).
 4. **Quantitative Derivation of Expected Effects**:
@@ -593,9 +680,9 @@ You must design a comprehensive serving architecture, scheduling configuration, 
 5. **Trade-Off & Failure Mode Analysis**:
    - Detail the operational risks, hardware utilization costs, and failure modes of each intervention.
 6. **Rejection of Inappropriate Interventions**:
-   - Explicitly analyze and reject at least one seemingly plausible intervention (e.g., explaining why simply increasing the global continuous batch size or relying on CPU swapping worsens the voice agent's latency collapse).
+   - Explicitly analyze and reject at least one seemingly plausible intervention using the fixture or your declared measurements. For example, test whether simply increasing the global continuous batch size, or relying on CPU swapping, would worsen voice latency. Reject it only if your inputs support that conclusion.
 7. **Final Architecture Defense**:
-   - Defend your recommended architecture, detailing exact scheduler settings (`max_num_batched_tokens`, chunk sizes, queue limits, admission control rules).
+   - Defend your recommended architecture with concrete scheduler settings, such as `max_num_batched_tokens`, chunk sizes, queue limits, and admission control rules. Tie each to the runtime and revision it applies to, and derive it from your declared inputs. These are initial settings to validate by load test, not guaranteed values.
 8. **Uncertainty, Falsification, & Rollback Strategy**:
    - Identify what workload change would falsify your design assumptions (e.g., voice prompts growing to 4,000 tokens).
    - Define exact operational metrics and automated rollback triggers that would reverse the architectural changes in production.
@@ -613,7 +700,28 @@ The trace must map out:
 4. How chunked prefill slices waiting requests into the scheduled token budget.
 5. One concrete policy trade-off where the production scheduler's heuristic favors one objective over another; do not assert a universally optimal queue discipline without an objective and queue model.
 
+### Reference Checks for Mastery Deliverables 1–2 (fixture inputs only)
+Reviewers use these values to check arithmetic, not to grade a design. A submission with different declared inputs is checked against its own inputs.
+
+- **Weights**: $70\times10^9\times2=140\times10^9$ bytes $=140$ GB $\approx130.39$ GiB. Per GPU at $t=2/4/8$: $\approx65.19/32.60/16.30$ GiB.
+- **KV pool**, from $76.0-130.39/t-6.0$:
+  - per GPU at $t=2/4/8$: $\approx4.81/37.40/53.70$ GiB;
+  - per replica: $\approx9.61/149.61/429.61$ GiB, with $4/2/1$ replicas.
+  - The 16,800-token document footprint alone ($\approx5.13$ GiB) exceeds a single $t=2$ GPU's KV pool. It fits only when sharded across the replica's pool of $\approx9.61$ GiB, so a $t=2$ replica holds at most one resident document at a time.
+- **KV bytes/token**: $2\times80\times8\times128\times2=327{,}680$ B $=320$ KiB.
+  - Voice at mean lengths: $550\times320\text{ KiB}=171.875$ MiB $\approx0.168$ GiB.
+  - Documents: $16{,}800\times320\text{ KiB}=5{,}250$ MiB $\approx5.13$ GiB.
+- **Little's Law, long-run means**:
+  - Voice: $40\times3.2=128$ end-to-end and $40\times3.0=120$ resident.
+  - Documents: $2\times30=60$ end-to-end and $2\times28=56$ resident.
+  - The resident screening demand at mean lengths is $\approx20.14+287.11=307.25$ GiB. That is below the single $t=8$ pool but above the $\approx299.23$ GiB total of two $t=4$ replicas. The caveats from Lesson 4.7 apply, and burst-window and tail demand must be analyzed separately.
+- **Step costs**: The fixture's 175 ms unchunked-prefill step is *consistent with* the 180 ms P99 ITL spike. It supports the prefill-interference hypothesis but does not prove it. At a 512-token chunk the mixed step is 27 ms, and at 1,024 tokens it is 34 ms, which already exceeds a 30 ms ITL target before any other overhead. With one 512-token chunk per step, a 16,000-token prompt needs $\lceil16{,}000/512\rceil=32$ steps, so at least $32\times27=864$ ms of document prefill span. That is the TTFT/throughput cost to weigh.
+
 ### Rubric Dimensions
+- **Conditional Quantitative Answers** (Mastery Deliverables 1, 4, 7):
+  - *Insufficient*: Reports one GPU count or setting as "the answer" from incomplete inputs, treats 70B × 2 bytes as 140 GiB, or compares end-to-end concurrency with a KV ceiling.
+  - *Competent*: Declares every input with its source (fixture, measurement, or assumption), keeps units and boundaries straight, and states the conditions under which each conclusion holds.
+  - *Strong*: Also gives the sensitivity to the unknown inputs, such as the transfer bandwidth or non-KV memory at which the recommendation flips, and the measurement that would resolve each one.
 - **Mechanistic Reasoning**: *Insufficient* describes high-level concepts without execution mechanisms. *Competent* explains step-by-step scheduler decisions and hardware contention. *Strong* links scheduler loop logic directly to GPU hardware execution regimes (Tensor Core saturation vs HBM bandwidth).
 - **Quantitative Reasoning**: *Insufficient* quotes formulas without assumptions. *Competent* applies Little's Law, qualified queueing models, and memory estimates with units and boundaries. *Strong* compares predictions with load measurements and explains where state-dependent service invalidates the analytical approximation.
 - **Experiment Design & Rigor**: *Insufficient* runs uninstrumented tests. *Competent* isolates variables and validates hypotheses with controlled workloads. *Strong* constructs rigorous falsification experiments and accounts for statistical variance across Monte Carlo trials.
@@ -626,13 +734,15 @@ The trace must map out:
 
 | Capability | Taught | Practiced | Assessed | Evidence |
 |---|---|---|---|---|
-| **Latency Metrics Decomposition** | Lesson 4.1 | Lesson 4.1 Guided Practice | LAB A / Mastery Deliverable 1 | Latency Profiler Trace / Workload Model |
-| **Continuous Batching Dynamics** | Lesson 4.2 | Lesson 4.2 Independent Practice | LAB A | Scheduler Simulator Code & Benchmark Report |
-| **Chunked Prefill & ITL Stabilization** | Lesson 4.3 | Lesson 4.3 Guided Practice | LAB B / Mastery Deliverable 3 | ITL Variance Measurement & Comparison Artifact |
-| **Queueing Theory & Little's Law** | Lesson 4.4 | Lesson 4.4 Guided Practice | LAB C / Mastery Deliverable 1 | M/G/1 Model Derivation & Empirical Plot |
-| **Preemption & Memory Arbitration** | Lesson 4.5 | Lesson 4.5 Guided Practice | LAB D / Incident 04.1 | Production Source Trace / Diagnostic Report |
+| **Latency Metrics Decomposition** | Lesson 4.1 | Lesson 4.1 Guided Practice | LAB A dependent variables (TTFT/TPOT) / Mastery Deliverable 1 | Latency Profiler Trace / Workload Model with declared timestamp boundaries |
+| **Continuous Batching Dynamics** | Lesson 4.2 | Lesson 4.2 Independent Practice (LAB A) | LAB A Break & Falsify | Scheduler Simulator Code & Benchmark Report |
+| **Chunked Prefill & ITL Stabilization** | Lesson 4.3 | Lesson 4.3 Independent Practice (LAB B) | LAB B / Mastery Deliverables 3–4 (checked against fixture step costs) | ITL Variance Measurement & Comparison Artifact |
+| **Queueing Theory & Little's Law** | Lesson 4.4 | Lesson 4.4 Guided Practice; Lesson 4.7 Step 2 counterexample | LAB C / Mastery Deliverable 1 (end-to-end vs resident concurrency, with boundary conditions) | M/G/1 Model Derivation & Empirical Plot; Reference Checks in Section 09 |
+| **Memory & Concurrency Sizing Units** | Lesson 4.7 Steps 1–3 | Lesson 4.7 Guided Practice | Mastery Deliverable 1 / Conditional Quantitative Answers rubric | Workload model with bytes/GB/GiB and declared inputs |
+| **Preemption & Memory Arbitration** | Lesson 4.5 | Lesson 4.5 Worked Example and Knowledge Check | LAB D / Incident 04.1 steps 3–5 | Diagnostic Report with measured or labeled synthetic transfer/recompute costs |
+| **Production Scheduler Source Trace** | Lesson 4.5 | Lesson 4.5 Guided Practice (pinned trace, including the waiting-path allocation failure) | Section 09 Required Artifact items 1–5 | Production Source Trace pinned to commit `25b0add7…` |
 | **Admission Control & Load Shedding** | Lesson 4.6 | Lesson 4.6 Guided Practice | LAB D / Mastery Deliverable 7 | Gateway Simulator & Goodput Curve |
-| **Bottleneck Discrimination** | Lesson 4.7 | Lesson 4.7 Guided Practice | Incident 04.1 / Mastery Deliverable 2 | Root Cause Analysis Protocol & Defense |
+| **Bottleneck Discrimination** | Lesson 4.7 | Lesson 4.7 Guided Practice | Incident 04.1 steps 1–7 / Mastery Deliverable 2 | Root Cause Analysis Protocol & Defense |
 
 ---
 

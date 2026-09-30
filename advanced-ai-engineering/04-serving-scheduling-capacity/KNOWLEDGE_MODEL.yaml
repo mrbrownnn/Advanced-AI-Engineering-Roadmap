@@ -1,5 +1,5 @@
 module: "04-serving-scheduling-capacity"
-registry_version: "1.1.0"
+registry_version: "1.2.0"
 
 required_concepts:
   - "continuous_batching"
@@ -77,12 +77,12 @@ mechanisms:
 
 mathematical_models:
   - id: "MATH-01"
-    description: "Latency decomposition model: T_e2e = T_queue + T_TTFT_compute + sum_{i=1}^{N_out - 1} ITL_i, where T_TTFT = T_queue + T_TTFT_compute and TPOT = (T_e2e - T_TTFT) / (N_out - 1). Distinguishes queue residency from execution latency."
-    evidence_ids: ["CLM-008"]
+    description: "Latency decomposition model: per request with N_out >= 2 at one observation boundary, T_e2e = TTFT + sum_{i=2}^{N_out} ITL_i, where TTFT = T_queue + T_first_output_after_queue and TPOT = (T_e2e - TTFT) / (N_out - 1). Across requests, E[T_e2e] = E[TTFT] + E[(N_out - 1) TPOT] = E[TTFT] + (E[N_out] - 1) E[TPOT] + Cov(N_out, TPOT); the product of request means is exact only with zero covariance or with the gap-weighted ITL mean (two-request counterexample: 8 ms true vs 12 ms product). N_out = 1 requests are a separate class."
+    evidence_ids: ["CLM-008", "CLM-015"]
     derived_from: []
 
   - id: "MATH-02"
-    description: "Little's Law and queue stability: Average concurrency L = lambda * W in steady state. For arrival rate exceeding maximum service rate (lambda > mu), queue depth grows linearly at rate dL_q/dt = lambda - mu."
+    description: "Little's Law and queue stability: L = lambda * W holds for long-run averages when the limits exist and are finite, and exactly over a finite window that is empty at both ends (or with W counting in-window time), independent of stationarity and queue discipline. L, lambda, and W must share one boundary: end-to-end L counts waiting, resident, and streaming requests and is not the resident KV-holding count, which is lambda_admitted * E[T_resident]. Separately, a constant-rate fluid model with lambda > mu from an empty queue grows as dQ/dt = lambda - mu; that is not a consequence of Little's Law."
     evidence_ids: ["CLM-004"]
     derived_from: []
 
@@ -96,6 +96,16 @@ mathematical_models:
     evidence_ids: ["CLM-009", "CLM-009b", "CLM-012"]
     derived_from: ["MATH-03"]
 
+  - id: "MATH-05"
+    description: "Memory sizing units: logical weight payload bytes = P * B_param with P the absolute parameter count (1e9 * P_B when quoted in billions); 70e9 * 2 bytes = 140e9 bytes = 140 GB ~= 130.39 GiB. Resident KV screening compares L_resident = lambda_admitted * E[T_resident] with M_KV_available / KV_req, where KV_req = 2 * layers * kv_heads * head_dim * bytes * (N_in + N_out); the product of means can over- or understate time-average KV demand because KV grows during decode and footprint covaries with residence time."
+    evidence_ids: ["CLM-017", "CLM-004", "CLM-012"]
+    derived_from: ["MATH-01", "MATH-02"]
+
+  - id: "MATH-06"
+    description: "Transfer versus recompute lower bounds: T_roundtrip >= 2 * state_bytes / effective_bandwidth (500 MiB at 25 GiB/s gives 39.0625 ms) and T_recompute >= 2 * P * tokens / peak_FLOP_per_s (dense approximation, attention excluded). Bounds and break-even bandwidths guide which measurements to take; they are not latency predictions."
+    evidence_ids: ["CLM-018", "CLM-016", "CLM-007"]
+    derived_from: []
+
 implementation_mechanisms:
   - id: "IMPL-01"
     description: "vLLM V1 step scheduler at commit 25b0add7b8a1c944d5c4e364f2de6aa82497a2ad: Scheduler.schedule() assigns work under max_num_scheduled_tokens and max_num_batched_tokens, schedules running requests before traversing waiting queues, and calls KVCacheManager.allocate_slots() for required KV capacity."
@@ -103,18 +113,18 @@ implementation_mechanisms:
     derived_from: []
 
   - id: "IMPL-02"
-    description: "vLLM V1 preemption path at the pinned commit: when allocate_slots() cannot provide blocks, Scheduler.schedule() selects a victim according to PRIORITY or queue order and calls Scheduler._preempt_request(); that method frees request blocks, marks PREEMPTED, resets num_computed_tokens to zero, increments num_preemptions, and prepends the request to the waiting queue."
+    description: "vLLM V1 preemption path at the pinned commit: when allocate_slots() cannot provide blocks, Scheduler.schedule() selects a victim according to PRIORITY or queue order and calls Scheduler._preempt_request(); that method frees request blocks, marks PREEMPTED, resets num_computed_tokens to zero, increments num_preemptions, and prepends the request to the waiting queue. Allocation failure for a waiting request stops admission for the step rather than preempting (statically re-inspected 2026-09-30)."
     evidence_ids: ["CLM-007", "CLM-013"]
     derived_from: []
 
 failure_modes:
   - id: "FAIL-01"
-    description: "Preemption thrashing: When continuous batching admits too many concurrent long-output requests, memory exhaustion causes requests to repeatedly swap or recompute without completing, reducing goodput to near zero."
+    description: "Preemption thrashing (hypothesis to verify with counters): when admitted resident work outgrows KV capacity, repeated preemption with recomputation (or state transfer, in runtimes that support it) can consume capacity without completing requests and reduce SLO-compliant goodput. How far goodput falls depends on policy, workload, and admission limits; counters and traces must show the loop before it is diagnosed."
     evidence_ids: ["CLM-007", "CLM-009b"]
     derived_from: []
 
   - id: "FAIL-02"
-    description: "Decode ITL spikes from monolithic prefills: Large unchunked prompt arrivals seize the GPU compute pipeline, stalling all running decodes for hundreds of milliseconds and violating streaming TPOT SLOs."
+    description: "Decode ITL spikes from monolithic prefills (workload-dependent): when a long unchunked prefill shares a scheduling step or device with running decodes, those decodes can wait for the prefill work, producing ITL spikes whose size depends on prompt length, hardware, kernels, and scheduler policy; a time-aligned step/kernel trace is needed to confirm the mechanism."
     evidence_ids: ["CLM-002b", "CLM-003"]
     derived_from: []
 
@@ -164,8 +174,11 @@ candidate_capabilities:
   - capability: "Apply Little's Law and qualified queueing approximations as mean-value sanity checks, then determine SLO-constrained operating headroom from workload-faithful load, burst, overload, and recovery measurements."
     mapped_mechanisms: ["MATH-02", "MATH-03", "MATH-04"]
 
+  - capability: "Size weight and KV memory with explicit units and boundaries (absolute parameter counts, bytes/GB/GiB, end-to-end versus resident concurrency), and give conditional answers when placement, non-KV memory, or transfer bandwidth are unknown."
+    mapped_mechanisms: ["MATH-01", "MATH-02", "MATH-05"]
+
   - capability: "Analyze scheduler priority policies, KV memory exhaustion, and delay, rejection, recomputation, transfer, or reservation trade-offs, including workloads that trigger repeated preemption."
-    mapped_mechanisms: ["MECH-04", "MECH-05", "IMPL-01", "IMPL-02", "FAIL-01"]
+    mapped_mechanisms: ["MECH-04", "MECH-05", "MATH-06", "IMPL-01", "IMPL-02", "FAIL-01"]
 
   - capability: "Design and implement admission control, backpressure, and load shedding strategies to protect system goodput under burst overload."
     mapped_mechanisms: ["MECH-06", "FAIL-03", "PROD-02"]
