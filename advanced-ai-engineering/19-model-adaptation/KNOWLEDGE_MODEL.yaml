@@ -1,15 +1,21 @@
 module: "19-model-adaptation"
-registry_version: "1.0.0"
+registry_version: "1.1.0"
 
-required_concepts: [adapt_vs_retrieve, model_states, optimizer_states, lora, lora_scaling, merge, qlora, nf4, sft_data, loss_masking, failure_mining, data_flywheel, rlhf, reward_model, dpo, grpo, grpo_bias, kl_to_base, catastrophic_forgetting, safety_regression, regression_gate]
-prerequisite_concepts: [parameter_accounting, mixed_precision, quantization_contract, data_lineage, contamination, evaluation_contract, paired_inference, harness_manifest]
-first_occurrence_concepts: [model_states, lora, qlora, loss_masking, dpo, grpo, grpo_bias, kl_to_base, catastrophic_forgetting, regression_gate]
+required_concepts: [adapt_vs_retrieve, model_states, optimizer_states, lora, lora_scaling, rslora, target_modules, merge, qlora, nf4, sft_data, loss_masking, loss_mass, failure_mining, data_flywheel, data_provenance, backdoor_poisoning, rlhf, reward_model, dpo, grpo, grpo_bias, kl_to_base, catastrophic_forgetting, safety_regression, regression_gate]
+prerequisite_concepts: [parameter_accounting, precision_formats, quantization_contract, data_lineage, contamination, evaluation_contract, paired_inference, harness_manifest, source_sink_model]
+first_occurrence_concepts: [model_states, lora, rslora, target_modules, qlora, loss_masking, loss_mass, backdoor_poisoning, dpo, grpo, grpo_bias, kl_to_base, catastrophic_forgetting, regression_gate]
 
 concept_dependencies:
-  - { concept: model_states, depends_on: [parameter_accounting, mixed_precision] }
+  - { concept: model_states, depends_on: [parameter_accounting, precision_formats] }
+  - { concept: optimizer_states, depends_on: [model_states] }
   - { concept: lora, depends_on: [parameter_accounting] }
+  - { concept: lora_scaling, depends_on: [lora] }
+  - { concept: rslora, depends_on: [lora_scaling] }
+  - { concept: target_modules, depends_on: [lora] }
   - { concept: qlora, depends_on: [lora, quantization_contract] }
   - { concept: sft_data, depends_on: [data_lineage, contamination] }
+  - { concept: loss_mass, depends_on: [loss_masking] }
+  - { concept: backdoor_poisoning, depends_on: [data_provenance, source_sink_model] }
   - { concept: dpo, depends_on: [sft_data, reward_model] }
   - { concept: grpo, depends_on: [reward_model] }
   - { concept: grpo_bias, depends_on: [grpo] }
@@ -17,44 +23,47 @@ concept_dependencies:
   - { concept: regression_gate, depends_on: [paired_inference, catastrophic_forgetting, safety_regression] }
 
 mechanisms:
-  - { id: "MECH-01", description: "Adaptation decision: localize the failure class, then choose prompt, retrieval, routing, SFT, or preference tuning by persistence, freshness, provenance, per-request cost, and update cost.", evidence_ids: ["CLM-001", "CLM-013", "CLM-014"], derived_from: [] }
-  - { id: "MECH-02", description: "Training memory is model states (parameters, gradients, optimizer states) plus activations; parameter-efficient and quantized methods shrink the trainable and resident terms.", evidence_ids: ["CLM-002", "CLM-003", "CLM-004"], derived_from: [] }
-  - { id: "MECH-03", description: "LoRA adds a scaled low-rank update BA to frozen weights, initialized to zero, trainable per target module, mergeable for serving; capacity relative to data size and target-module choice decide whether it matches full fine-tuning.", evidence_ids: ["CLM-003", "CLM-005", "CLM-006", "CLM-015"], derived_from: ["MECH-02"] }
-  - { id: "MECH-04", description: "SFT data is mined from failures and demonstrations with lineage, deduplication, contamination checks, chat-template fidelity, and loss masked to target tokens.", evidence_ids: ["CLM-007"], derived_from: ["MECH-01"] }
-  - { id: "MECH-05", description: "Preference optimization shifts the policy toward preferred outputs via reward model plus RL, DPO's implicit reward against a reference, or GRPO's group-normalized rewards, each regularized toward a reference; group-normalization choices bias length and question weighting.", evidence_ids: ["CLM-008", "CLM-009", "CLM-010", "CLM-017", "CLM-018"], derived_from: ["MECH-04"] }
-  - { id: "MECH-06", description: "Release gating compares adapted and base models on target gain, retained capability, and safety, with repeated seeds and fixed procedures, then ships through the Module 17 rollout path.", evidence_ids: ["CLM-006", "CLM-011", "CLM-012", "CLM-016", "CLM-019"], derived_from: ["MECH-03", "MECH-05"] }
+  - { id: "MECH-01", description: "Adaptation decision: localize the failure class, then choose prompt, retrieval, routing, SFT, or preference tuning by persistence, freshness, auditable support, per-request cost, and update cost; a weight update is shared by all requests and its reach beyond the target is measured, not assumed.", evidence_ids: ["CLM-001", "CLM-013", "CLM-014"], derived_from: [] }
+  - { id: "MECH-02", description: "Training memory is model states (parameters, gradients, optimizer states, in the chosen precision layout) plus activations and workspace; parameter-efficient and quantized methods shrink the trainable and resident terms but not activations.", evidence_ids: ["CLM-002", "CLM-003", "CLM-004"], derived_from: [] }
+  - { id: "MECH-03", description: "LoRA adds a scaled low-rank update sBA to frozen weights, B initialized to zero, trainable only on the configured target modules, mergeable for serving; scale s depends on alpha and rank (alpha/r or alpha/sqrt(r)), and capacity relative to data size and target-module choice decide whether it matches full fine-tuning.", evidence_ids: ["CLM-003", "CLM-005", "CLM-006", "CLM-015", "CLM-021", "CLM-022"], derived_from: ["MECH-02"] }
+  - { id: "MECH-04", description: "SFT data is mined from failures and demonstrations with lineage, deduplication, contamination checks, provenance and write-access control, chat-template fidelity, and an explicit loss mask whose loss share is computed from per-token losses, not token counts.", evidence_ids: ["CLM-007", "CLM-023", "CLM-027", "CLM-028"], derived_from: ["MECH-01"] }
+  - { id: "MECH-05", description: "Preference optimization shifts the policy toward preferred outputs via reward model plus RL, DPO's implicit reward relative to a reference, or GRPO's group-normalized rewards; original RLHF and GRPO add a KL term, but R1-Zero-style recipes may set it to zero, so KL-to-base is monitored even when not optimized; normalization choices bias length and question weighting.", evidence_ids: ["CLM-008", "CLM-009", "CLM-010", "CLM-017", "CLM-018", "CLM-029"], derived_from: ["MECH-04"] }
+  - { id: "MECH-06", description: "Release gating compares adapted and base models on target gain, retained capability, and safety with pre-declared margins, paired intervals, and independently trained runs, then ships through the Module 17 rollout path; it cannot certify absence of trigger-conditioned backdoors, which provenance controls address.", evidence_ids: ["CLM-006", "CLM-011", "CLM-012", "CLM-016", "CLM-019", "CLM-027"], derived_from: ["MECH-03", "MECH-05"] }
 
 mathematical_models:
-  - { id: "MATH-01", description: "Full mixed-precision Adam model states = 16Ψ bytes (2Ψ+2Ψ+12Ψ); an 8B model needs ≈128 GB before activations.", evidence_ids: ["CLM-002"], derived_from: ["MECH-02"] }
-  - { id: "MATH-02", description: "LoRA trainable parameters per adapted matrix W∈R^{d_out×d_in}: r(d_in+d_out); forward y = Wx + (α/r)B(Ax) (α/√r with rsLoRA).", evidence_ids: ["CLM-003", "CLM-005"], derived_from: ["MECH-03"] }
+  - { id: "MATH-01", description: "Full mixed-precision Adam model states under the ZeRO layout = 16Ψ bytes (2Ψ+2Ψ+12Ψ); an 8×10^9-parameter model needs 128×10^9 bytes before activations. Other layouts change the per-parameter bytes.", evidence_ids: ["CLM-002"], derived_from: ["MECH-02"] }
+  - { id: "MATH-02", description: "LoRA trainable parameters per adapted matrix W∈R^{d_out×d_in}: r(d_in+d_out); forward y = Wx + s·B(Ax) with s=α/r (α/√r with rsLoRA).", evidence_ids: ["CLM-003", "CLM-005", "CLM-021"], derived_from: ["MECH-03"] }
   - { id: "MATH-03", description: "DPO loss −log σ(β[(log πθ(y_w|x)−log πref(y_w|x))−(log πθ(y_l|x)−log πref(y_l|x))]).", evidence_ids: ["CLM-009"], derived_from: ["MECH-05"] }
-  - { id: "MATH-04", description: "GRPO outcome advantage A_i=(r_i−mean(r))/std(r) over G samples of one prompt; equal rewards give zero signal, which DAPO-style dynamic sampling filters out.", evidence_ids: ["CLM-010", "CLM-018"], derived_from: ["MECH-05"] }
+  - { id: "MATH-04", description: "GRPO outcome advantage A_i=(r_i−mean(r))/(std(r)+ε) over G samples of one prompt, with a declared ε or zero-variance branch; equal rewards give zero reward-term gradient (a KL term, if present, still contributes), which DAPO-style dynamic sampling filters out; Dr. GRPO removes the std and 1/|o_i| normalizations.", evidence_ids: ["CLM-010", "CLM-017", "CLM-018"], derived_from: ["MECH-05"] }
+  - { id: "MATH-05", description: "Response loss share = Σ_resp ℓ_t / Σ_included ℓ_t = T_r·m_r/(T_p·m_p+T_r·m_r); equals token share T_r/(T_p+T_r) only when m_p=m_r.", evidence_ids: ["CLM-028"], derived_from: ["MECH-04"] }
 
 implementation_mechanisms:
-  - { id: "IMPL-01", description: "An adaptation run manifest records base model hash, data snapshot IDs, template, loss mask, method/rank/alpha/targets, precision, seeds, hyperparameters, and evaluation suite versions.", evidence_ids: ["CLM-007", "CLM-012"], derived_from: ["MECH-04", "MECH-06"] }
-  - { id: "IMPL-02", description: "Pinned PEFT source shows scaling α/r, zero-initialized B, additive forward, and merge via get_delta_weight.", evidence_ids: ["CLM-005"], derived_from: ["MECH-03"] }
+  - { id: "IMPL-01", description: "An adaptation run manifest records base-model and adapter checkpoint hashes and sources, data snapshot IDs with source trust labels, template hash, loss mask, method/rank/alpha/explicit target_modules/effective scaling, precision layout, training seeds, hyperparameters, and evaluation suite versions.", evidence_ids: ["CLM-007", "CLM-012", "CLM-022", "CLM-027"], derived_from: ["MECH-04", "MECH-06"] }
+  - { id: "IMPL-02", description: "Pinned PEFT source shows scaling α/r or α/√r, zero-initialized B, additive forward, merge/unmerge via get_delta_weight, and q_proj/v_proj-only default targets for llama, mistral, qwen2, and qwen3.", evidence_ids: ["CLM-005", "CLM-022"], derived_from: ["MECH-03"] }
 
 failure_modes:
-  - { id: "FAIL-01", description: "Wrong tool: fine-tuning to inject changing facts, producing stale, uncitable answers.", evidence_ids: ["CLM-001", "CLM-013"], derived_from: ["MECH-01"] }
-  - { id: "FAIL-02", description: "Memory misestimate: counting only weights and OOMing on optimizer states or activations.", evidence_ids: ["CLM-002", "CLM-004"], derived_from: ["MECH-02"] }
-  - { id: "FAIL-03", description: "Catastrophic forgetting: target gains with regressions outside the domain, tracking distribution shift (KL to base on the new task) and typically larger for SFT than on-policy RL in reported studies.", evidence_ids: ["CLM-006", "CLM-016"], derived_from: ["MECH-03"] }
-  - { id: "FAIL-04", description: "Data leakage and template mismatch: training on evaluation near-duplicates or with a chat template/loss mask different from serving.", evidence_ids: ["CLM-007"], derived_from: ["MECH-04"] }
-  - { id: "FAIL-05", description: "Preference pathologies: reward hacking, length bias, over-refusal, or drift from the reference when β/KL is mis-set, rewards are invalid, or loss normalization biases length.", evidence_ids: ["CLM-009", "CLM-010", "CLM-017"], derived_from: ["MECH-05"] }
-  - { id: "FAIL-06", description: "Safety regression after fine-tuning, including from benign data, and safety measurements that vary with trivial setup changes.", evidence_ids: ["CLM-011", "CLM-012", "CLM-019"], derived_from: ["MECH-06"] }
+  - { id: "FAIL-01", description: "Wrong tool: fine-tuning to inject changing facts, producing stale answers without auditable per-answer support.", evidence_ids: ["CLM-001", "CLM-013", "CLM-014"], derived_from: ["MECH-01"] }
+  - { id: "FAIL-02", description: "Memory misestimate: counting only weights and OOMing on optimizer states, activations, or workspace.", evidence_ids: ["CLM-002", "CLM-004"], derived_from: ["MECH-02"] }
+  - { id: "FAIL-03", description: "Catastrophic forgetting: target gains with regressions outside the domain; one reported study (RL's Razor) finds it tracks KL to base on the new task and is smaller for on-policy RL than SFT.", evidence_ids: ["CLM-006", "CLM-016"], derived_from: ["MECH-03"] }
+  - { id: "FAIL-04", description: "Data leakage and template mismatch: training on evaluation near-duplicates or with a chat template/loss mask different from serving.", evidence_ids: ["CLM-007", "CLM-028"], derived_from: ["MECH-04"] }
+  - { id: "FAIL-05", description: "Preference pathologies: reward hacking, length bias, over-refusal, or unmonitored drift from the base when β/KL is mis-set or removed, rewards are invalid, or loss normalization biases length.", evidence_ids: ["CLM-009", "CLM-010", "CLM-017", "CLM-029"], derived_from: ["MECH-05"] }
+  - { id: "FAIL-06", description: "Safety regression after fine-tuning, including from benign or narrow data, and safety measurements that vary with trivial setup changes.", evidence_ids: ["CLM-011", "CLM-012", "CLM-019", "CLM-026"], derived_from: ["MECH-06"] }
+  - { id: "FAIL-07", description: "Training-time poisoning: a small number of untrusted examples or an inherited checkpoint installs trigger-conditioned behavior that passes untriggered release suites and can persist through later safety training.", evidence_ids: ["CLM-023", "CLM-024", "CLM-025", "CLM-026", "CLM-027"], derived_from: ["MECH-04", "MECH-06"] }
+  - { id: "FAIL-08", description: "Silent configuration drift: relying on library-default target modules or changing rank without revisiting alpha changes which layers adapt and the effective update scale.", evidence_ids: ["CLM-005", "CLM-015", "CLM-021", "CLM-022"], derived_from: ["MECH-03"] }
 
 production_connections:
-  - { id: "PROD-01", description: "A data flywheel mines production failures, labels or ranks them, retrains adapters on a schedule, gates on target/general/safety suites, and ships via canary with rollback to the previous adapter.", evidence_ids: ["CLM-007", "CLM-012"], derived_from: ["MECH-04", "MECH-06"] }
+  - { id: "PROD-01", description: "A data flywheel mines production failures with provenance labels, labels or ranks them, retrains adapters on a schedule, gates on target/general/safety suites, and ships via canary with rollback to the previous adapter.", evidence_ids: ["CLM-007", "CLM-012", "CLM-027"], derived_from: ["MECH-04", "MECH-06"] }
   - { id: "PROD-02", description: "Adapter economics compare training and evaluation cost plus serving (merged versus multi-adapter) against per-request prompt tokens saved.", evidence_ids: ["CLM-001", "CLM-003"], derived_from: ["MECH-01", "MECH-03"] }
 
 research_connections:
-  - { id: "RESEARCH-01", description: "LoRA, QLoRA, and LoRA-forgetting studies frame the capacity–forgetting trade-off of parameter-efficient methods.", evidence_ids: ["CLM-003", "CLM-004", "CLM-006", "CLM-015", "CLM-016"], derived_from: ["MECH-03"] }
-  - { id: "RESEARCH-02", description: "RLHF, DPO, and GRPO represent reward-model RL, offline implicit-reward, and critic-free group-baseline RL respectively; Dr. GRPO and DAPO show group-normalization details materially change training.", evidence_ids: ["CLM-008", "CLM-009", "CLM-010", "CLM-017", "CLM-018"], derived_from: ["MECH-05"] }
-  - { id: "RESEARCH-03", description: "Fine-tuning safety regression, evaluation variance, and alignment reversal dynamics are active 2025-2026 research, not solved controls.", evidence_ids: ["CLM-011", "CLM-019", "CLM-020"], derived_from: ["MECH-06"] }
+  - { id: "RESEARCH-01", description: "LoRA, rsLoRA, QLoRA, and LoRA-forgetting studies frame the capacity–forgetting trade-off of parameter-efficient methods.", evidence_ids: ["CLM-003", "CLM-004", "CLM-006", "CLM-015", "CLM-016", "CLM-021"], derived_from: ["MECH-03"] }
+  - { id: "RESEARCH-02", description: "RLHF, DPO, and GRPO represent reward-model RL, offline implicit-reward, and critic-free group-baseline RL respectively; Dr. GRPO and DAPO change normalization and drop the KL term.", evidence_ids: ["CLM-008", "CLM-009", "CLM-010", "CLM-017", "CLM-018", "CLM-029"], derived_from: ["MECH-05"] }
+  - { id: "RESEARCH-03", description: "Fine-tuning safety regression, evaluation variance, emergent misalignment, backdoor persistence, and alignment reversal dynamics are active research, not solved controls.", evidence_ids: ["CLM-011", "CLM-019", "CLM-020", "CLM-024", "CLM-025", "CLM-026"], derived_from: ["MECH-06"] }
 
 candidate_capabilities:
-  - { capability: "Decide when to adapt versus prompt, retrieve, or route, with a testable hypothesis per failure class.", mapped_mechanisms: ["MECH-01", "FAIL-01"] }
-  - { capability: "Estimate training memory and trainable parameters for full, LoRA, and QLoRA setups.", mapped_mechanisms: ["MECH-02", "MATH-01", "MATH-02", "FAIL-02"] }
-  - { capability: "Implement and trace LoRA, including scaling, initialization, and merging.", mapped_mechanisms: ["MECH-03", "IMPL-02", "FAIL-03"] }
-  - { capability: "Build leak-free SFT and preference datasets with correct templates and loss masks.", mapped_mechanisms: ["MECH-04", "IMPL-01", "FAIL-04"] }
+  - { capability: "Decide when to adapt versus prompt, retrieve, or route, with a falsifiable comparative hypothesis per failure class.", mapped_mechanisms: ["MECH-01", "FAIL-01"] }
+  - { capability: "Estimate and measure training memory and trainable parameters for full, LoRA, and QLoRA setups.", mapped_mechanisms: ["MECH-02", "MATH-01", "MATH-02", "FAIL-02"] }
+  - { capability: "Implement and trace LoRA, including scaling, initialization, target modules, and merging.", mapped_mechanisms: ["MECH-03", "IMPL-02", "FAIL-03", "FAIL-08"] }
+  - { capability: "Build leak-free, provenance-controlled SFT and preference datasets with correct templates and loss masks.", mapped_mechanisms: ["MECH-04", "MATH-05", "IMPL-01", "FAIL-04", "FAIL-07"] }
   - { capability: "Apply and diagnose DPO/GRPO-style preference optimization.", mapped_mechanisms: ["MECH-05", "MATH-03", "MATH-04", "FAIL-05"] }
-  - { capability: "Gate adapted models on target, retained capability, and safety before rollout.", mapped_mechanisms: ["MECH-06", "FAIL-06", "PROD-01"] }
+  - { capability: "Gate adapted models on target, retained capability, and safety before rollout, and state what the gate cannot certify.", mapped_mechanisms: ["MECH-06", "FAIL-06", "FAIL-07", "PROD-01"] }
