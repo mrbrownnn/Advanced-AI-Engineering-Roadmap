@@ -18,6 +18,10 @@ definitions:
 properties:
   module: { type: string }
   registry_version: { type: string }
+  status:
+    type: string
+    enum: [draft, ready]
+    description: "Absent means ready. A ready (published) knowledge model must carry content; draft may be incomplete."
 
   required_concepts: { type: array, items: { type: string } }
   prerequisite_concepts: { type: array, items: { type: string } }
@@ -46,3 +50,17 @@ properties:
       properties:
         capability: { type: string }
         mapped_mechanisms: { type: array, items: { type: string } }
+
+# A ready knowledge model (status absent or "ready") must not be empty.
+if:
+  not:
+    properties:
+      status: { const: draft }
+    required: [status]
+then:
+  required: [required_concepts, mechanisms, failure_modes, candidate_capabilities]
+  properties:
+    required_concepts: { minItems: 1 }
+    mechanisms: { minItems: 1 }
+    failure_modes: { minItems: 1 }
+    candidate_capabilities: { minItems: 1 }

@@ -1,0 +1,10 @@
+module: "fixture"
+registry_version: "0.0.0"
+claims:
+  - id: CLM-001
+    claim: "A source-code observation with an abbreviated revision."
+    provenance: VERIFIED_FACT
+    domain: fixture
+    concepts: [x]
+    confidence: high
+    evidence: [{ source_type: source_code, tier: 1, repository: "https://example.invalid/repo", commit: "abc1234", file: "a.py", symbol: "f", verification_date: "2026-09-30" }]

@@ -103,6 +103,7 @@ properties:
             properties:
               provenance: { const: VERIFIED_FACT }
           then:
+            required: [evidence]
             properties:
               evidence:
                 type: array
@@ -110,6 +111,20 @@ properties:
                 items:
                   properties:
                     tier: { enum: [1, 2] }
+        - # Any source_code evidence item must be pinned to an exact revision, file, and symbol.
+          properties:
+            evidence:
+              items:
+                if:
+                  properties:
+                    source_type: { const: source_code }
+                  required: [source_type]
+                then:
+                  required: [repository, commit, file, symbol, verification_date]
+                  properties:
+                    commit: { type: string, pattern: "^[0-9a-f]{40}$" }
+                    file: { type: string, minLength: 1 }
+                    symbol: { type: string, minLength: 1 }
         - if:
             properties:
               provenance: { const: DERIVED }
