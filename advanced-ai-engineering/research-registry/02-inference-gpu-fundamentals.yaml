@@ -1,7 +1,9 @@
 module: "02-inference-gpu-fundamentals"
-registry_version: "1.0.0"
+registry_version: "1.1.0"
+previous_version: "1.0.0"
 research_cutoff: "2026-09-25"
-change_reason: "Evidence registry for GPU execution, memory behavior, measurement, Roofline reasoning, and profiler-driven diagnosis."
+change_reason: "WP-F1 (AUD-02-01, AUD-G04): add an exact binary/decimal unit example to the effective-bandwidth derivation and align claim IDs to the curriculum-wide CLM-### form. No external source was re-read in this revision, so research_cutoff, accessed_at, and verification_date values are unchanged; only the presence of the pinned PyTorch timer symbols was re-checked on 2026-09-30."
+changed_claims: ["CLM-010"]
 
 out_of_scope_candidates:
   - "KV-cache allocation, paging, reuse, and eviction (Module 03)"
@@ -10,7 +12,7 @@ out_of_scope_candidates:
   - "Multi-GPU communication and distributed placement (Module 20)"
 
 claims:
-  - id: "M02-CLM-001"
+  - id: "CLM-001"
     claim: "CUDA launches a grid of thread blocks; SMs execute threads in groups of 32 called warps, and an application cannot rely on a particular ordering of thread blocks. Divergent paths within a warp can reduce execution efficiency even though threads retain individual state."
     provenance: "VERIFIED_FACT"
     domain: "execution_model"
@@ -42,7 +44,7 @@ claims:
       labs: ["LAB-A"]
       assessments: ["Mastery-02"]
 
-  - id: "M02-CLM-002"
+  - id: "CLM-002"
     claim: "Global-memory requests by threads of a warp are served through memory transactions; adjacent, aligned accesses can be coalesced into fewer transactions, while strided or scattered access can transfer substantially more bytes than the program requests."
     provenance: "VERIFIED_FACT"
     domain: "memory_system"
@@ -66,7 +68,7 @@ claims:
       labs: ["LAB-A"]
       assessments: ["Mastery-02"]
 
-  - id: "M02-CLM-003"
+  - id: "CLM-003"
     claim: "CUDA kernel launches and many transfers are asynchronous with respect to the host; accurate timing therefore needs an explicit synchronization boundary or device events placed in the relevant stream, and possible overlap depends on hardware and execution conditions."
     provenance: "VERIFIED_FACT"
     domain: "measurement"
@@ -98,7 +100,7 @@ claims:
       labs: ["LAB-B"]
       assessments: ["Mastery-02"]
 
-  - id: "M02-CLM-004"
+  - id: "CLM-004"
     claim: "The basic Roofline model bounds attainable performance by the smaller of a compute ceiling and bandwidth multiplied by operational intensity."
     provenance: "VERIFIED_FACT"
     domain: "performance_model"
@@ -130,7 +132,7 @@ claims:
       labs: ["LAB-C"]
       assessments: ["Mastery-02"]
 
-  - id: "M02-CLM-005"
+  - id: "CLM-005"
     claim: "Under an explicitly chosen work count W, transferred-byte count Q, attainable compute rate P_peak, and attainable bandwidth beta, the basic Roofline bound is P <= min(P_peak, beta*W/Q), with ridge intensity I_star=P_peak/beta."
     provenance: "DERIVED"
     domain: "performance_model"
@@ -145,13 +147,13 @@ claims:
     limitations:
       - "This is an analytical upper bound, not a latency prediction or proof of the observed bottleneck."
     applicability: "Unit-checked Roofline calculations and falsifiable profiler predictions."
-    related_claims: ["M02-CLM-004"]
+    related_claims: ["CLM-004"]
     curriculum_usage:
       lessons: ["2.4"]
       labs: ["LAB-C"]
       assessments: ["Mastery-02"]
 
-  - id: "M02-CLM-006"
+  - id: "CLM-006"
     claim: "Arithmetic intensity and the likely limiter of a matrix multiply depend on matrix dimensions, precision, reuse, and implementation; small or insufficiently parallel workloads can be latency-limited even when a simple operations-per-byte calculation lies above the Roofline ridge."
     provenance: "VERIFIED_FACT"
     domain: "workload_dependence"
@@ -181,7 +183,7 @@ claims:
       labs: ["LAB-C", "LAB-D"]
       assessments: ["Mastery-02"]
 
-  - id: "M02-CLM-007"
+  - id: "CLM-007"
     claim: "Occupancy is constrained by per-block threads, registers, shared memory, and architectural limits; increasing occupancy can improve latency hiding but does not by itself guarantee higher performance and can trade against per-thread resources."
     provenance: "VERIFIED_FACT"
     domain: "resource_residency"
@@ -213,7 +215,7 @@ claims:
       labs: ["LAB-D"]
       assessments: ["Mastery-02"]
 
-  - id: "M02-CLM-008"
+  - id: "CLM-008"
     claim: "Nsight Systems exposes application timelines such as CUDA API calls, memory operations, kernels, streams, and CPU activity, whereas Nsight Compute collects detailed metrics for selected GPU kernels; these tools answer different scopes of a diagnosis."
     provenance: "VERIFIED_FACT"
     domain: "profiling"
@@ -242,7 +244,7 @@ claims:
       labs: ["LAB-B", "LAB-D"]
       assessments: ["Production-Source-Trace", "Mastery-02"]
 
-  - id: "M02-CLM-009"
+  - id: "CLM-009"
     claim: "Nsight Compute metric collection can require replay, save/restore state, cache control, serialization, or software instrumentation; requested sections and workload nondeterminism can therefore add overhead or change the observed execution context."
     provenance: "VERIFIED_FACT"
     domain: "measurement_intrusion"
@@ -264,7 +266,7 @@ claims:
       labs: ["LAB-B", "LAB-D"]
       assessments: ["Mastery-02"]
 
-  - id: "M02-CLM-010"
+  - id: "CLM-010"
     claim: "For a timed kernel interval t seconds with B_r useful bytes read and B_w useful bytes written, effective bandwidth is (B_r+B_w)/t; comparing requested/effective bytes with measured transferred bytes can reveal inefficient transactions, but neither value alone identifies the cause."
     provenance: "DERIVED"
     domain: "memory_measurement"
@@ -274,17 +276,17 @@ claims:
       - "The byte count covers the same operation and timing interval."
       - "Read/write multiplicity and units (GB versus GiB) are stated."
       - "The calculation concerns useful/requested bytes; profiler counters are required for actual hierarchy traffic."
-    derivation: "Bandwidth is transferred quantity divided by elapsed time. Summing useful bytes read and written and dividing by seconds yields bytes/second; divide by 10^9 for decimal GB/s or 2^30 for GiB/s."
+    derivation: "Bandwidth is transferred quantity divided by elapsed time. Summing useful bytes read and written and dividing by seconds yields bytes/second; divide by 10^9 for decimal GB/s or 2^30 for GiB/s. Example: 4 MiB in 1 ms is 4,194,304,000 bytes/s = 4000 MiB/s = 3.90625 GiB/s = 4.194304 GB/s, not 4 GiB/s."
     limitations:
       - "Cache reuse, write allocation, compression, ECC, retries, and transaction granularity can make hardware traffic differ from useful bytes."
     applicability: "Coalescing experiments and memory-traffic reconciliation."
-    related_claims: ["M02-CLM-002"]
+    related_claims: ["CLM-002"]
     curriculum_usage:
       lessons: ["2.2"]
       labs: ["LAB-A"]
       assessments: ["Mastery-02"]
 
-  - id: "M02-CLM-011"
+  - id: "CLM-011"
     claim: "At PyTorch commit 7ee5406f6686d190efc6571475f074ba1bc9a8c0, torch.utils.benchmark's default timer synchronizes an available accelerator before reading the host timer, and blocked_autorange warms up and chooses a block size intended to amortize timer overhead before collecting replicates."
     provenance: "VERIFIED_FACT"
     domain: "runtime_implementation"
@@ -312,7 +314,7 @@ claims:
       labs: ["LAB-B", "LAB-E"]
       assessments: ["Production-Source-Trace", "Mastery-02"]
 
-  - id: "M02-CLM-012"
+  - id: "CLM-012"
     claim: "A single high-level utilization value, occupancy value, bandwidth percentage, or Roofline point is necessary evidence for some hypotheses but is insufficient to establish a unique bottleneck without aligned scope, timeline, stall, traffic, launch, and shape evidence."
     provenance: "HYPOTHESIS"
     domain: "diagnostic_methodology"
@@ -330,7 +332,7 @@ claims:
       labs: ["LAB-D"]
       assessments: ["Incident-02.1", "Mastery-02"]
 
-  - id: "M02-CLM-013"
+  - id: "CLM-013"
     claim: "Numerical parity and performance must be evaluated together: floating-point reordering is not generally associative, so alternative reductions, precision modes, or fused paths can change results even when they implement the same high-level operation."
     provenance: "VERIFIED_FACT"
     domain: "numerical_behavior"

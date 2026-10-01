@@ -182,7 +182,7 @@ Use $10^9$ for decimal GB/s and $2^{30}$ for GiB/s; do not mix the label and div
 
 **Feedback Contract:**
 - *Expected Evidence*: a byte equation per access pattern with the unit convention stated; synchronized time; useful bandwidth; profiler-reported sectors/bytes at L1/L2/DRAM for the same launch; the transferred-to-useful ratio; and at least two competing explanations.
-- *Common Failure*: dividing MiB by milliseconds and labeling the result GiB/s (a 2.4% error at this size that grows with prefix mismatch), or comparing useful bytes with a DRAM counter from a different launch.
+- *Common Failure*: dividing MiB by milliseconds and labeling the result GiB/s (a 2.4% error here: 4 versus 3.90625), or comparing useful bytes with a DRAM counter from a different launch.
 - *Diagnostic Hint*: convert to bytes and seconds first, then divide by $2^{30}$ or $10^9$ exactly once.
 - *Concept to Revisit*: useful versus transferred bytes at a named boundary.
 
@@ -333,7 +333,7 @@ Numerical behavior remains part of the experiment. Floating-point addition is no
 - *Input*: FP16, $M=K=4096$, batch-like dimension $N\in\{1,8,64,512\}$, one-pass bytes.
 - *Steps*: $I=MNK/(MK+KN+MN)$ gives $1.0$, $7.97$, $62.1$, and $409.6$ FLOP/byte.
 - *Result*: the one-pass screen crosses the ridge between $N=64$ and $N=512$. The memory-bound lower time stays near 17–21 µs while $N$ grows 512×, which is why batching decode tokens can raise throughput until another ceiling appears (**O**, CLM-006).
-- *Interpretation / limits*: a $64\times64\times64$ GEMM has $I\approx21$ FLOP/byte, but at a typical $128\times128$ output tile it launches one block and cannot fill the device. Intensity does not encode grid size, and the kernel library may pick a different tiling for each $N$.
+- *Interpretation / limits*: a $64\times64\times64$ GEMM has $I\approx21$ FLOP/byte, but its $64\times64$ output may be covered by one or a few thread blocks, far too few to occupy every SM. Intensity does not encode grid size, and the kernel library may pick a different tiling for each $N$.
 
 **Knowledge Check:** Why is the one-pass GEMM intensity not measured intensity, and how can padding both add work and improve execution?
 

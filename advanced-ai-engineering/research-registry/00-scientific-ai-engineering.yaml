@@ -1,7 +1,9 @@
 module: "00-scientific-ai-engineering"
-registry_version: "1.0.0"
+registry_version: "1.1.0"
+previous_version: "1.0.0"
 research_cutoff: "2026-09-25"
-change_reason: "Initial evidence registry for the scientific engineering foundation, with statistical assumptions, benchmark failure modes, and pinned production source traces made explicit."
+change_reason: "WP-F1 (AUD-00-01, AUD-G04, AUD-G05): add one pinned-source observation (LoadGen latency origin and percentile indexing, re-read 2026-09-30) used by the Lesson 0.6 worked example, and align claim IDs to the curriculum-wide CLM-### form. No other source was re-read, so research_cutoff and the accessed_at/verification_date values of CLM-001 to CLM-013 are unchanged."
+changed_claims: ["CLM-014"]
 
 out_of_scope_candidates:
   - "Domain-specific model quality evaluation and judge calibration (Module 15)"
@@ -9,7 +11,7 @@ out_of_scope_candidates:
   - "Serving queueing and capacity models (Module 04)"
 
 claims:
-  - id: "M00-CLM-001"
+  - id: "CLM-001"
     claim: "A defensible measurement result requires a declared measurand, observation boundary, unit, procedure, and uncertainty; an instrument reading or dashboard number without those definitions is not a complete engineering claim."
     provenance: "VERIFIED_FACT"
     domain: "measurement"
@@ -31,7 +33,7 @@ claims:
       labs: ["LAB-A", "LAB-D"]
       assessments: ["Mastery-00"]
 
-  - id: "M00-CLM-002"
+  - id: "CLM-002"
     claim: "Seemingly irrelevant setup choices can change program layout and measured performance enough to reverse an experimental conclusion; setup randomization and causal follow-up are therefore controls against measurement bias, not cosmetic reporting choices."
     provenance: "VERIFIED_FACT"
     domain: "experimental_design"
@@ -54,7 +56,7 @@ claims:
       labs: ["LAB-B"]
       assessments: ["Incident-00.1", "Mastery-00"]
 
-  - id: "M00-CLM-003"
+  - id: "CLM-003"
     claim: "Randomized block designs compare treatments within levels of important nuisance factors, while randomization reduces systematic contamination from nuisance factors that are not controlled."
     provenance: "VERIFIED_FACT"
     domain: "experimental_design"
@@ -76,7 +78,7 @@ claims:
       labs: ["LAB-B"]
       assessments: ["Mastery-00"]
 
-  - id: "M00-CLM-004"
+  - id: "CLM-004"
     claim: "Performance experiments can contain multiple variance levels, such as iterations within process executions and executions across fresh processes; repetitions must target the level that supports the intended inference."
     provenance: "VERIFIED_FACT"
     domain: "benchmark_methodology"
@@ -107,7 +109,7 @@ claims:
       labs: ["LAB-A", "LAB-C"]
       assessments: ["Mastery-00"]
 
-  - id: "M00-CLM-005"
+  - id: "CLM-005"
     claim: "For independent observations from a normal population with unknown variance, the classical two-sided confidence interval for the population mean is xbar +/- t_(1-alpha/2,n-1)*s/sqrt(n); its confidence level describes long-run coverage of the procedure, not the posterior probability that this realized interval contains the parameter."
     provenance: "VERIFIED_FACT"
     domain: "statistical_inference"
@@ -130,7 +132,7 @@ claims:
       labs: ["LAB-C"]
       assessments: ["Mastery-00"]
 
-  - id: "M00-CLM-006"
+  - id: "CLM-006"
     claim: "If independent normal observations have known standard deviation sigma, a normal-approximation mean interval with absolute half-width E requires n >= (z_(1-alpha/2)*sigma/E)^2; replacing sigma with a pilot estimate makes this a planning approximation rather than a guarantee."
     provenance: "DERIVED"
     domain: "statistical_inference"
@@ -149,7 +151,7 @@ claims:
       labs: ["LAB-C"]
       assessments: ["Mastery-00"]
 
-  - id: "M00-CLM-007"
+  - id: "CLM-007"
     claim: "For n independent trials where an event has probability q, the probability of observing at least one event is 1-(1-q)^n; observing a rare tail event is not the same as estimating a tail quantile precisely."
     provenance: "DERIVED"
     domain: "tail_measurement"
@@ -167,7 +169,7 @@ claims:
       labs: ["LAB-A", "LAB-C"]
       assessments: ["Mastery-00"]
 
-  - id: "M00-CLM-008"
+  - id: "CLM-008"
     claim: "An extreme observation is not automatically erroneous: formal outlier procedures depend on distributional and multiplicity assumptions, and unexplained points should be investigated or handled with a predeclared robust analysis rather than deleted because they change the conclusion."
     provenance: "VERIFIED_FACT"
     domain: "data_analysis"
@@ -189,7 +191,7 @@ claims:
       labs: ["LAB-A", "LAB-D"]
       assessments: ["Incident-00.1"]
 
-  - id: "M00-CLM-009"
+  - id: "CLM-009"
     claim: "A load generator that waits for one response before scheduling the next intended arrival can omit latency samples during stalls and understate the delay an independently arriving request would experience; the HdrHistogram project documents correction methods when the expected sampling interval is known."
     provenance: "VERIFIED_FACT"
     domain: "load_generation"
@@ -221,7 +223,7 @@ claims:
       labs: ["LAB-A"]
       assessments: ["Incident-00.1", "Mastery-00"]
 
-  - id: "M00-CLM-010"
+  - id: "CLM-010"
     claim: "ACM's current artifact policy distinguishes repeatability (same team and setup), reproducibility (different team using the same setup/artifacts), and replicability (different team and independently developed setup), while noting that terminology has differed across communities."
     provenance: "VERIFIED_FACT"
     domain: "reproducibility"
@@ -245,7 +247,7 @@ claims:
       labs: ["LAB-D"]
       assessments: ["Mastery-00"]
 
-  - id: "M00-CLM-011"
+  - id: "CLM-011"
     claim: "At MLCommons Inference commit 3fbc329939999c13d0a7b5e67fb2092287e06047, StartTest sanitizes settings and selects scenario/mode run functions; IssueQueryController::StartIssueQueries records the start time and dispatches scenario-specific queries; QuerySamplesComplete timestamps completions; PerformanceSummary::ProcessLatencies sorts recorded sample latencies and computes summary fields."
     provenance: "VERIFIED_FACT"
     domain: "runtime_implementation"
@@ -273,7 +275,7 @@ claims:
       labs: ["LAB-D"]
       assessments: ["Production-Source-Trace", "Mastery-00"]
 
-  - id: "M00-CLM-012"
+  - id: "CLM-012"
     claim: "A p-value does not measure effect size, practical importance, or the probability that a hypothesis is true; engineering decisions require the estimate, uncertainty, assumptions, costs, and a predeclared practical threshold."
     provenance: "VERIFIED_FACT"
     domain: "statistical_inference"
@@ -296,7 +298,7 @@ claims:
       labs: ["LAB-B", "LAB-C"]
       assessments: ["Mastery-00"]
 
-  - id: "M00-CLM-013"
+  - id: "CLM-013"
     claim: "Source observations, mathematical derivations, and engineering hypotheses carry different evidence burdens: an observed result is scoped to its setup, a derivation is conditional on assumptions, and a hypothesis requires a prediction plus a discriminating or falsifying measurement."
     provenance: "DERIVED"
     domain: "scientific_reasoning"
@@ -313,3 +315,32 @@ claims:
       lessons: ["0.1", "0.7"]
       labs: ["LAB-A", "LAB-B", "LAB-C", "LAB-D"]
       assessments: ["Incident-00.1", "Mastery-00"]
+
+  - id: "CLM-014"
+    claim: "At MLCommons Inference commit 3fbc329939999c13d0a7b5e67fb2092287e06047, QuerySamplesComplete reads PerfClock::now() once on entry and passes it to each sample's response delegate; ResponseDelegateDetailed::SampleComplete records the sample latency as the delta from the query's scheduled_time to that completion timestamp; PerformanceSummary::ProcessLatencies sorts the recorded latencies and selects percentiles as sample_latencies[sample_count * percentile]."
+    provenance: "VERIFIED_FACT"
+    domain: "runtime_implementation"
+    concepts: ["timestamp_boundary", "scheduled_time", "quantile_convention", "source_trace"]
+    confidence: "high"
+    evidence:
+      - source_type: "source_code"
+        tier: 1
+        title: "MLCommons Inference LoadGen completion and latency processing"
+        repository: "https://github.com/mlcommons/inference"
+        commit: "3fbc329939999c13d0a7b5e67fb2092287e06047"
+        verification_date: "2026-09-30"
+        file: "loadgen/loadgen.cc; loadgen/results.cc"
+        symbol: "QuerySamplesComplete; ResponseDelegateDetailed::SampleComplete; PerformanceSummary::ProcessLatencies"
+        entry_point: "mlperf::QuerySamplesComplete"
+        execution_path: "QuerySamplesComplete (PerfClock::now) -> response_delegate->SampleComplete -> latency = sched.delta(complete_begin_time) with sched from query->scheduled_time -> RecordSampleCompletion; PerformanceSummary::ProcessLatencies -> std::sort -> sample_latencies[sample_count * percentile]"
+        url: "https://github.com/mlcommons/inference/blob/3fbc329939999c13d0a7b5e67fb2092287e06047/loadgen/loadgen.cc"
+        accessed_at: "2026-09-30"
+    limitations:
+      - "Static inspection only; scenario-specific scheduling of scheduled_time and other response delegates were not traced."
+      - "The index rule is this revision's convention and is not a general definition of a percentile."
+    applicability: "Lesson 0.6 worked example and the Lab D source trace."
+    related_claims: ["CLM-011", "CLM-009"]
+    curriculum_usage:
+      lessons: ["0.6"]
+      labs: ["LAB-D"]
+      assessments: ["Production-Source-Trace"]
