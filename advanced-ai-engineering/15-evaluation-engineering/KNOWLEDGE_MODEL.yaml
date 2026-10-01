@@ -1,5 +1,5 @@
 module: "15-evaluation-engineering"
-registry_version: "1.0.0"
+registry_version: "1.1.0"
 
 required_concepts:
   - "evaluation_contract"
@@ -18,6 +18,13 @@ required_concepts:
   - "offline_online_validity"
   - "denominator_policy"
   - "quality_cost_latency_frontier"
+  - "design_effect"
+  - "slice_partition"
+  - "critical_slice_gate"
+  - "block_resampling"
+  - "noninferiority_margin"
+  - "release_decision_state"
+  - "statistical_power"
 
 prerequisite_concepts:
   - "measurement_validity"
@@ -39,6 +46,13 @@ first_occurrence_concepts:
   - "contamination"
   - "offline_online_validity"
   - "denominator_policy"
+  - "design_effect"
+  - "slice_partition"
+  - "critical_slice_gate"
+  - "block_resampling"
+  - "noninferiority_margin"
+  - "release_decision_state"
+  - "statistical_power"
 
 concept_dependencies:
   - { concept: "evaluation_contract", depends_on: ["measurement_validity", "target_population"] }
@@ -47,6 +61,13 @@ concept_dependencies:
   - { concept: "grader_validity", depends_on: ["measurement_validity", "behavioral_uncertainty"] }
   - { concept: "paired_comparison", depends_on: ["experimental_unit", "confidence_interval"] }
   - { concept: "regression_gate", depends_on: ["paired_comparison", "multiple_comparisons"] }
+  - { concept: "design_effect", depends_on: ["experimental_unit"] }
+  - { concept: "slice_partition", depends_on: ["slice", "target_population"] }
+  - { concept: "critical_slice_gate", depends_on: ["slice", "regression_gate"] }
+  - { concept: "block_resampling", depends_on: ["experimental_unit", "design_effect", "confidence_interval"] }
+  - { concept: "noninferiority_margin", depends_on: ["regression_gate"] }
+  - { concept: "release_decision_state", depends_on: ["regression_gate", "noninferiority_margin", "multiple_comparisons", "critical_slice_gate"] }
+  - { concept: "statistical_power", depends_on: ["block_resampling", "regression_gate"] }
   - { concept: "offline_online_validity", depends_on: ["evaluation_contract", "target_population"] }
   - { concept: "denominator_policy", depends_on: ["attempt_lineage", "goodput"] }
 
@@ -56,16 +77,16 @@ mechanisms:
     evidence_ids: ["CLM-001", "CLM-002", "CLM-003"]
     derived_from: []
   - id: "MECH-02"
-    description: "Versioned datasets preserve sampling frame, item lineage, freshness, weights, slices, exclusions, and holdout policy so results have a defined population and contamination risk."
-    evidence_ids: ["CLM-004", "CLM-012"]
+    description: "Versioned datasets preserve sampling frame, item lineage, freshness, weights, tags, exclusions, and holdout policy so results have a defined population and contamination risk. Prevalence-weighted estimates use a partition or item-level weights; critical-slice gates are evaluated separately and may overlap."
+    evidence_ids: ["CLM-004", "CLM-012", "CLM-019"]
     derived_from: ["MECH-01"]
   - id: "MECH-03"
     description: "A grader portfolio selects executable oracles, semantic checks, LLM judges, or humans by construct and validates each measurement channel rather than assuming interchangeability."
     evidence_ids: ["CLM-005", "CLM-006", "CLM-007", "CLM-008", "CLM-009", "CLM-017"]
     derived_from: ["MECH-01"]
   - id: "MECH-04"
-    description: "Paired comparisons and dependence-preserving uncertainty estimates quantify change; preregistered tolerances, slice constraints, and multiplicity policy turn estimates into auditable release gates."
-    evidence_ids: ["CLM-003", "CLM-010", "CLM-011"]
+    description: "Paired comparisons and block-level uncertainty estimates quantify change; preregistered thresholds, margins, critical-slice gates, and a multiplicity and look policy turn estimates into an auditable RELEASE, HOLD, or INCONCLUSIVE decision."
+    evidence_ids: ["CLM-003", "CLM-010", "CLM-011", "CLM-020", "CLM-021", "CLM-023"]
     derived_from: ["MECH-01", "MECH-02", "MECH-03"]
   - id: "MECH-05"
     description: "End-to-end evaluation retains every offered outcome and joins quality, safety, latency, cost, completion, and system effects rather than conditioning on successful generations."
@@ -78,16 +99,16 @@ mechanisms:
 
 mathematical_models:
   - id: "MATH-01"
-    description: "For paired item scores, d_i=m_B(i)-m_A(i) and mean change is d_bar=(1/n)sum_i d_i. A confidence interval must resample or model the independent block (item, user, or session); row bootstrap is invalid when rows inside blocks are dependent."
-    evidence_ids: ["CLM-003", "CLM-010"]
+    description: "For paired rows, d_{g,j}=m_B(g,j)-m_A(g,j); the block effect is the mean of d inside block g and the estimate is the mean of the G block effects. The interval is a t interval on block effects, Delta_hat +/- t_{1-alpha/2,G-1} s_b/sqrt(G), or a bootstrap that resamples whole blocks. Row resampling is valid only with one row per block or uncorrelated rows."
+    evidence_ids: ["CLM-003", "CLM-010", "CLM-020"]
     derived_from: ["MECH-04"]
   - id: "MATH-02"
     description: "For n adjudicated pairwise comparisons, tie-adjusted preference p_hat=(wins_B+0.5*ties)/n. This descriptive rate depends on prompt, ordering, judge/rater population, and sampled items; it is not context-free latent quality."
     evidence_ids: ["CLM-006", "CLM-007", "CLM-008"]
     derived_from: ["MECH-03"]
   - id: "MATH-03"
-    description: "A noninferiority gate for a harm metric can require the upper confidence bound of Delta=m_B-m_A to be at most tolerance tau; an improvement gate can require the lower bound to exceed practical effect epsilon. Coverage depends on the interval and multiplicity procedure."
-    evidence_ids: ["CLM-010", "CLM-011"]
+    description: "On a two-sided 1-alpha interval [L,U] signed so larger is better: an improvement gate passes if L>=epsilon and is refuted if U<epsilon; a noninferiority gate passes if L>=-tau and is refuted if U<-tau (for a harm metric, UCB(Delta_h)<=tau). RELEASE needs every gate to pass; any refuted gate or violated hard constraint is HOLD; otherwise INCONCLUSIVE. All-must-pass needs no adjustment for false release; any-of-K claims and L planned looks use alpha/K and alpha/L."
+    evidence_ids: ["CLM-010", "CLM-011", "CLM-021"]
     derived_from: ["MECH-04"]
   - id: "MATH-04"
     description: "A scalar score S=sum_k w_k z_k is interpretable only for fixed directions, scales, transformations, and weights. It can hide a critical regression, so retain the metric vector/Pareto frontier and hard constraints."
@@ -97,6 +118,22 @@ mathematical_models:
     description: "Offered-request goodput at thresholds q*, l*, c* is G=(1/T)sum_i 1[quality_i>=q* and latency_i<=l* and cost_i<=c* and terminal_i=accepted]. Units are useful accepted requests/time; thresholds are product choices, not universal constants."
     evidence_ids: ["CLM-013", "CLM-014"]
     derived_from: ["MECH-05"]
+  - id: "MATH-06"
+    description: "Design effect for G blocks of m rows with within-block correlation rho: Var(mean)=sigma^2[1+(m-1)rho]/(Gm), so n_eff=Gm/(1+(m-1)rho). Assumes equal block sizes and one common rho."
+    evidence_ids: ["CLM-003", "CLM-020"]
+    derived_from: ["MECH-01", "MECH-04"]
+  - id: "MATH-07"
+    description: "Prevalence-weighted estimate m_hat=sum_s w_s m_s is valid only for disjoint, exhaustive slices with sum_s w_s=1. With overlapping tags use item weights omega_i=(target cell share)/(sample cell share) and m_hat=sum_i omega_i m_i / sum_i omega_i. A critical-slice gate reads only its own members and never uses w_s."
+    evidence_ids: ["CLM-019", "CLM-011"]
+    derived_from: ["MECH-02"]
+  - id: "MATH-08"
+    description: "Planning: for an improvement gate with planning effect delta>epsilon, G>=((z_{1-alpha/2}+z_{1-beta}) s_b/(delta-epsilon))^2 blocks under the normal approximation; for noninferiority replace delta-epsilon by delta+tau. Power is the pass probability at true effect delta; at a true effect equal to the threshold the pass rate is the false-pass rate."
+    evidence_ids: ["CLM-022", "CLM-023"]
+    derived_from: ["MECH-04"]
+  - id: "MATH-09"
+    description: "Seeded synthetic coverage simulation (rho=0.5, m=4): at 10 blocks nominal 95% intervals cover 0.756 (row bootstrap), 0.900 (block percentile bootstrap), 0.953 (block t); at 40 blocks 0.774, 0.931, 0.946. One model; not a guarantee for other data."
+    evidence_ids: ["CLM-024"]
+    derived_from: ["MECH-04"]
 
 implementation_mechanisms:
   - id: "IMPL-01"
@@ -111,6 +148,10 @@ implementation_mechanisms:
     description: "Pinned lm-evaluation-harness source demonstrates a concrete task lifecycle from task loading and request construction through model execution, per-document processing, and aggregation."
     evidence_ids: ["CLM-015"]
     derived_from: ["MECH-06"]
+  - id: "IMPL-04"
+    description: "At the pinned lm-evaluation-harness revision, reported standard errors are computed over per-document values (closed form for mean, item resampling for listed metrics) with no block or pairing key; a paired block interval must be computed from exported per-document results."
+    evidence_ids: ["CLM-018"]
+    derived_from: ["MECH-04", "MECH-06"]
 
 failure_modes:
   - id: "FAIL-01"
@@ -130,8 +171,8 @@ failure_modes:
     evidence_ids: ["CLM-006", "CLM-007", "CLM-008", "CLM-017"]
     derived_from: ["MECH-03"]
   - id: "FAIL-05"
-    description: "Pseudoreplication, unpaired tests, tiny slices, adaptive metric selection, and repeated comparisons produce overconfident regression claims."
-    evidence_ids: ["CLM-003", "CLM-010", "CLM-011"]
+    description: "Pseudoreplication (rows resampled as if independent), unpaired tests, tiny slices, adaptive metric selection, rerun-until-pass, and releasing on a positive mean produce overconfident regression claims."
+    evidence_ids: ["CLM-003", "CLM-010", "CLM-011", "CLM-020", "CLM-021", "CLM-024"]
     derived_from: ["MECH-04"]
   - id: "FAIL-06"
     description: "Survivorship accounting drops failed, refused, timed-out, or expensive attempts and makes a less useful system appear higher quality."
@@ -145,11 +186,15 @@ failure_modes:
     description: "An evaluation suite becomes too slow, expensive, flaky, or stale to gate releases, while undocumented retries and grader calls hide its true cost and variance."
     evidence_ids: ["CLM-015", "CLM-016"]
     derived_from: ["MECH-06"]
+  - id: "FAIL-09"
+    description: "Overlapping tag slices are weighted as if they were a partition, so items in the overlap are counted twice and the aggregate is neither the sample mean nor the target mean; or a failed critical-slice gate is averaged away by its small prevalence weight."
+    evidence_ids: ["CLM-019", "CLM-011"]
+    derived_from: ["MECH-02"]
 
 production_connections:
   - id: "PROD-01"
     description: "Release evidence should include population and slice coverage, paired effects with uncertainty, grader validation, offered-request denominators, quality-latency-cost trade-offs, and an explicit decision record."
-    evidence_ids: ["CLM-001", "CLM-008", "CLM-010", "CLM-011", "CLM-014"]
+    evidence_ids: ["CLM-001", "CLM-008", "CLM-010", "CLM-011", "CLM-014", "CLM-021"]
     derived_from: ["MECH-01", "MECH-03", "MECH-04", "MECH-05"]
   - id: "PROD-02"
     description: "Continuous evaluation needs immutable manifests, fresh protected samples, deterministic replay where possible, judge/rater audits, online validation, and measured suite cost and escape rate."
@@ -165,10 +210,20 @@ research_connections:
     description: "LLM judges are scalable measurement instruments with documented biases; current frontier work improves reproducibility and configuration control but still requires independent validation."
     evidence_ids: ["CLM-006", "CLM-007", "CLM-008", "CLM-017"]
     derived_from: ["MECH-03"]
+  - id: "RESEARCH-03"
+    description: "The evaluation-statistics literature supplies clustered standard errors, paired question-level inference, and power planning for language-model evaluations; the three-state gate and its margins are this module's derivation on top of it."
+    evidence_ids: ["CLM-023", "CLM-021"]
+    derived_from: ["MECH-04"]
+
+todo_verify:
+  - id: "TODO-01"
+    description: "Industry prevalence of paired, block-aware, predeclared release gating and the 2025-2026 landscape of evaluation-statistics tooling and sequential release testing were not surveyed."
+    evidence_ids: ["CLM-025"]
+    derived_from: []
 
 candidate_capabilities:
-  - { capability: "Specify an evaluation decision, population, unit, estimands, dataset lineage, slices, and system boundary in a reproducible contract.", mapped_mechanisms: ["MECH-01", "MECH-02", "IMPL-01", "FAIL-01", "FAIL-02"] }
+  - { capability: "Specify an evaluation decision, population, unit, estimands, dataset lineage, slices, and system boundary in a reproducible contract.", mapped_mechanisms: ["MECH-01", "MECH-02", "MATH-06", "MATH-07", "IMPL-01", "FAIL-01", "FAIL-02", "FAIL-09"] }
   - { capability: "Select and validate executable, model-based, and human graders with explicit rubrics, bias tests, disagreement, and adjudication.", mapped_mechanisms: ["MECH-03", "MATH-02", "IMPL-02", "FAIL-03", "FAIL-04"] }
-  - { capability: "Estimate paired changes with dependence-aware uncertainty and enforce practical, slice-aware, multiplicity-aware release gates.", mapped_mechanisms: ["MECH-04", "MATH-01", "MATH-03", "MATH-04", "FAIL-05"] }
+  - { capability: "Estimate paired changes with dependence-aware uncertainty and enforce practical, slice-aware, multiplicity-aware release gates.", mapped_mechanisms: ["MECH-04", "MATH-01", "MATH-03", "MATH-04", "MATH-08", "MATH-09", "FAIL-05"] }
   - { capability: "Evaluate end-to-end quality, safety, completion, latency, and cost without success-only denominators, then test offline-online validity.", mapped_mechanisms: ["MECH-05", "MATH-05", "FAIL-06", "FAIL-07", "PROD-01"] }
-  - { capability: "Operate a versioned, staged evaluation program; trace a pinned harness; measure grader/suite drift, incremental detection, cost, and escaped regressions.", mapped_mechanisms: ["MECH-06", "IMPL-03", "FAIL-08", "PROD-02"] }
+  - { capability: "Operate a versioned, staged evaluation program; trace a pinned harness; measure grader/suite drift, incremental detection, cost, and escaped regressions.", mapped_mechanisms: ["MECH-06", "IMPL-03", "IMPL-04", "FAIL-08", "PROD-02"] }

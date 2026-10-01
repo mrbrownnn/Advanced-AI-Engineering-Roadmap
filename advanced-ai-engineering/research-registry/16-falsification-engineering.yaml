@@ -1,7 +1,9 @@
 module: "16-falsification-engineering"
-registry_version: "1.0.0"
+registry_version: "1.1.0"
+previous_version: "1.0.0"
 research_cutoff: "2026-09-26"
-change_reason: "Replace placeholders with hypothesis-driven property, metamorphic, differential, mutation, stochastic, and fault-injection testing mechanisms."
+change_reason: "WP-A1b (AUD-16-01, AUD-16-02, AUD-G04, AUD-G05): replace the false corpus-growth recall relation with a counterexample and a valid k-growth relation with an input-relation validator; add one end-to-end synthetic fixture (timeout after commit) covering generation, shrinking, metamorphic adjudication, differential common-mode miss, mutation kill table, and replay counts; record the pinned engine's same-failure predicate and default settings; relabel derived practices from CURRENT DEFAULT to RECOMMENDED BASELINE because no tool default or adoption survey supports the older label. New and changed claims were checked against sources opened on 2026-10-01 with a landscape cutoff of 2026-09-30. Unchanged claims keep their 2026-09-26 cutoff and were not re-verified, except that CLM-014's files and symbols were re-read at the pinned commit."
+changed_claims: ["CLM-001", "CLM-003", "CLM-005", "CLM-009", "CLM-010", "CLM-011", "CLM-012", "CLM-013", "CLM-014", "CLM-015", "CLM-016", "CLM-017", "CLM-018", "CLM-019", "CLM-020"]
 claims:
   - id: CLM-001
     claim: "Falsification engineering turns a requirement or causal belief into a testable predicate, defines the valid input domain and oracle, searches for counterexamples, and records what surviving tests do not prove."
@@ -9,7 +11,7 @@ claims:
     domain: falsification_contract
     concepts: [property, oracle, counterexample]
     confidence: high
-    currentness_status: "CURRENT DEFAULT"
+    currentness_status: "RECOMMENDED BASELINE / MODULE DERIVATION"
     assumptions: ["The requirement can be operationalized as an observable predicate or relation over executions."]
     derivation: "A passing finite sample establishes only that no counterexample was observed under the sampled domain, oracle, budget, and implementation. Reproducible failure requires those boundaries to be explicit."
     limitations: ["Some normative or open-world requirements cannot be reduced to one complete oracle."]
@@ -32,7 +34,7 @@ claims:
     domain: property_based_testing
     concepts: [generator, shrinker, validity_domain]
     confidence: high
-    currentness_status: "CURRENT DEFAULT"
+    currentness_status: "RECOMMENDED BASELINE / MODULE DERIVATION"
     assumptions: ["Generated examples and shrink steps can be checked for domain validity."]
     derivation: "The test explores the support induced by its generator. Filtering reduces effective trials; a shrinker that leaves the domain can replace the original failure with an invalid artifact."
     limitations: ["Minimality depends on the shrink order and representation, not semantic simplicity alone."]
@@ -50,14 +52,14 @@ claims:
     applicability: "Translation, classification, retrieval, ranking, extraction, generation, and workflow relations."
     curriculum_usage: { lessons: ["16.3"], labs: ["LAB-B"], assessments: ["Mastery-16"] }
   - id: CLM-005
-    claim: "A 2025 study catalogs metamorphic relations for NLP and evaluates a subset across LLMs, while also manually validating detected failures and reporting method limitations."
+    claim: "A 2025 study collects 191 metamorphic relations for NLP tasks from the literature, implements 36 of them, runs roughly 560,000 metamorphic tests on three LLMs across four tasks, and manually analyzes 937 reported oracle violations, reporting a true-positive rate of around 60% and attributing most false positives to limitations of the relations rather than to the models."
     provenance: VERIFIED_FACT
     domain: metamorphic_testing
     concepts: [llm_testing, relation_catalog, oracle_quality]
     confidence: high
     currentness_status: "FRONTIER / WORKLOAD-DEPENDENT"
-    evidence: [{ source_type: paper, tier: 1, title: "Metamorphic Testing of Large Language Models for Natural Language Processing", authors: "Steven Cho, Stefano Ruberto, Valerio Terragni", year: "2025", url: "https://arxiv.org/abs/2511.02108", section: "Relation review, experiments, and manual validation", accessed_at: "2026-09" }]
-    limitations: ["Its tasks, selected relations, transformations, models, and empirical rates do not establish universal relations or production defect prevalence."]
+    evidence: [{ source_type: paper, tier: 1, title: "Metamorphic Testing of Large Language Models for Natural Language Processing", authors: "Steven Cho, Stefano Ruberto, Valerio Terragni", year: "2025", url: "https://arxiv.org/abs/2511.02108", version: "v1", section: "Abstract; Section I (summary of findings); Section IV (research questions RQ1-RQ3, tasks and relations)", accessed_at: "2026-10-01" }]
+    limitations: ["Author-reported and not reproduced; the rates are specific to its four tasks, 36 relations, three models, and output-comparison thresholds.", "Its tasks, selected relations, transformations, models, and empirical rates do not establish universal relations or production defect prevalence.", "Sections V-VIII were not read in this revision."]
     applicability: "Design evidence for LLM metamorphic suites."
     curriculum_usage: { lessons: ["16.3"], labs: ["LAB-B"], assessments: ["Mastery-16"] }
   - id: CLM-006
@@ -99,7 +101,7 @@ claims:
     domain: stochastic_testing
     concepts: [failure_probability, binomial_bound, repeated_trial]
     confidence: high
-    currentness_status: "CURRENT DEFAULT / WHEN ASSUMPTIONS HOLD"
+    currentness_status: "RECOMMENDED BASELINE / WHEN ASSUMPTIONS HOLD"
     assumptions: ["Trials are independent, identically distributed Bernoulli outcomes with a fixed failure predicate and no excluded attempts."]
     derivation: "With failure probability p, observing zero failures has probability (1-p)^n. Setting (1-p)^n=alpha and solving for p gives the upper bound."
     limitations: ["The bound says nothing about unseen input regions and is invalid for correlated retries or changing systems."]
@@ -111,7 +113,7 @@ claims:
     domain: adaptive_testing
     concepts: [adaptive_search, discovery_set, confirmatory_set]
     confidence: high
-    currentness_status: "CURRENT DEFAULT"
+    currentness_status: "RECOMMENDED BASELINE / MODULE DERIVATION"
     assumptions: ["The search policy uses observed failures to choose later tests."]
     derivation: "Selection maximizes observed weakness and changes inclusion probabilities, so the found set is not an unbiased workload sample. Reusing it is useful for regression but not population prevalence without a sampling model."
     limitations: ["A frozen set can become development data and must be supplemented with fresh protected sampling."]
@@ -123,7 +125,7 @@ claims:
     domain: fault_injection
     concepts: [fault_model, blast_radius, recovery_oracle]
     confidence: high
-    currentness_status: "CURRENT DEFAULT"
+    currentness_status: "RECOMMENDED BASELINE / MODULE DERIVATION"
     assumptions: ["The test environment can inject and observe faults without uncontrolled harm."]
     derivation: "A failure after injection may be caused by invalid setup, propagation, recovery, or oracle error. Boundary-specific evidence and safety controls are required to distinguish these paths."
     limitations: ["Synthetic faults may not reproduce correlated provider, data, or regional incidents."]
@@ -135,7 +137,7 @@ claims:
     domain: counterexample_lifecycle
     concepts: [minimization, regression_fixture, deduplication]
     confidence: high
-    currentness_status: "CURRENT DEFAULT"
+    currentness_status: "RECOMMENDED BASELINE / MODULE DERIVATION"
     assumptions: ["The failure can be replayed or represented with sufficient system and environment lineage."]
     derivation: "Raw discoveries can be invalid, flaky, redundant, or tied to obsolete behavior. Lifecycle controls preserve the smallest causal evidence while preventing permanent suite growth from untriaged artifacts."
     limitations: ["Nondeterministic providers and unavailable historical state can prevent exact replay."]
@@ -147,23 +149,23 @@ claims:
     domain: test_adequacy
     concepts: [coverage, adequacy, oracle_validity]
     confidence: high
-    currentness_status: "CURRENT DEFAULT"
+    currentness_status: "RECOMMENDED BASELINE / MODULE DERIVATION"
     assumptions: ["Coverage is computed consistently over a declared structural universe."]
     derivation: "Coverage records whether a structural element was exercised, not whether its behavior was checked correctly. A weak oracle can pass every covered element."
     limitations: ["Different coverage definitions are not directly comparable and can be gamed."]
     applicability: "Test portfolio measurement and search guidance."
     curriculum_usage: { lessons: ["16.1", "16.6"], labs: ["LAB-C"], assessments: ["Mastery-16"] }
   - id: CLM-014
-    claim: "At Hypothesis commit 9c55f97e507eae21677457e84737b386fd06e271, given wraps generated-example tests, RuleBasedStateMachine/run_state_machine_as_test exercise stateful rules, ConjectureRunner drives exploration, and Shrinker minimizes interesting examples."
+    claim: "At Hypothesis commit 9c55f97e507eae21677457e84737b386fd06e271, given wraps generated-example tests; find and get_state_machine_test (called by run_state_machine_as_test) each build a @given test; StateForActualGivenExecution.run_engine constructs a ConjectureRunner and calls run; ConjectureRunner._run performs reuse, generate, and shrink phases; shrink_interesting_test_cases calls Shrinker.shrink, which runs initial_coarse_reduction and greedy_shrink."
     provenance: VERIFIED_FACT
     domain: testing_runtime
     concepts: [hypothesis, conjecture_engine, shrinking]
     confidence: high
     currentness_status: "CURRENT SOURCE SNAPSHOT"
     evidence:
-      - { source_type: source_code, tier: 1, title: "Hypothesis core and stateful APIs", repository: "https://github.com/HypothesisWorks/hypothesis", commit: "9c55f97e507eae21677457e84737b386fd06e271", verification_date: "2026-09-26", file: "hypothesis/src/hypothesis/core.py; hypothesis/src/hypothesis/stateful.py", symbol: "given; find; RuleBasedStateMachine; run_state_machine_as_test", entry_point: "@given(...) test or run_state_machine_as_test(...)", execution_path: "strategy/state-machine definition -> generated choices/rules -> predicate/assertion execution -> failing example", url: "https://github.com/HypothesisWorks/hypothesis/tree/9c55f97e507eae21677457e84737b386fd06e271/hypothesis/src/hypothesis", accessed_at: "2026-09" }
-      - { source_type: source_code, tier: 1, title: "Hypothesis Conjecture engine and shrinker", repository: "https://github.com/HypothesisWorks/hypothesis", commit: "9c55f97e507eae21677457e84737b386fd06e271", verification_date: "2026-09-26", file: "hypothesis/src/hypothesis/internal/conjecture/engine.py; hypothesis/src/hypothesis/internal/conjecture/shrinker.py", symbol: "ConjectureRunner; Shrinker", entry_point: "generated test execution after @given/find/stateful setup", execution_path: "choice generation and execution -> interesting example -> shrink passes -> minimized replayable example", url: "https://github.com/HypothesisWorks/hypothesis/tree/9c55f97e507eae21677457e84737b386fd06e271/hypothesis/src/hypothesis/internal/conjecture", accessed_at: "2026-09" }
-    limitations: ["Static Python source inspection only; engine behavior was not executed, and this implementation does not define all property-based testing systems."]
+      - { source_type: source_code, tier: 1, title: "Hypothesis core and stateful APIs", repository: "https://github.com/HypothesisWorks/hypothesis", commit: "9c55f97e507eae21677457e84737b386fd06e271", verification_date: "2026-10-01", file: "hypothesis/src/hypothesis/core.py; hypothesis/src/hypothesis/stateful.py", symbol: "given; find; StateForActualGivenExecution.run_engine; RuleBasedStateMachine; get_state_machine_test; run_state_machine_as_test", entry_point: "@given(...) test or run_state_machine_as_test(...)", execution_path: "run_state_machine_as_test -> get_state_machine_test -> @given(st.data()) run_state_machine -> StateForActualGivenExecution.run_engine -> ConjectureRunner(...).run()", url: "https://github.com/HypothesisWorks/hypothesis/tree/9c55f97e507eae21677457e84737b386fd06e271/hypothesis/src/hypothesis", accessed_at: "2026-09" }
+      - { source_type: source_code, tier: 1, title: "Hypothesis Conjecture engine and shrinker", repository: "https://github.com/HypothesisWorks/hypothesis", commit: "9c55f97e507eae21677457e84737b386fd06e271", verification_date: "2026-10-01", file: "hypothesis/src/hypothesis/internal/conjecture/engine.py; hypothesis/src/hypothesis/internal/conjecture/shrinker.py", symbol: "ConjectureRunner.run; ConjectureRunner._run; ConjectureRunner.shrink_interesting_test_cases; ConjectureRunner.shrink; ConjectureRunner.new_shrinker; Shrinker.shrink", entry_point: "ConjectureRunner.run()", execution_path: "run -> _run -> reuse_existing_test_cases -> generate_new_test_cases -> shrink_interesting_test_cases -> shrink -> new_shrinker -> Shrinker.shrink -> initial_coarse_reduction; greedy_shrink", url: "https://github.com/HypothesisWorks/hypothesis/tree/9c55f97e507eae21677457e84737b386fd06e271/hypothesis/src/hypothesis/internal/conjecture", accessed_at: "2026-09" }
+    limitations: ["Static Python source inspection only; engine behavior was not executed, and this implementation does not define all property-based testing systems.", "First verified 2026-09-26; the named files and symbols were re-read at the same commit on 2026-10-01, which is the date now recorded. At this commit the package lives under hypothesis/src/hypothesis/."]
     applicability: "Production source-reading example for generation, stateful exploration, and shrinking."
     curriculum_usage: { lessons: ["16.2", "16.6"], labs: ["LAB-A"], assessments: ["Production-Source-Trace"] }
   - id: CLM-015
@@ -172,7 +174,7 @@ claims:
     domain: test_portfolio
     concepts: [portfolio, unique_failure_yield, test_cost]
     confidence: medium
-    currentness_status: "CURRENT / WORKLOAD-DEPENDENT"
+    currentness_status: "WORKLOAD-DEPENDENT"
     hypothesis:
       prediction: "A portfolio allocated by hazard and historical escape data increases unique high-severity failures found before release at equal evaluation cost."
       measurement_target: "Unique adjudicated failure clusters, severity, overlap by method, time/cost to discovery, false-positive rate, shrink/triage cost, and escaped incidents."
@@ -180,3 +182,71 @@ claims:
     limitations: ["Historical risk weighting can miss novel failure classes and generated cases can share hidden common causes."]
     applicability: "Release and continuous falsification programs."
     curriculum_usage: { lessons: ["16.6"], labs: ["LAB-D"], assessments: ["Mastery-16"] }
+  - id: CLM-016
+    claim: "Recall@k is not monotonic under corpus growth at fixed k: adding one higher-scoring irrelevant document can move Recall@1 from 1 to 0, and with a corpus-dependent scorer such as BM25 added documents can reorder existing ones in either direction. Recall@k' >= Recall@k does hold when the query, corpus snapshot, scorer version, and tie-break are identical, retrieval is exact (a prefix of one deterministic total order), the relevance set is identical and non-empty, and k' >= k."
+    provenance: DERIVED
+    domain: metamorphic_testing
+    concepts: [metamorphic_relation, recall_at_k, input_relation_validator]
+    confidence: high
+    currentness_status: "RECOMMENDED BASELINE / MODULE DERIVATION"
+    assumptions: ["Recall@k = |Rel intersect Top_k| / |Rel| with Rel non-empty.", "For the valid relation: exact retrieval returns a prefix of one fixed total order.", "For the BM25 illustration: tf=1, no length normalization, idf = ln(1 + (N-n+0.5)/(n+0.5))."]
+    derivation: "Counterexample: k=1, relevant document score 0.8; add an irrelevant document with score 0.9; it takes rank 1, so Recall@1 falls from 1 to 0. BM25 illustration: corpus d1={a}, d2={b}, d3={b}, d4={c}, query {a,b}: scores d1=1.204, d2=d3=0.693. After adding three documents containing only a: idf(a)=0.575, idf(b)=1.163, so d2 outranks d1; Recall@1 rises 0 to 1 if Rel={d2} and falls 1 to 0 if Rel={d1}. Valid relation: with one fixed total order, Top_k is a prefix of Top_k' for k' >= k, so Rel intersect Top_k is a subset of Rel intersect Top_k' and the denominator is unchanged."
+    limitations: ["An approximate index does not satisfy the exact-ranking precondition; its top-k need not be nested across k.", "A validator that reads the manifest trusts the manifest; exactness should be confirmed by brute-force recomputation on a sample.", "The relation says nothing about whether the relevance judgments are complete."]
+    applicability: "Metamorphic checks on retrieval and ranking components."
+    related_claims: ["CLM-004", "CLM-005"]
+    curriculum_usage: { lessons: ["16.3"], labs: ["LAB-B"], assessments: ["Mastery-16"] }
+  - id: CLM-017
+    claim: "At Hypothesis commit 9c55f97e507eae21677457e84737b386fd06e271, the default settings profile has max_examples=100, derandomize=False, stateful_step_count=50, and deadline 200 ms, and state-machine tests without explicit settings use deadline=None; when shrinking, the engine keeps a candidate only if its status is INTERESTING and its interesting_origin equals the target (any INTERESTING result if report_multiple_bugs is disabled); InterestingOrigin holds exception type, file name, line number, context, and group elements; candidates are ordered by sort_key, shorter choice sequences first and then smaller choices."
+    provenance: VERIFIED_FACT
+    domain: testing_runtime
+    concepts: [hypothesis, shrinking, failure_signature, default_settings]
+    confidence: high
+    currentness_status: "ONE IMPLEMENTATION DEFAULT / SOURCE SNAPSHOT"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "Hypothesis settings defaults", repository: "https://github.com/HypothesisWorks/hypothesis", commit: "9c55f97e507eae21677457e84737b386fd06e271", verification_date: "2026-10-01", file: "hypothesis/src/hypothesis/_settings.py; hypothesis/src/hypothesis/stateful.py", symbol: "default (settings profile); get_state_machine_test; RuleBasedStateMachine._to_test_case", entry_point: "settings() default profile; run_state_machine_as_test(...)", execution_path: "default = settings(max_examples=100, derandomize=False, stateful_step_count=50, deadline=200ms, ...); get_state_machine_test falls back to Settings(deadline=None, suppress_health_check=...)", url: "https://github.com/HypothesisWorks/hypothesis/blob/9c55f97e507eae21677457e84737b386fd06e271/hypothesis/src/hypothesis/_settings.py", accessed_at: "2026-10-01" }
+      - { source_type: source_code, tier: 1, title: "Hypothesis shrink predicate and ordering", repository: "https://github.com/HypothesisWorks/hypothesis", commit: "9c55f97e507eae21677457e84737b386fd06e271", verification_date: "2026-10-01", file: "hypothesis/src/hypothesis/internal/conjecture/engine.py; hypothesis/src/hypothesis/internal/conjecture/shrinker.py; hypothesis/src/hypothesis/internal/escalation.py", symbol: "ConjectureRunner.shrink_interesting_test_cases; sort_key; Shrinker; InterestingOrigin", entry_point: "ConjectureRunner._run shrink phase", execution_path: "shrink_interesting_test_cases -> predicate(d): d.status >= INTERESTING and d.interesting_origin == target -> self.shrink(result, predicate); InterestingOrigin.from_exception(e) -> (exc_type, filename, lineno, context, group_elems)", url: "https://github.com/HypothesisWorks/hypothesis/blob/9c55f97e507eae21677457e84737b386fd06e271/hypothesis/src/hypothesis/internal/conjecture/engine.py", accessed_at: "2026-10-01" }
+    limitations: ["Static source inspection only; no test was executed against this revision.", "One library at one revision; other engines and other Hypothesis versions may define failure identity differently.", "Settings profiles and decorators can override every default listed."]
+    applicability: "Deciding how to write assertions so an engine-level shrink preserves the intended failure."
+    related_claims: ["CLM-014", "CLM-018"]
+    curriculum_usage: { lessons: ["16.2"], labs: ["LAB-A"], assessments: ["Production-Source-Trace"] }
+  - id: CLM-018
+    claim: "A shrink step is valid only if the candidate stays inside the declared domain and fails with the same failure signature, defined here as (violated invariant, causal boundary, receiver-side effect count); an engine predicate based on exception type and source location is weaker, so each invariant should be raised from its own line or exception type and the effect count asserted inside the test."
+    provenance: DERIVED
+    domain: property_based_testing
+    concepts: [shrinker, failure_signature, validity_domain]
+    confidence: high
+    currentness_status: "RECOMMENDED BASELINE / MODULE DERIVATION"
+    assumptions: ["The requirement names a receiver-side observable effect.", "Domain validity can be checked for every candidate.", "The engine identifies failures by exception origin, as observed in CLM-017."]
+    derivation: "A candidate outside the domain is not an input the requirement covers, so its failure is not a counterexample. A candidate that fails a different invariant, or the same invariant with a different effect count or causal boundary, is a different defect; replacing the original with it loses the evidence being minimized. Two invariants checked on one source line share an exception origin, so an origin-equality predicate cannot tell them apart."
+    limitations: ["The signature is a modeling choice; too coarse merges defects and too fine blocks useful shrinking.", "Minimality is relative to shrink order and representation."]
+    applicability: "Stateful and effectful property tests."
+    related_claims: ["CLM-003", "CLM-012", "CLM-017"]
+    curriculum_usage: { lessons: ["16.2"], labs: ["LAB-A"], assessments: ["Mastery-16", "Incident-16.1"] }
+  - id: CLM-019
+    claim: "In the synthetic fixture F-16 toy model (client mints a new effect id per attempt; receiver commits then acknowledges and dedupes by effect id), an 8-step generated trace shrinks to 2 steps with the signature (INV-ONE-EFFECT, ack_lost_after_commit, 2) preserved after 24 predicate calls; a shrinker accepting any failure ends outside the domain with zero effects; a shared atomic mock hides the defect from three client variants; six hand-written mutants give mutation scores 0.40 before and 0.80 after promoting the minimized trace, with an acknowledge-before-commit mutant surviving; scripted replay reproduces 20 of 20 and a seeded timing-race variant 7 of 20."
+    provenance: DERIVED
+    domain: counterexample_lifecycle
+    concepts: [stateful_testing, shrinker, differential_testing, mutation_testing, reproduction_rate]
+    confidence: medium
+    currentness_status: "WORKLOAD-DEPENDENT / SYNTHETIC FIXTURE"
+    assumptions: ["The toy model rules are exactly those listed in Lesson 16.2.", "Generator seed 16 (Python random.Random), second generated case.", "Timing-race variant: acknowledgement latency log-normal with median 80 ms and sigma 0.5, timeout 100 ms, replay seed 163."]
+    derivation: "The toy model was executed deterministically. Shrink order: delete steps from the last, simplify faults in the order none < req_lost < ack_lost, set amount to 1, restart after each accepted step. Mutation score = killed/(generated - equivalent) = 2/5 and 4/5. Exact binomial interval for 7 of 20 is [0.154, 0.592]; the model probability of the race is 1 - Phi(ln(100/80)/0.5) = 0.328."
+    numeric_metadata:
+      numeric_type: predicted_behavior
+      workload: "Synthetic toy model of a transfer client and receiver; not a production system."
+      metric_definition: "Shrink predicate calls; mutation score K/(M-E); reproduction count k/n with exact binomial interval."
+      measurement_method: "Deterministic execution of the toy model outside the repository; seeded pseudo-random replay for the timing-race variant."
+    limitations: ["The toy model is not in the repository; the README states its rules so it can be rebuilt.", "Six hand-written mutants are not an operator distribution.", "Nothing here is evidence about any real payment system, client library, or testing tool."]
+    applicability: "Worked example for Lessons 16.2-16.6 and reference checks for LAB A-C."
+    related_claims: ["CLM-003", "CLM-008", "CLM-009", "CLM-012", "CLM-018"]
+    curriculum_usage: { lessons: ["16.2", "16.3", "16.4", "16.5", "16.6"], labs: ["LAB-A", "LAB-C", "LAB-D"], assessments: ["Mastery-16", "Incident-16.1"] }
+  - id: CLM-020
+    claim: "How widely property-based, metamorphic, and mutation testing are used for AI systems in industry, and 2025-2026 work on automated relation discovery, LLM-specific mutation operators, and agent fault injection, were not surveyed in this revision."
+    provenance: TODO_VERIFY
+    domain: currentness
+    concepts: [industry_prevalence, frontier_landscape]
+    confidence: low
+    currentness_status: "TODO_VERIFY"
+    limitations: ["No adoption survey or landscape review was opened; no prevalence statement in this module may be read as measured."]
+    applicability: "Scope note for the Section 05 source map."
+    curriculum_usage: { lessons: ["16.3"], labs: [], assessments: [] }

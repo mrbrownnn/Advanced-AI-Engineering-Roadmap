@@ -1,14 +1,18 @@
 module: "16-falsification-engineering"
-registry_version: "1.0.0"
+registry_version: "1.1.0"
 
-required_concepts: [falsification_contract, property, oracle, generator, shrinker, stateful_testing, metamorphic_relation, behavioral_test, differential_testing, mutation_testing, stochastic_trial, adaptive_search, fault_injection, counterexample_lifecycle, test_adequacy]
-prerequisite_concepts: [measurement_validity, experimental_unit, evaluation_contract, grader_validity, attempt_lineage, state_transition, system_boundary]
-first_occurrence_concepts: [falsification_contract, property_based_testing, shrinker, metamorphic_relation, differential_testing, mutation_testing, adaptive_search, counterexample_lifecycle]
+required_concepts: [falsification_contract, property, oracle, generator, shrinker, failure_signature, stateful_testing, metamorphic_relation, input_relation_validator, behavioral_test, differential_testing, common_mode_failure, mutation_testing, stochastic_trial, reproduction_rate, adaptive_search, fault_injection, counterexample_lifecycle, test_adequacy]
+prerequisite_concepts: [measurement_validity, experimental_unit, evaluation_contract, grader_validity, attempt_lineage, state_transition, system_boundary, recall_at_k, exact_vs_approximate_search, idempotency_key]
+first_occurrence_concepts: [falsification_contract, property_based_testing, shrinker, failure_signature, metamorphic_relation, input_relation_validator, differential_testing, common_mode_failure, mutation_testing, reproduction_rate, adaptive_search, counterexample_lifecycle]
 
 concept_dependencies:
   - { concept: property, depends_on: [measurement_validity, system_boundary] }
   - { concept: generator, depends_on: [property, experimental_unit] }
   - { concept: shrinker, depends_on: [generator, oracle] }
+  - { concept: failure_signature, depends_on: [oracle, attempt_lineage, idempotency_key] }
+  - { concept: input_relation_validator, depends_on: [metamorphic_relation, recall_at_k, exact_vs_approximate_search] }
+  - { concept: common_mode_failure, depends_on: [differential_testing, system_boundary] }
+  - { concept: reproduction_rate, depends_on: [stochastic_trial, failure_signature] }
   - { concept: metamorphic_relation, depends_on: [property, oracle] }
   - { concept: differential_testing, depends_on: [oracle, system_boundary] }
   - { concept: mutation_testing, depends_on: [property, test_adequacy] }
@@ -17,32 +21,32 @@ concept_dependencies:
 
 mechanisms:
   - { id: "MECH-01", description: "A falsification contract specifies requirement, valid domain, observable predicate/relation, oracle, search budget, lineage, severity, and the claim a passing test cannot support.", evidence_ids: ["CLM-001", "CLM-006", "CLM-013"], derived_from: [] }
-  - { id: "MECH-02", description: "Property-based testing generates valid examples or state-machine actions, checks invariants, and shrinks a failing execution while preserving domain validity and failure.", evidence_ids: ["CLM-002", "CLM-003", "CLM-014"], derived_from: ["MECH-01"] }
-  - { id: "MECH-03", description: "Metamorphic testing transforms an input under a justified relation and checks the corresponding output relation when a complete single-case oracle is unavailable.", evidence_ids: ["CLM-004", "CLM-005"], derived_from: ["MECH-01"] }
-  - { id: "MECH-04", description: "Differential testing finds disagreements for adjudication, while mutation testing perturbs known boundaries to measure whether a suite detects chosen fault classes.", evidence_ids: ["CLM-007", "CLM-008"], derived_from: ["MECH-01"] }
+  - { id: "MECH-02", description: "Property-based testing generates valid examples or state-machine actions, checks invariants, and shrinks a failing execution while preserving domain validity and the failure signature (violated invariant, causal boundary, receiver-side effect count).", evidence_ids: ["CLM-002", "CLM-003", "CLM-014", "CLM-018", "CLM-019"], derived_from: ["MECH-01"] }
+  - { id: "MECH-03", description: "Metamorphic testing transforms an input under a justified relation and checks the corresponding output relation when a complete single-case oracle is unavailable. An input-relation validator reads inputs and run configuration only and returns NOT_APPLICABLE before any output relation is adjudicated.", evidence_ids: ["CLM-004", "CLM-005", "CLM-016"], derived_from: ["MECH-01"] }
+  - { id: "MECH-04", description: "Differential testing finds disagreements for adjudication, while mutation testing perturbs known boundaries to measure whether a suite detects chosen fault classes. Targets that share a defect or a mock agree and produce no candidate.", evidence_ids: ["CLM-007", "CLM-008", "CLM-019"], derived_from: ["MECH-01"] }
   - { id: "MECH-05", description: "Stochastic and adaptive tests separate per-cell repetition from population coverage and separate counterexample discovery from confirmatory estimation.", evidence_ids: ["CLM-009", "CLM-010"], derived_from: ["MECH-01"] }
   - { id: "MECH-06", description: "Fault injection crosses an explicit boundary under a bounded blast radius and tests propagation, invariant preservation, recovery, and effect evidence.", evidence_ids: ["CLM-011"], derived_from: ["MECH-01"] }
   - { id: "MECH-07", description: "A counterexample pipeline adjudicates, minimizes, deduplicates, attributes, promotes, replays, and retires failures while a portfolio measures unique risk-weighted yield instead of one coverage target.", evidence_ids: ["CLM-012", "CLM-013", "CLM-015"], derived_from: ["MECH-02", "MECH-03", "MECH-04", "MECH-05", "MECH-06"] }
 
 mathematical_models:
   - { id: "MATH-01", description: "Generator support S_G is the set of inputs reachable with nonzero probability. A property test can falsify P only on sampled x in S_G intersect valid-domain D; passing says nothing about D outside S_G.", evidence_ids: ["CLM-001", "CLM-003"], derived_from: ["MECH-01", "MECH-02"] }
-  - { id: "MATH-02", description: "A metamorphic relation has an input predicate R_i(x,x') and required output predicate R_o(f(x),f(x')); a violation is evidence only when x and x' are valid and R_i is semantically justified.", evidence_ids: ["CLM-004", "CLM-005"], derived_from: ["MECH-03"] }
+  - { id: "MATH-02", description: "A metamorphic relation has an input predicate R_i(x,x') and required output predicate R_o(f(x),f(x')); a violation is evidence only when x and x' are valid and R_i is semantically justified. Example: Recall@k' >= Recall@k holds for k' >= k on one fixed exact ranking with a fixed non-empty relevance set; recall under corpus growth at fixed k has no guaranteed direction.", evidence_ids: ["CLM-004", "CLM-005", "CLM-016"], derived_from: ["MECH-03"] }
   - { id: "MATH-03", description: "Mutation score MS=K/(M-E), where K chosen mutants are killed, M generated, and E adjudicated equivalent/invalid. It measures sensitivity to this operator distribution, not all real defects.", evidence_ids: ["CLM-008"], derived_from: ["MECH-04"] }
-  - { id: "MATH-04", description: "With zero failures in n IID Bernoulli trials, one-sided confidence 1-alpha gives p_upper=1-alpha^(1/n). Trials, outcome predicate, and denominator must remain fixed; dependence invalidates the calculation.", evidence_ids: ["CLM-009"], derived_from: ["MECH-05"] }
+  - { id: "MATH-04", description: "With zero failures in n IID Bernoulli trials, one-sided confidence 1-alpha gives p_upper=1-alpha^(1/n); n reproductions in n replays give the lower bound alpha^(1/n) on the reproduction rate; k of n is reported with an exact binomial interval. Trials, outcome predicate, and denominator must remain fixed; dependence invalidates the calculation.", evidence_ids: ["CLM-009", "CLM-019"], derived_from: ["MECH-05"] }
   - { id: "MATH-05", description: "Portfolio yield can be reported as unique adjudicated severity-weighted failure clusters divided by total test, compute, judge, and triage cost; weights are risk policy and duplicate clustering is an empirical procedure.", evidence_ids: ["CLM-012", "CLM-015"], derived_from: ["MECH-07"] }
 
 implementation_mechanisms:
   - { id: "IMPL-01", description: "A test manifest pins property/relation/oracle version, generator and seed, system/config revisions, raw attempts, environment, transformation, shrink trace, expected invariant, and terminal verdict.", evidence_ids: ["CLM-001", "CLM-003", "CLM-012"], derived_from: ["MECH-01", "MECH-02", "MECH-07"] }
   - { id: "IMPL-02", description: "A fault matrix enumerates component, fault, injection point/time, observability, expected containment/recovery, abort threshold, cleanup, and postcondition evidence.", evidence_ids: ["CLM-011"], derived_from: ["MECH-06"] }
-  - { id: "IMPL-03", description: "Pinned Hypothesis source connects @given/find and rule-based state machines to ConjectureRunner exploration and Shrinker counterexample minimization.", evidence_ids: ["CLM-014"], derived_from: ["MECH-02"] }
+  - { id: "IMPL-03", description: "Pinned Hypothesis source connects @given/find and rule-based state machines to ConjectureRunner exploration and Shrinker counterexample minimization; its shrink predicate identifies a failure by exception origin, and its default profile bounds examples and stateful steps.", evidence_ids: ["CLM-014", "CLM-017"], derived_from: ["MECH-02"] }
 
 failure_modes:
   - { id: "FAIL-01", description: "Oracle illusion encodes an ambiguous, incomplete, circular, or judge-biased requirement and treats every disagreement as a system defect.", evidence_ids: ["CLM-001", "CLM-004", "CLM-007"], derived_from: ["MECH-01", "MECH-03", "MECH-04"] }
-  - { id: "FAIL-02", description: "Generator theater reaches only easy inputs, filters heavily, violates domain constraints, or shrinks into a different/invalid failure.", evidence_ids: ["CLM-003", "CLM-014"], derived_from: ["MECH-02"] }
-  - { id: "FAIL-03", description: "Unsound metamorphism assumes a paraphrase, order swap, irrelevant insertion, or format change preserves meaning when the task or policy makes it consequential.", evidence_ids: ["CLM-004", "CLM-005"], derived_from: ["MECH-03"] }
-  - { id: "FAIL-04", description: "Common-mode differential failure makes agreeing systems wrong, while implementation or policy differences create expected disagreement.", evidence_ids: ["CLM-007"], derived_from: ["MECH-04"] }
+  - { id: "FAIL-02", description: "Generator theater reaches only easy inputs, filters heavily, violates domain constraints, or shrinks into a different/invalid failure.", evidence_ids: ["CLM-003", "CLM-014", "CLM-018", "CLM-019"], derived_from: ["MECH-02"] }
+  - { id: "FAIL-03", description: "Unsound metamorphism assumes a paraphrase, order swap, irrelevant insertion, corpus growth, or format change preserves meaning or direction when the task or policy makes it consequential, or treats an approximate ranking as an exact one.", evidence_ids: ["CLM-004", "CLM-005", "CLM-016"], derived_from: ["MECH-03"] }
+  - { id: "FAIL-04", description: "Common-mode differential failure makes agreeing systems wrong, while implementation or policy differences create expected disagreement.", evidence_ids: ["CLM-007", "CLM-019"], derived_from: ["MECH-04"] }
   - { id: "FAIL-05", description: "Mutation-score gaming selects trivial/equivalent mutants or operators unlike production defects and mistakes score maximization for correctness.", evidence_ids: ["CLM-008"], derived_from: ["MECH-04"] }
-  - { id: "FAIL-06", description: "False stochastic confidence counts correlated retries as independent, drops failed attempts, or generalizes a fixed-cell bound to unseen inputs.", evidence_ids: ["CLM-009"], derived_from: ["MECH-05"] }
+  - { id: "FAIL-06", description: "False stochastic confidence counts correlated retries as independent, drops failed attempts, generalizes a fixed-cell bound to unseen inputs, or calls a once-observed timing-dependent failure deterministic.", evidence_ids: ["CLM-009", "CLM-019"], derived_from: ["MECH-05"] }
   - { id: "FAIL-07", description: "Adaptive-test leakage uses discovered worst cases to estimate prevalence or repeatedly tunes against a nominal holdout.", evidence_ids: ["CLM-010"], derived_from: ["MECH-05"] }
   - { id: "FAIL-08", description: "Unsafe or unrealistic injection causes uncontrolled effects, tests the injector rather than the recovery path, or misses correlated real faults.", evidence_ids: ["CLM-011"], derived_from: ["MECH-06"] }
   - { id: "FAIL-09", description: "Counterexample cemetery stores flaky, duplicate, unminimized, unowned failures until the suite becomes slow and ignored.", evidence_ids: ["CLM-012", "CLM-015"], derived_from: ["MECH-07"] }
@@ -54,6 +58,9 @@ production_connections:
 research_connections:
   - { id: "RESEARCH-01", description: "QuickCheck, metamorphic testing, differential testing, mutation testing, and CheckList remain distinct reference families whose assumptions must be adapted to stochastic composed AI systems.", evidence_ids: ["CLM-002", "CLM-004", "CLM-006", "CLM-007", "CLM-008"], derived_from: ["MECH-02", "MECH-03", "MECH-04"] }
   - { id: "RESEARCH-02", description: "2025 LLM metamorphic research expands the relation catalog but leaves transformation soundness, free-form output oracles, and product transfer workload-dependent.", evidence_ids: ["CLM-005"], derived_from: ["MECH-03"] }
+
+todo_verify:
+  - { id: "TODO-01", description: "Industry prevalence of property-based, metamorphic, and mutation testing for AI systems and the 2025-2026 landscape of relation discovery, LLM-specific mutation operators, and agent fault injection were not surveyed.", evidence_ids: ["CLM-020"], derived_from: [] }
 
 candidate_capabilities:
   - { capability: "Translate AI-system requirements into falsifiable properties, valid domains, oracles, severity, and explicit non-claims.", mapped_mechanisms: ["MECH-01", "MATH-01", "FAIL-01"] }

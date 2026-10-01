@@ -1,7 +1,9 @@
 module: "15-evaluation-engineering"
-registry_version: "1.0.0"
+registry_version: "1.1.0"
+previous_version: "1.0.0"
 research_cutoff: "2026-09-26"
-change_reason: "Replace placeholders with a traceable evaluation contract, grader calibration, uncertainty, release gating, contamination, and source-code evidence model."
+change_reason: "WP-A1b (AUD-15-01, AUD-15-02, AUD-G04, AUD-G05): add the slice partition / item-weighting rule, the block-level interval and row-versus-block comparison, the three-state release rule with multiplicity and look policy, the planning formula, and a seeded coverage simulation; record one harness's default standard-error behavior at the pinned revision; relabel derived practices from CURRENT DEFAULT to RECOMMENDED BASELINE because no tool default or adoption survey supports the older label. New and changed claims were checked against sources opened on 2026-10-01 with a landscape cutoff of 2026-09-30. Unchanged claims keep their 2026-09-26 cutoff and were not re-verified, except that CLM-015's files and symbols were re-read at the pinned commit."
+changed_claims: ["CLM-001", "CLM-003", "CLM-004", "CLM-005", "CLM-007", "CLM-008", "CLM-009", "CLM-010", "CLM-011", "CLM-012", "CLM-013", "CLM-014", "CLM-015", "CLM-016", "CLM-018", "CLM-019", "CLM-020", "CLM-021", "CLM-022", "CLM-023", "CLM-024", "CLM-025"]
 claims:
   - id: CLM-001
     claim: "An evaluation is decision evidence only when it declares the use case, target population, sampling unit, system boundary, policy, dataset and harness versions, metrics, thresholds, uncertainty procedure, and treatment of missing or failed outcomes."
@@ -9,7 +11,7 @@ claims:
     domain: evaluation_contract
     concepts: [decision_contract, target_population, estimand]
     confidence: high
-    currentness_status: "CURRENT DEFAULT"
+    currentness_status: "RECOMMENDED BASELINE / MODULE DERIVATION"
     assumptions: ["The evaluation is intended to support a named engineering or release decision rather than exploratory description alone."]
     derivation: "A score changes with population, unit, implementation, metric, and missingness policy. Without fixing these quantities, two runs need not estimate the same target and cannot support a reproducible decision."
     limitations: ["A complete contract does not make an unrepresentative sample or invalid grader valid."]
@@ -32,7 +34,7 @@ claims:
     domain: experimental_design
     concepts: [experimental_unit, clustering, repeated_generation]
     confidence: high
-    currentness_status: "CURRENT DEFAULT"
+    currentness_status: "RECOMMENDED BASELINE / MODULE DERIVATION"
     assumptions: ["Outputs sharing an input, user, session, or environment can be statistically dependent."]
     derivation: "Treating correlated repeats as independent inflates the nominal sample size and can understate uncertainty. The resampling or model unit must match the independent sampling process and decision target."
     limitations: ["The correct hierarchy is workload-specific and may require multilevel modeling rather than a single cluster key."]
@@ -44,7 +46,7 @@ claims:
     domain: dataset_design
     concepts: [dataset_lineage, slice, sampling_frame]
     confidence: high
-    currentness_status: "CURRENT DEFAULT"
+    currentness_status: "RECOMMENDED BASELINE / MODULE DERIVATION"
     assumptions: ["The target workload can be represented by observable examples and metadata, at least approximately."]
     derivation: "Aggregate estimates cannot be interpreted or reproduced when item origin, inclusion probability, version, or subgroup membership is unknown. Explicit metadata permits weighted estimates and slice-level failure detection."
     limitations: ["Recorded slices cannot reveal unmeasured subpopulations; privacy may constrain metadata retention."]
@@ -56,7 +58,7 @@ claims:
     domain: grading
     concepts: [executable_oracle, exact_match, test_coverage]
     confidence: high
-    currentness_status: "CURRENT DEFAULT / WHEN APPLICABLE"
+    currentness_status: "RECOMMENDED BASELINE / WHEN APPLICABLE"
     assumptions: ["The task exposes a machine-checkable property or expected result."]
     derivation: "A deterministic grader proves only its implemented predicate. Equivalence classes omitted by exact match create false negatives; behaviors omitted by tests create false positives."
     limitations: ["Some open-ended qualities lack a complete executable oracle."]
@@ -79,8 +81,8 @@ claims:
     domain: llm_judging
     concepts: [position_bias, order_balance, judge_stability]
     confidence: high
-    currentness_status: "CURRENT EVIDENCE"
-    evidence: [{ source_type: paper, tier: 1, title: "Judging the Judges: A Systematic Study of Position Bias in LLM-as-a-Judge", authors: "Lin Shi, Chiyu Ma, Wenhua Liang, Weicheng Ma, Soroush Vosoughi", year: "2024", url: "https://arxiv.org/abs/2406.07791", section: "Framework and experiments", accessed_at: "2026-09" }]
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "Judging the Judges: A Systematic Study of Position Bias in LLM-as-a-Judge", authors: "Lin Shi, Chiyu Ma, Wenhua Liang, Xingjian Diao, Weicheng Ma, Soroush Vosoughi", year: "2024", url: "https://arxiv.org/abs/2406.07791", section: "Framework and experiments", accessed_at: "2026-09" }]
     limitations: ["Order reversal diagnoses sensitivity but does not by itself recover ground truth or remove every bias."]
     applicability: "Pairwise judge protocols."
     curriculum_usage: { lessons: ["15.3"], labs: ["LAB-B"], assessments: ["Incident-15.1"] }
@@ -90,7 +92,7 @@ claims:
     domain: grader_validation
     concepts: [meta_evaluation, calibration_set, adjudication]
     confidence: high
-    currentness_status: "CURRENT DEFAULT"
+    currentness_status: "RECOMMENDED BASELINE / MODULE DERIVATION"
     assumptions: ["A human or executable reference protocol with acceptable validity can be sampled for calibration."]
     derivation: "A judge output is another fallible observation. Estimating its error against an independent reference and across relevant slices is necessary before using it as a proxy for the target judgment."
     limitations: ["Human labels can be noisy or norm-dependent; agreement with humans does not establish objective truth."]
@@ -102,7 +104,7 @@ claims:
     domain: human_evaluation
     concepts: [rubric, inter_rater_disagreement, adjudication]
     confidence: high
-    currentness_status: "CURRENT DEFAULT"
+    currentness_status: "RECOMMENDED BASELINE / MODULE DERIVATION"
     assumptions: ["The target construct requires human judgment and qualified raters can apply an explicit protocol."]
     derivation: "Without a shared operational definition and controlled presentation, labels confound target quality with rater interpretation, ordering, identity cues, and exposure conditions. Disagreement is evidence about ambiguity, not merely noise to delete."
     limitations: ["Blinding may be impossible when outputs reveal model identity; consensus can hide legitimate plural values."]
@@ -114,7 +116,7 @@ claims:
     domain: statistics
     concepts: [paired_comparison, bootstrap, confidence_interval]
     confidence: high
-    currentness_status: "CURRENT DEFAULT"
+    currentness_status: "RECOMMENDED BASELINE / MODULE DERIVATION"
     assumptions: ["The sampled independent blocks represent the target population and the comparison policy is fixed before inspecting outcomes."]
     derivation: "Pairing subtracts item difficulty shared by systems. Resampling independent blocks approximates repeated sampling; resampling dependent rows as independent produces the wrong sampling distribution."
     limitations: ["Bootstrap intervals are approximations and can fail with few clusters, severe shift, adaptive sampling, or nonregular statistics."]
@@ -126,19 +128,19 @@ claims:
     domain: release_gating
     concepts: [regression_gate, practical_significance, multiple_testing]
     confidence: high
-    currentness_status: "CURRENT DEFAULT"
+    currentness_status: "RECOMMENDED BASELINE / MODULE DERIVATION"
     assumptions: ["Metrics and tolerances reflect product and risk decisions made before the release result is known."]
     derivation: "Searching many metrics or slices raises false-discovery probability, while aggregation allows gains to compensate for critical harms. Predeclared constraints and uncertainty make the decision rule auditable."
     limitations: ["Thresholds encode value and risk judgments; statistics cannot choose them automatically."]
     applicability: "Model, prompt, retrieval, tool, policy, and runtime releases."
-    curriculum_usage: { lessons: ["15.4", "15.6"], labs: ["LAB-C"], assessments: ["Mastery-15"] }
+    curriculum_usage: { lessons: ["15.2", "15.4"], labs: ["LAB-C"], assessments: ["Mastery-15"] }
   - id: CLM-012
     claim: "LiveBench uses frequently refreshed questions, recent sources, objective ground-truth grading, and diverse tasks to limit contamination; its design reduces a known risk but does not prove zero leakage or production validity."
     provenance: VERIFIED_FACT
     domain: benchmark_freshness
     concepts: [contamination, dynamic_benchmark, objective_grader]
     confidence: high
-    currentness_status: "CURRENT / WORKLOAD-DEPENDENT"
+    currentness_status: "FRONTIER / WORKLOAD-DEPENDENT"
     evidence: [{ source_type: paper, tier: 1, title: "LiveBench: A Challenging, Contamination-Limited LLM Benchmark", authors: "Colin White et al.", year: "2025", url: "https://proceedings.iclr.cc/paper_files/paper/2025/hash/e4a46394ba5378b3f9a186a5b4c650d1-Abstract-Conference.html", section: "Abstract and benchmark design", accessed_at: "2026-09" }]
     limitations: ["Freshness cannot exclude private leakage, task adaptation, or mismatch with a product population; the title deliberately says contamination-limited, not contamination-free."]
     applicability: "Benchmark refresh and contamination-risk design."
@@ -149,7 +151,7 @@ claims:
     domain: offline_online_validity
     concepts: [proxy_metric, online_experiment, external_validity]
     confidence: high
-    currentness_status: "CURRENT DEFAULT"
+    currentness_status: "RECOMMENDED BASELINE / MODULE DERIVATION"
     assumptions: ["The deployed population, interaction policy, and downstream effects can differ from the offline sample."]
     derivation: "Offline datasets omit selection, adaptation, latency, abandonment, tool effects, and feedback loops. Correlation under one release does not establish that optimizing the proxy causes the desired online outcome."
     limitations: ["Online experiments may be infeasible or unethical for high-risk changes and can themselves suffer interference or novelty effects."]
@@ -161,23 +163,23 @@ claims:
     domain: outcome_accounting
     concepts: [denominator, missingness, survivorship_bias]
     confidence: high
-    currentness_status: "CURRENT DEFAULT"
+    currentness_status: "RECOMMENDED BASELINE / MODULE DERIVATION"
     assumptions: ["Non-completion can affect user utility and may depend on system, input, or load."]
     derivation: "Dropping failures conditions the estimate on a post-treatment event. A system can appear better by failing on difficult items, so offered-item and completed-item outcomes must remain distinguishable."
     limitations: ["Different product decisions may require multiple denominators, all explicitly named."]
     applicability: "Model and end-to-end system evaluation."
     curriculum_usage: { lessons: ["15.5"], labs: ["LAB-C", "LAB-D"], assessments: ["Incident-15.1"] }
   - id: CLM-015
-    claim: "At lm-evaluation-harness commit d6de81643928d653435c431bae19945d41d32520, simple_evaluate loads tasks and delegates to evaluate; evaluation builds requests, executes model request types, calls task.process_results, and aggregates configured metrics."
+    claim: "At lm-evaluation-harness commit d6de81643928d653435c431bae19945d41d32520, simple_evaluate loads tasks through TaskManager.load and delegates to evaluate; evaluate calls task.build_all_requests, dispatches each request type with getattr(lm, reqtype), calls task.process_results per document, and passes the per-document metrics to _process_results for aggregation."
     provenance: VERIFIED_FACT
     domain: evaluation_runtime
     concepts: [evaluation_harness, request_construction, metric_aggregation]
     confidence: high
     currentness_status: "CURRENT SOURCE SNAPSHOT"
     evidence:
-      - { source_type: source_code, tier: 1, title: "lm-evaluation-harness evaluator", repository: "https://github.com/EleutherAI/lm-evaluation-harness", commit: "d6de81643928d653435c431bae19945d41d32520", verification_date: "2026-09-26", file: "lm_eval/evaluator.py", symbol: "simple_evaluate; evaluate", entry_point: "simple_evaluate(model, tasks, ...)", execution_path: "TaskManager/load -> evaluate -> build_all_requests -> model request dispatch -> process_results -> aggregation", url: "https://github.com/EleutherAI/lm-evaluation-harness/blob/d6de81643928d653435c431bae19945d41d32520/lm_eval/evaluator.py", accessed_at: "2026-09" }
-      - { source_type: source_code, tier: 1, title: "lm-evaluation-harness task API", repository: "https://github.com/EleutherAI/lm-evaluation-harness", commit: "d6de81643928d653435c431bae19945d41d32520", verification_date: "2026-09-26", file: "lm_eval/api/task.py", symbol: "Task.build_all_requests; Task.construct_requests; Task.process_results; Task.aggregation; Task.higher_is_better", entry_point: "evaluation task lifecycle", execution_path: "documents/config -> instances -> request execution -> per-document results -> aggregate metrics", url: "https://github.com/EleutherAI/lm-evaluation-harness/blob/d6de81643928d653435c431bae19945d41d32520/lm_eval/api/task.py", accessed_at: "2026-09" }
-    limitations: ["Static source inspection only; tasks, models, caches, distributed behavior, and numerical results were not executed.", "This implementation does not define evaluation engineering generally."]
+      - { source_type: source_code, tier: 1, title: "lm-evaluation-harness evaluator", repository: "https://github.com/EleutherAI/lm-evaluation-harness", commit: "d6de81643928d653435c431bae19945d41d32520", verification_date: "2026-10-01", file: "lm_eval/evaluator.py", symbol: "simple_evaluate; evaluate", entry_point: "simple_evaluate(model, tasks, ...)", execution_path: "simple_evaluate -> TaskManager.load -> evaluate -> task.build_all_requests -> getattr(lm, reqtype)(requests) -> task.process_results -> _process_results (aggregation)", url: "https://github.com/EleutherAI/lm-evaluation-harness/blob/d6de81643928d653435c431bae19945d41d32520/lm_eval/evaluator.py", accessed_at: "2026-09" }
+      - { source_type: source_code, tier: 1, title: "lm-evaluation-harness task API", repository: "https://github.com/EleutherAI/lm-evaluation-harness", commit: "d6de81643928d653435c431bae19945d41d32520", verification_date: "2026-10-01", file: "lm_eval/api/task.py", symbol: "Task.build_all_requests; Task.construct_requests; Task.process_results; Task.aggregation; Task.higher_is_better", entry_point: "evaluation task lifecycle", execution_path: "documents/config -> instances -> request execution -> per-document results -> aggregate metrics", url: "https://github.com/EleutherAI/lm-evaluation-harness/blob/d6de81643928d653435c431bae19945d41d32520/lm_eval/api/task.py", accessed_at: "2026-09" }
+    limitations: ["Static source inspection only; tasks, models, caches, distributed behavior, and numerical results were not executed.", "This implementation does not define evaluation engineering generally.", "First verified 2026-09-26; the named files and symbols were re-read at the same commit on 2026-10-01, which is the date now recorded."]
     applicability: "Production source-reading example for task-to-request-to-metric lineage."
     curriculum_usage: { lessons: ["15.6"], labs: ["LAB-D"], assessments: ["Production-Source-Trace"] }
   - id: CLM-016
@@ -186,7 +188,7 @@ claims:
     domain: evaluation_operations
     concepts: [evaluation_funnel, escape_rate, false_block]
     confidence: medium
-    currentness_status: "CURRENT / WORKLOAD-DEPENDENT"
+    currentness_status: "WORKLOAD-DEPENDENT"
     hypothesis:
       prediction: "A cost-ordered staged funnel catches most actionable regressions before expensive or risky stages while preserving fewer false release blocks than a single universal suite."
       measurement_target: "Cost and latency per stage, unique defects found, overlap, false block, escaped incident, rerun instability, and time to decision."
@@ -205,3 +207,114 @@ claims:
     limitations: ["Recent preprint; framework coverage and reported judge performance require independent reproduction and do not remove judge validity requirements."]
     applicability: "Controlled comparison of judge configurations."
     curriculum_usage: { lessons: ["15.3", "15.6"], labs: ["LAB-B"], assessments: ["Mastery-15"] }
+  - id: CLM-018
+    claim: "At lm-evaluation-harness commit d6de81643928d653435c431bae19945d41d32520, simple_evaluate and evaluate default to bootstrap_iters=100000; _compute_task_aggregations obtains a standard-error function from stderr_for_metric, which maps the mean aggregation to mean_stderr (sample standard deviation over per-document values divided by sqrt(n)) and a listed set of other metrics to bootstrap_stderr, which resamples per-document values with rnd.choices(xs, k=len(xs)). No block or pairing key is used."
+    provenance: VERIFIED_FACT
+    domain: evaluation_runtime
+    concepts: [standard_error, bootstrap, experimental_unit]
+    confidence: high
+    currentness_status: "ONE IMPLEMENTATION DEFAULT / SOURCE SNAPSHOT"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "lm-evaluation-harness evaluator defaults", repository: "https://github.com/EleutherAI/lm-evaluation-harness", commit: "d6de81643928d653435c431bae19945d41d32520", verification_date: "2026-10-01", file: "lm_eval/evaluator.py", symbol: "simple_evaluate; evaluate", entry_point: "simple_evaluate(model, tasks, bootstrap_iters=100000, ...)", execution_path: "simple_evaluate -> evaluate -> _process_results(eval_results_acc, groups, bootstrap_iters)", url: "https://github.com/EleutherAI/lm-evaluation-harness/blob/d6de81643928d653435c431bae19945d41d32520/lm_eval/evaluator.py", accessed_at: "2026-10-01" }
+      - { source_type: source_code, tier: 1, title: "lm-evaluation-harness task aggregation", repository: "https://github.com/EleutherAI/lm-evaluation-harness", commit: "d6de81643928d653435c431bae19945d41d32520", verification_date: "2026-10-01", file: "lm_eval/evaluator_utils.py", symbol: "_compute_task_aggregations", entry_point: "_process_results(eval_results_acc, groups, bootstrap_iters)", execution_path: "raw per-document metric values -> task.aggregation()[metric] -> stderr_for_metric(metric=agg_fn, bootstrap_iters=...) -> <metric>_stderr", url: "https://github.com/EleutherAI/lm-evaluation-harness/blob/d6de81643928d653435c431bae19945d41d32520/lm_eval/evaluator_utils.py", accessed_at: "2026-10-01" }
+      - { source_type: source_code, tier: 1, title: "lm-evaluation-harness standard-error functions", repository: "https://github.com/EleutherAI/lm-evaluation-harness", commit: "d6de81643928d653435c431bae19945d41d32520", verification_date: "2026-10-01", file: "lm_eval/api/metrics.py", symbol: "stderr_for_metric; mean_stderr; sample_stddev; bootstrap_stderr; _bootstrap_internal", entry_point: "stderr_for_metric(metric, bootstrap_iters)", execution_path: "metric in bootstrappable list -> bootstrap_stderr -> rnd.choices(xs, k=len(xs)); metric is mean -> mean_stderr -> sample_stddev(arr)/sqrt(len(arr))", url: "https://github.com/EleutherAI/lm-evaluation-harness/blob/d6de81643928d653435c431bae19945d41d32520/lm_eval/api/metrics.py", accessed_at: "2026-10-01" }
+    limitations: ["Static source inspection only; nothing was executed.", "One harness at one revision; it says nothing about other tools or about how users post-process per-document outputs.", "The intermediate calls between _process_results and _compute_task_aggregations were followed by signature and call site, not by execution."]
+    applicability: "Interpreting harness-reported standard errors and deciding when to recompute uncertainty at block level."
+    curriculum_usage: { lessons: ["15.6"], labs: ["LAB-D"], assessments: ["Production-Source-Trace"] }
+  - id: CLM-019
+    claim: "A slice-weighted estimate sum_s w_s m_s equals the target population mean only when the slices partition the population (disjoint and exhaustive) and the weights are the target prevalences summing to one; with overlapping tags, items must instead be weighted individually by target cell share over sample cell share, so that each item is counted once."
+    provenance: DERIVED
+    domain: dataset_design
+    concepts: [slice_partition, post_stratification, item_weighting]
+    confidence: high
+    currentness_status: "RECOMMENDED BASELINE / MODULE DERIVATION"
+    assumptions: ["Target cell shares are known.", "Every target cell with nonzero share has sampled items.", "Within a cell, sampled items represent that cell's population."]
+    derivation: "For a partition, the law of total probability gives E[m] = sum_s P(S_s) E[m | S_s]. If an item lies in two slices its score enters two terms; if it lies in none it enters no term, so the identity fails. Weighting item i by (target share of its cell)/(sample share of its cell) and normalizing by the weight sum reproduces the partition formula over cells, because all items in a cell share one weight. Worked check: cells (10,9), (4,3), (2,1), (4,1) as (items, passes) give 14/20 = 0.70; overlapping tag slices give 0.75 with weights summing to 1.2, or 0.625 after normalizing."
+    limitations: ["An empty sampled cell cannot be reweighted.", "Extreme weights inflate variance.", "The worked numbers are synthetic."]
+    applicability: "Prevalence-weighted reporting over tagged evaluation sets."
+    related_claims: ["CLM-004", "CLM-011"]
+    curriculum_usage: { lessons: ["15.2"], labs: ["LAB-A"], assessments: ["Mastery-15"] }
+  - id: CLM-020
+    claim: "When an independent unit contributes more than one row, the interval for a paired mean must be built from block effects (a t interval on block means or a bootstrap that resamples whole blocks); resampling rows understates the standard error by about the square root of the design effect 1+(m-1)rho under positive within-block correlation, and the bootstrap distribution of a mean of G block effects has standard deviation sqrt((G-1)/G) s_b/sqrt(G)."
+    provenance: DERIVED
+    domain: statistics
+    concepts: [block_resampling, design_effect, paired_comparison]
+    confidence: high
+    currentness_status: "RECOMMENDED BASELINE / MODULE DERIVATION"
+    assumptions: ["Blocks are sampled independently from the target population.", "For the design-effect expression: equal block size m, common row variance, and one common within-block correlation rho.", "For the t interval: block effects are approximately normal."]
+    derivation: "With G independent blocks of m rows, Var(mean) = (1/(Gm)^2) * G * [m sigma^2 + m(m-1) rho sigma^2] = sigma^2 [1+(m-1) rho]/(Gm). Treating rows as independent drops the covariance term. Resampling G values with replacement from G block effects gives a mean whose variance is the population-style variance of those values divided by G, that is ((G-1)/G) s_b^2 / G. Worked check on the synthetic fixture R-15 (10 blocks of 4): block SE 0.1491 versus row SE 0.0930, ratio 1.60."
+    limitations: ["With unequal block sizes the block-weighted and row-weighted means are different estimands.", "A percentile bootstrap over few blocks undercovers; see CLM-024.", "Negative within-block correlation makes the row interval wider, not narrower; the block level is still the correct unit."]
+    applicability: "Repeated generations, multi-turn conversations, per-user task sets, shared documents, and translated question sets."
+    related_claims: ["CLM-003", "CLM-010", "CLM-024"]
+    curriculum_usage: { lessons: ["15.1", "15.4"], labs: ["LAB-C"], assessments: ["Mastery-15"] }
+  - id: CLM-021
+    claim: "A three-state release rule can be defined from predeclared gates on a two-sided 1-alpha interval [L,U] signed so larger is better: an improvement gate passes if L >= epsilon and is refuted if U < epsilon; a noninferiority gate passes if L >= -tau and is refuted if U < -tau; RELEASE requires every gate to pass, HOLD follows from any refuted gate or violated hard constraint, and everything else is INCONCLUSIVE. Requiring all gates to pass needs no multiplicity adjustment for false release; any-of-K claims and L planned looks use alpha/K and alpha/L."
+    provenance: DERIVED
+    domain: release_gating
+    concepts: [regression_gate, noninferiority_margin, multiple_comparisons, decision_state]
+    confidence: high
+    currentness_status: "RECOMMENDED BASELINE / MODULE DERIVATION"
+    assumptions: ["Each interval procedure has at least its nominal coverage for its own parameter.", "Thresholds, margins, slices, levels, and looks are fixed before results are seen.", "Looks are counted in advance."]
+    derivation: "If the true value of gate j is at or below its threshold, the gate passes only when L_j exceeds the true value, which has probability at most alpha/2 for a two-sided 1-alpha interval. If release is false because some gate j is truly violated, P(all gates pass) <= P(gate j passes) <= alpha/2, so no adjustment is needed. If any one of K gates could justify a claim, the union bound gives at most K times the per-gate level, so testing each at alpha/K restores the level; the same bound covers L looks. With k independent attempts at a gate whose true value equals its threshold, P(at least one pass) = 1-(1-alpha/2)^k."
+    limitations: ["Bonferroni is conservative; group-sequential boundaries are not covered.", "The all-must-pass rule lowers power.", "INCONCLUSIVE followed by risk acceptance is a governance decision, not a statistical pass.", "Coverage of the underlying interval is itself approximate; see CLM-024."]
+    applicability: "Model, prompt, retrieval, tool, policy, and runtime releases; reused by Module 17."
+    related_claims: ["CLM-011", "CLM-020", "CLM-022"]
+    curriculum_usage: { lessons: ["15.4"], labs: ["LAB-C"], assessments: ["Mastery-15"] }
+  - id: CLM-022
+    claim: "For an improvement gate with planning effect delta > epsilon, pilot block standard deviation s_b, two-sided level alpha, and power 1-beta, the normal approximation gives G >= ((z_{1-alpha/2}+z_{1-beta}) s_b/(delta-epsilon))^2 blocks; power is the probability that the gate passes when the true effect equals delta."
+    provenance: DERIVED
+    domain: statistics
+    concepts: [statistical_power, sample_size_planning, practical_threshold]
+    confidence: medium
+    currentness_status: "RECOMMENDED BASELINE / MODULE DERIVATION"
+    assumptions: ["The mean of G block effects is approximately normal with standard error s_b/sqrt(G).", "s_b from the pilot equals the block standard deviation in the planned sample.", "One look."]
+    derivation: "The gate passes when mean - z_{1-alpha/2} s_b/sqrt(G) >= epsilon. Under true effect delta, mean ~ Normal(delta, s_b^2/G), so the pass probability is Phi((delta-epsilon) sqrt(G)/s_b - z_{1-alpha/2}). Setting this to 1-beta and solving for G gives the formula. Worked check: s_b=0.4714, delta=0.25, epsilon=0.05, alpha=0.05, power 0.80 gives 43.6, so 44 blocks."
+    numeric_metadata:
+      numeric_type: predicted_behavior
+      workload: "Synthetic: block effects drawn from Normal(delta, 0.4714^2); 20,000 replications; NumPy default_rng seed 154."
+      metric_definition: "Fraction of replications in which the block t lower bound is at least epsilon=0.05."
+      measurement_method: "Monte Carlo with t critical values: 0.223 at G=10, 0.788 at G=44, 0.801 at G=46 for delta=0.25; 0.024 to 0.025 when the true effect equals epsilon."
+    limitations: ["A small pilot gives an uncertain s_b; the answer moves from 25 to 71 blocks as s_b moves from 0.35 to 0.60.", "The normal approximation is slightly optimistic against the t-based gate (0.788 rather than 0.80 at G=44 in the simulation).", "Power is not the probability that B is better and is not defined at a true effect equal to the threshold."]
+    applicability: "Sizing a paired block comparison before data collection; reused by Module 17."
+    related_claims: ["CLM-020", "CLM-021", "CLM-023"]
+    curriculum_usage: { lessons: ["15.4"], labs: ["LAB-C"], assessments: ["Mastery-15"] }
+  - id: CLM-023
+    claim: "Miller (2024) treats evaluation questions as draws from a super-population and recommends, among other things, clustered standard errors when questions are drawn in related groups, inference on question-level paired differences when two models are compared, and power analysis with a sample-size formula for a minimum detectable effect."
+    provenance: VERIFIED_FACT
+    domain: statistics
+    concepts: [clustered_standard_error, paired_comparison, statistical_power]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "Adding Error Bars to Evals: A Statistical Approach to Language Model Evaluations", authors: "Evan Miller", year: "2024", url: "https://arxiv.org/abs/2411.00640", version: "v1", section: "Section 2.2 and Eq. 4 (clustered standard errors); Section 4.2 and Eq. 7 (paired analysis); Section 5 and Eq. 9 (sample-size formula)", accessed_at: "2026-10-01" }]
+    limitations: ["The paper's formulas rest on Central Limit Theorem approximations.", "Its worked numbers are the author's and are not reused here.", "It does not define a noninferiority margin or a release/hold/inconclusive rule; those are this module's derivations."]
+    applicability: "Source for the cluster adjustment, paired analysis, and power planning used in Lesson 15.4."
+    related_claims: ["CLM-020", "CLM-022"]
+    curriculum_usage: { lessons: ["15.4"], labs: ["LAB-C"], assessments: ["Mastery-15"] }
+  - id: CLM-024
+    claim: "In one seeded synthetic model with within-block correlation 0.5 and four rows per block, nominal 95% intervals covered the true mean in 0.756 (row bootstrap), 0.900 (block percentile bootstrap), and 0.953 (block t) of replications at 10 blocks, and in 0.774, 0.931, and 0.946 at 40 blocks."
+    provenance: DERIVED
+    domain: statistics
+    concepts: [interval_coverage, block_resampling, bootstrap]
+    confidence: medium
+    currentness_status: "WORKLOAD-DEPENDENT / SIMULATION"
+    assumptions: ["Block effects are Normal(0.25, 0.4^2) and row noise is Normal(0, 0.4^2), independent across blocks.", "Percentile intervals use 1,000 resamples; 5,000 replications; NumPy default_rng seed 151."]
+    derivation: "Monte Carlo: for each replication draw the data, form each interval, and record whether it contains 0.25. The row bootstrap ignores the between-block variance component, so its interval is too narrow for any number of blocks. The percentile block bootstrap uses the right unit but its distribution is too narrow by the factor sqrt((G-1)/G) and uses normal-like quantiles, so it undercovers when G is small. The t interval is exact for normal block effects by construction."
+    numeric_metadata:
+      numeric_type: predicted_behavior
+      workload: "Synthetic two-level normal model; G in {10, 40}; m=4."
+      metric_definition: "Fraction of nominal 95% intervals containing the true mean."
+      measurement_method: "Seeded Monte Carlo; standard error about 0.003 near 0.95 and 0.006 near 0.76."
+    limitations: ["One simulation model; coverage for skewed, bounded, or heavy-tailed block effects can differ in either direction.", "Not a measurement of any real evaluation.", "Does not rank bootstrap variants that were not run."]
+    applicability: "Illustrating that the resampling unit matters and that a small-sample bootstrap interval is an approximation."
+    related_claims: ["CLM-020"]
+    curriculum_usage: { lessons: ["15.4"], labs: ["LAB-C"], assessments: ["Mastery-15"] }
+  - id: CLM-025
+    claim: "How widely paired, block-aware, predeclared release gating is used in industry, and the 2025-2026 landscape of evaluation-statistics tooling and sequential release testing, were not surveyed in this revision."
+    provenance: TODO_VERIFY
+    domain: currentness
+    concepts: [industry_prevalence, sequential_testing]
+    confidence: low
+    currentness_status: "TODO_VERIFY"
+    limitations: ["No adoption survey or tooling comparison was opened; no prevalence statement in this module may be read as measured."]
+    applicability: "Scope note for the Section 05 source map."
+    curriculum_usage: { lessons: ["15.4"], labs: [], assessments: [] }
