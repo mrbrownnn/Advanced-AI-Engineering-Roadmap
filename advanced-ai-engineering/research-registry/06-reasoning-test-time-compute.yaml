@@ -1,7 +1,9 @@
 module: "06-reasoning-test-time-compute"
-registry_version: "1.0.0"
-research_cutoff: "2026-09-26"
-change_reason: "Replace generated placeholders with verified test-time reasoning mechanisms, qualified mathematical models, source tracing, and falsifiable failure hypotheses."
+registry_version: "1.1.0"
+previous_version: "1.0.0"
+research_cutoff: "2026-09-30"
+change_reason: "WP-F2 review (AUD-06-01, G04, G05): make the independence assumptions of pass@k explicit, separate independent sampling from dependent or heterogeneous candidates, add solved compute-ledger and stopping examples, record reading depth per source, and re-inspect the pinned Transformers trace."
+changed_claims: ["CLM-001", "CLM-002", "CLM-003", "CLM-004", "CLM-005", "CLM-006", "CLM-007", "CLM-008", "CLM-009", "CLM-010", "CLM-012", "CLM-013", "CLM-014", "CLM-017", "CLM-018", "CLM-019"]
 
 claims:
   - id: CLM-001
@@ -18,8 +20,9 @@ claims:
         authors: "Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Brian Ichter, Fei Xia, Ed Chi, Quoc Le, Denny Zhou"
         year: "2022"
         url: "https://arxiv.org/abs/2201.11903"
-        section: "Abstract and experiments"
-        accessed_at: "2026-09"
+        version: "arXiv v6 (10 Jan 2023)"
+        section: "Abstract only (2026-10 re-read)"
+        accessed_at: "2026-10"
     limitations:
       - "Effects depend on model, scale, prompt exemplars, task, decoding, and scoring."
       - "Outputting steps is an observable behavior, not proof of an internal causal trace."
@@ -27,7 +30,7 @@ claims:
     curriculum_usage: { lessons: ["6.1"], labs: ["LAB-A"], assessments: ["Mastery-06"] }
 
   - id: CLM-002
-    claim: "Self-consistency samples diverse chain-of-thought paths and selects an answer by marginalizing over their final answers; its paper reports gains on evaluated reasoning benchmarks, but benefit depends on sample diversity, error correlation, answer normalization, and compute budget."
+    claim: "Self-consistency samples diverse chain-of-thought paths from the decoder and selects an answer by marginalizing over the sampled reasoning paths, defined as argmax over answers a of the count of candidates whose parsed answer equals a (the paper calls this a majority vote; it is a plurality rule). The paper reports gains on evaluated reasoning benchmarks, but benefit depends on sample diversity, error correlation, answer normalization, and compute budget."
     provenance: VERIFIED_FACT
     domain: parallel_reasoning
     concepts: [self_consistency, answer_voting, sample_diversity]
@@ -40,8 +43,9 @@ claims:
         authors: "Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc Le, Ed Chi, Sharan Narang, Aakanksha Chowdhery, Denny Zhou"
         year: "2023"
         url: "https://arxiv.org/abs/2203.11171"
-        section: "Method and experiments"
-        accessed_at: "2026-09"
+        version: "arXiv v4 (7 Mar 2023), ICLR 2023"
+        section: "Section 2 (self-consistency over diverse reasoning paths; vote definition); Table 1"
+        accessed_at: "2026-10"
     limitations:
       - "Correlated wrong answers can dominate a vote."
       - "Plurality over normalized answers is not the same event as a strict majority of independent correct/incorrect trials."
@@ -49,7 +53,7 @@ claims:
     curriculum_usage: { lessons: ["6.2"], labs: ["LAB-B"], assessments: ["Mastery-06"] }
 
   - id: CLM-003
-    claim: "Tree of Thoughts introduces explicit branching, evaluation, lookahead, and backtracking over text units; the paper's benefits are task- and search-configuration-specific, and tree expansion can multiply model calls without improving the selector."
+    claim: "Tree of Thoughts frames problem solving as search over states (input plus thoughts so far) and is instantiated by four choices: thought decomposition, a thought generator producing k candidates per state (i.i.d. sampling or one propose prompt), a state evaluator (independent value or vote across states), and a search algorithm (BFS keeping b states per step for T steps, or DFS with a value threshold for pruning). The paper's benefits are task- and search-configuration-specific, and tree expansion can multiply model calls without improving the selector."
     provenance: VERIFIED_FACT
     domain: reasoning_search
     concepts: [tree_of_thoughts, branching_search, backtracking]
@@ -62,8 +66,9 @@ claims:
         authors: "Shunyu Yao, Dian Yu, Jeffrey Zhao, Izhak Shafran, Thomas L. Griffiths, Yuan Cao, Karthik Narasimhan"
         year: "2023"
         url: "https://arxiv.org/abs/2305.10601"
-        section: "Framework and experiments"
-        accessed_at: "2026-09"
+        version: "arXiv v2 (3 Dec 2023)"
+        section: "Section 3 (thought decomposition, generator G, state evaluator V, search); Algorithms 1 (ToT-BFS) and 2 (ToT-DFS). Experiments not re-read"
+        accessed_at: "2026-10"
     limitations:
       - "Results on Game of 24, Creative Writing, and Mini Crosswords do not establish general gains."
       - "Self-evaluation errors can prune good branches or retain persuasive wrong ones."
@@ -84,8 +89,9 @@ claims:
         authors: "Hunter Lightman, Vineet Kosaraju, Yura Burda, Harri Edwards, Bowen Baker, Teddy Lee, Jan Leike, John Schulman, Ilya Sutskever, Karl Cobbe"
         year: "2023"
         url: "https://arxiv.org/abs/2305.20050"
-        section: "Abstract, supervision comparison, and PRM800K release"
-        accessed_at: "2026-09"
+        version: "arXiv v1 (31 May 2023)"
+        section: "Abstract only (2026-10 re-read)"
+        accessed_at: "2026-10"
     limitations:
       - "Step labels are costly, task-specific, and may encode annotation policy rather than general correctness."
       - "A verifier can be miscalibrated or exploited by the candidate generator."
@@ -93,7 +99,7 @@ claims:
     curriculum_usage: { lessons: ["6.4"], labs: ["LAB-C"], assessments: ["Incident-06.1", "Mastery-06"] }
 
   - id: CLM-005
-    claim: "Snell et al. find that effective allocation between verifier-guided search and adaptive response-distribution methods varies with prompt difficulty in their studied setting, supporting workload-adaptive rather than uniform test-time compute policies."
+    claim: "Snell et al. find that effective allocation between verifier-guided search and adaptive response-distribution methods varies with prompt difficulty in their studied setting, supporting workload-adaptive rather than uniform test-time compute policies. Their difficulty bins are quantiles of a base model's per-question pass@1 estimated from many samples; they call the ground-truth version oracle difficulty and note it is unavailable at deployment, and they also evaluate a model-predicted difficulty derived from a learned verifier's scores, which adds inference cost."
     provenance: VERIFIED_FACT
     domain: compute_allocation
     concepts: [test_time_scaling, adaptive_compute, problem_difficulty]
@@ -106,8 +112,9 @@ claims:
         authors: "Charlie Snell, Jaehoon Lee, Kelvin Xu, Aviral Kumar"
         year: "2024"
         url: "https://arxiv.org/abs/2408.03314"
-        section: "Abstract and evaluation"
-        accessed_at: "2026-09"
+        version: "arXiv v1 (6 Aug 2024)"
+        section: "Abstract; passage defining difficulty bins (oracle difficulty and model-predicted difficulty)"
+        accessed_at: "2026-10"
     limitations:
       - "Reported efficiency/model-scaling comparisons are tied to the paper's base models, reward models, difficulty estimator, tasks, and FLOPs accounting."
       - "Prompt difficulty is latent and must be estimated without target-label leakage."
@@ -128,8 +135,9 @@ claims:
         authors: "Niklas Muennighoff, Zitong Yang, Weijia Shi, Xiang Lisa Li, Li Fei-Fei, Hannaneh Hajishirzi, Luke Zettlemoyer, Percy Liang, Emmanuel Candes, Tatsunori Hashimoto"
         year: "2025"
         url: "https://arxiv.org/abs/2501.19393"
-        section: "Abstract and budget-forcing method"
-        accessed_at: "2026-09"
+        version: "arXiv v3 (1 Mar 2025)"
+        section: "Abstract; Section 1; Section 3.1 (budget forcing)"
+        accessed_at: "2026-10"
     limitations:
       - "Appending a continuation cue does not guarantee useful additional computation and may induce repetition or answer revision."
       - "Training recipe and output format are part of the mechanism."
@@ -150,16 +158,18 @@ claims:
         authors: "Miles Turpin, Julian Michael, Ethan Perez, Samuel R. Bowman"
         year: "2023"
         url: "https://arxiv.org/abs/2305.04388"
-        section: "Abstract and biasing experiments"
-        accessed_at: "2026-09"
+        version: "arXiv v2 (9 Dec 2023)"
+        section: "Abstract only (2026-10 re-read)"
+        accessed_at: "2026-10"
       - source_type: paper
         tier: 1
         title: "Reasoning Models Don't Always Say What They Think"
         authors: "Yanda Chen et al."
         year: "2025"
         url: "https://arxiv.org/abs/2505.05410"
-        section: "Abstract and hint-faithfulness experiments"
-        accessed_at: "2026-09"
+        version: "arXiv v1 (8 May 2025)"
+        section: "Abstract only (2026-10 re-read)"
+        accessed_at: "2026-10"
     limitations:
       - "These studies falsify universal faithfulness; they do not prove that every rationale is unfaithful."
       - "Faithfulness probes are intervention-specific and do not directly reveal hidden states."
@@ -180,10 +190,13 @@ claims:
         authors: "Shu Zhou, Rui Ling, Junan Chen, Xin Wang, Tao Fan, Hao Wang"
         year: "2026"
         url: "https://arxiv.org/abs/2604.10739"
-        section: "Abstract"
-        accessed_at: "2026-09"
+        version: "arXiv v1 (12 Apr 2026), preprint"
+        section: "Abstract; Sections 1-3 (compute budget via budget forcing, marginal utility, flip events); Limitations"
+        accessed_at: "2026-10"
     limitations:
       - "Preprint evidence requires replication across more models, tasks, prompts, and stopping interventions."
+      - "Budgets are imposed by budget forcing (appending a continuation cue or force-decoding the end-of-thinking delimiter) over token budgets from 500 to 16000; the authors' Limitations section restricts the findings to mathematical and scientific reasoning tasks and open-weight models and says causal mechanisms are not established."
+      - "No number from the paper is retained here."
       - "Observed token length can be both a cause and a consequence of difficulty."
     applicability: "Designing budget sweeps and adaptive stopping tests rather than assuming monotone scaling."
     curriculum_usage: { lessons: ["6.5"], labs: ["LAB-D"], assessments: ["Mastery-06"] }
@@ -197,11 +210,12 @@ claims:
     currentness_status: "REFERENCE / BASELINE"
     assumptions:
       - "Each candidate is judged against an objective ground truth."
-      - "Correctness events are independent with common probability p."
+      - "Correctness events are independent with common probability p. For repeated sampling this means one fixed item and k draws generated independently under one sampling contract (separate random streams, no shared seed, cache reuse, deduplication, or conditioning on earlier candidates)."
       - "Oracle pass@k asks whether any candidate is correct, not whether a deployable selector chooses it."
     derivation: "The probability all k candidates fail is (1-p)^k; the complementary event that at least one succeeds has probability 1-(1-p)^k."
     limitations:
-      - "Shared prompts, model state, decoding, and failure modes usually correlate samples."
+      - "Pooled over items of unequal difficulty, candidates for the same item are positively correlated even when each item's draws are independent, and the pooled formula overstates population pass@k (see CLM-017)."
+      - "Greedy decoding, beam candidates, shared seeds, or revisions conditioned on earlier candidates make the draws themselves dependent."
       - "It does not include verifier error, cost, latency, or answer selection."
     applicability: "Toy planning and independence-sensitivity analysis for repeated sampling."
     curriculum_usage: { lessons: ["6.2"], labs: ["LAB-B"], assessments: ["Mastery-06"] }
@@ -224,10 +238,12 @@ claims:
         authors: "Mark Chen et al."
         year: "2021"
         url: "https://arxiv.org/abs/2107.03374"
-        section: "pass@k estimator"
-        accessed_at: "2026-09"
+        version: "arXiv v2 (14 Jul 2021)"
+        section: "Section 2.1 (Eq. 1, Figure 3); Appendix A"
+        accessed_at: "2026-10"
     limitations:
       - "Requires an executable or otherwise objective candidate-level judge."
+      - "Unbiasedness for the per-problem quantity 1-(1-p)^k assumes the n samples are independent draws with common p for that problem (see CLM-018)."
       - "Does not measure selection accuracy or user-visible utility."
     applicability: "Offline evaluation when multiple candidates per problem are generated and objectively checked."
     curriculum_usage: { lessons: ["6.2"], labs: ["LAB-B"], assessments: ["Mastery-06"] }
@@ -259,10 +275,12 @@ claims:
     assumptions:
       - "All terms are converted to one declared unit such as GPU-seconds, accelerator FLOPs, tokens by model class, or monetary cost."
       - "The timing boundary and parallel execution resources are explicitly recorded."
-    derivation: "Total resource use is additive over executed work after unit conversion; elapsed time follows the dependency critical path and can be smaller than summed work when branches run in parallel."
+    derivation: "Total resource use is additive over executed work after unit conversion; elapsed time follows the dependency critical path and can be smaller than summed work when branches run in parallel. Synthetic check: four branches of 2.0, 2.4, 3.1, 2.7 s plus a 0.5 s verifier pass after the join and 0.1 s host orchestration give 10.7 accelerator-seconds of work; the critical path is 3.1+0.1+0.5=3.7 s with four free workers and max(2.0+3.1, 2.4+2.7)+0.6=5.7 s with two workers, with total work unchanged."
     limitations:
       - "Token counts are not compute-equivalent across models, sequence positions, batch shapes, or verifier types."
       - "FLOPs estimates omit memory, communication, idle capacity, and billing rules."
+      - "The worked numbers are synthetic and assume no queueing and no slowdown from sharing a device."
+      - "Token count is a work measure, not a quality measure."
     applicability: "Cost/latency comparison of sequential reasoning, best-of-N, voting, and tree search."
     curriculum_usage: { lessons: ["6.5"], labs: ["LAB-B", "LAB-C", "LAB-D"], assessments: ["Mastery-06"] }
 
@@ -279,11 +297,13 @@ claims:
     derivation: "The oracle succeeds whenever at least one candidate is correct. A fallible selector can choose a wrong candidate from a set containing a correct one but cannot create a correct candidate absent from the set; therefore realized selection success cannot exceed oracle set success under these boundaries."
     limitations:
       - "If the verifier changes generation/search, the candidate sets differ and the simple bound comparison no longer isolates selection."
+      - "Candidate-level precision and recall do not determine item-level selected success."
+      - "Synthetic check used in Lesson 6.4: 60 of 100 fixed sets contain a correct candidate and 45 selections are correct, giving 0.60 oracle, 0.45 selected, 0.75 selection accuracy given opportunity."
     applicability: "Separating generator diversity from verifier quality in repeated-sampling experiments."
     curriculum_usage: { lessons: ["6.4"], labs: ["LAB-B", "LAB-C"], assessments: ["Mastery-06"] }
 
   - id: CLM-014
-    claim: "At Transformers commit 27166ea03f12c940f23176a904ab1d2ff1a3dcbb, GenerationMixin._prepare_generated_length makes max_new_tokens determine max_length as prompt length plus new-token budget; _get_stopping_criteria assembles length, time, stop-string, EOS, and optional custom criteria, and StoppingCriteriaList ORs their per-row decisions."
+    claim: "At Transformers commit 27166ea03f12c940f23176a904ab1d2ff1a3dcbb, GenerationMixin._prepare_generated_length sets max_length to max_new_tokens plus the input length when max_new_tokens is given; _get_stopping_criteria appends a MaxLengthCriteria when max_length is set, a MaxTimeCriteria when max_time is set, a StopStringCriteria when stop_strings is set (requiring a tokenizer), an EosTokenCriteria when an EOS token tensor is configured, a ConfidenceCriteria only for assistant generation with a positive confidence threshold, and then merges user-supplied criteria; StoppingCriteriaList.__call__ ORs the per-row boolean results, and _sample applies them as unfinished_sequences & ~stopping_criteria(input_ids, scores)."
     provenance: VERIFIED_FACT
     domain: runtime_implementation
     concepts: [generation_budget, stopping_criteria, transformers_source_trace]
@@ -295,18 +315,21 @@ claims:
         title: "Transformers generation and stopping implementation"
         repository: "https://github.com/huggingface/transformers"
         commit: "27166ea03f12c940f23176a904ab1d2ff1a3dcbb"
-        verification_date: "2026-09-26"
+        verification_date: "2026-10-01"
         file: "src/transformers/generation/utils.py; src/transformers/generation/stopping_criteria.py"
-        symbol: "GenerationMixin.generate; GenerationMixin._prepare_generated_length; GenerationMixin._get_stopping_criteria; StoppingCriteriaList.__call__; MaxLengthCriteria.__call__"
+        symbol: "GenerationMixin.generate; GenerationMixin._prepare_generated_length; GenerationMixin._get_stopping_criteria; GenerationMixin._sample; StoppingCriteriaList.__call__; MaxLengthCriteria.__call__; MaxTimeCriteria.__call__"
         entry_point: "GenerationMixin.generate(...)"
         execution_path: "generate -> prepare generation config/length -> build stopping criteria -> selected decode loop -> StoppingCriteriaList.__call__"
         url: "https://github.com/huggingface/transformers/blob/27166ea03f12c940f23176a904ab1d2ff1a3dcbb/src/transformers/generation/utils.py"
         accessed_at: "2026-09"
     limitations:
       - "Static source inspection only; the path was not executed in this repository."
+      - "First verified 2026-09-26; the same revision, files, and symbols were statically re-inspected on 2026-10-01."
+      - "One runtime snapshot: it does not establish which stop controls other runtimes or hosted APIs provide."
+      - "MaxLengthCriteria and MaxTimeCriteria return one decision for every row of the batch."
       - "Generic generation length/time controls do not constitute a semantic reasoning-budget controller or quality-aware stopping policy."
     applicability: "Source-reading exercise distinguishing runtime token/time stops from higher-level test-time reasoning policies."
-    curriculum_usage: { lessons: ["6.5"], labs: ["LAB-D"], assessments: ["Production-Source-Trace"] }
+    curriculum_usage: { lessons: ["6.5"], labs: ["LAB-A", "LAB-D"], assessments: ["Production-Source-Trace", "Mastery-06"] }
 
   - id: CLM-015
     claim: "A useful adaptive-compute policy should allocate additional work only when its predicted marginal value exceeds its marginal cost, but difficulty and value estimates must be validated for calibration, subgroup error, and label leakage before production use."
@@ -339,3 +362,65 @@ claims:
       - "A widening score-quality gap can also arise from evaluator noise or distribution shift without deliberate exploitation."
     applicability: "Best-of-N, process-reward search, tree search, and iterative critique systems."
     curriculum_usage: { lessons: ["6.4", "6.6"], labs: ["LAB-C"], assessments: ["Incident-06.1", "Mastery-06"] }
+
+  - id: CLM-017
+    claim: "When each item i has its own single-sample correctness probability p_i and candidates are independent draws within an item, population pass@k equals the average over items of 1-(1-p_i)^k, which is at most 1-(1-pbar)^k for the pooled mean pbar, with equality for k>=2 only when all p_i are equal. Candidates for the same randomly chosen item are then positively correlated with correlation Var(p_i)/(pbar(1-pbar)). If the draws are fully dependent (identical candidates, as under greedy decoding), pass@k equals pass@1."
+    provenance: DERIVED
+    domain: reasoning_metrics
+    concepts: [pass_at_k, item_heterogeneity, correlated_candidates, independence_assumption]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions:
+      - "Correctness is binary and judged against ground truth."
+      - "Within an item, the k candidates are independent draws with common probability p_i; items are sampled from a fixed population."
+      - "For the greedy statement: exact arithmetic and a deterministic decoder, so all k candidates are identical."
+    derivation: "(1-p)^k is convex in p for k>=2, so by Jensen E[(1-p_i)^k] >= (1-pbar)^k and therefore E[1-(1-p_i)^k] <= 1-(1-pbar)^k. For two candidates of one random item, P(both correct)=E[p_i^2], so the covariance is E[p_i^2]-pbar^2=Var(p_i). Synthetic checks: with half the items at p_i=0.8 and half at 0, pbar=0.4, population pass@3=0.5*(1-0.2^3)=0.496 versus 0.784 pooled, and correlation (0.32-0.16)/0.24=0.667. For the four-item table of Lesson 6.2 (correct counts 4,2,2,0 of n=5): single-sample accuracy 0.40, finite-sample pass@3 (1+0.9+0.9+0)/4=0.70, per-item plug-in mean 0.64, plurality-selected accuracy 0.50, strict-majority rate 0.25, oracle set success over five candidates 0.75. All values recomputed in Python."
+    limitations:
+      - "The table and the mixture are synthetic exercise data, not benchmark results."
+      - "Does not model partially dependent draws such as low-temperature near-duplicates; those need measurement."
+    applicability: "Explaining why a pooled IID formula overstates population pass@k and why sampling independence does not imply independent correctness across a population."
+    related_claims: ["CLM-009", "CLM-010", "CLM-011"]
+    curriculum_usage: { lessons: ["6.2"], labs: ["LAB-B"], assessments: ["Mastery-06"] }
+
+  - id: CLM-018
+    claim: "Chen et al. evaluate pass@k by generating n>=k samples per task, counting the c correct samples, and averaging 1-C(n-c,k)/C(n,k) over problems; they state that this estimator is unbiased, show in Appendix A that its expectation is 1-(1-p)^k when c is Binomial(n,p), and report that the plug-in estimate 1-(1-phat)^k with the empirical pass@1 is a consistent underestimate."
+    provenance: VERIFIED_FACT
+    domain: reasoning_metrics
+    concepts: [pass_at_k_estimator, unbiased_estimator, plug_in_bias]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence:
+      - source_type: paper
+        tier: 1
+        title: "Evaluating Large Language Models Trained on Code"
+        authors: "Mark Chen et al."
+        year: "2021"
+        url: "https://arxiv.org/abs/2107.03374"
+        version: "arXiv v2 (14 Jul 2021)"
+        section: "Section 2.1 (Eq. 1; Figure 3); Appendix A (Estimating pass@k)"
+        accessed_at: "2026-10"
+    limitations:
+      - "The binomial assumption is independence of the n samples for one problem with a common p; it is a property of the sampling protocol, not of every candidate-generation method."
+      - "The estimator measures oracle set success with a functional-correctness judge, not selected accuracy."
+    applicability: "Offline multi-sample evaluation with an objective per-candidate judge."
+    related_claims: ["CLM-010", "CLM-017"]
+    curriculum_usage: { lessons: ["6.2"], labs: ["LAB-B"], assessments: ["Mastery-06"] }
+
+  - id: CLM-019
+    claim: "For plurality voting over at most k_max candidates, after j candidates with a leader holding a votes and the best other answer holding b votes, the plurality winner cannot change if a-b > k_max-j; stopping then returns the same answer as the full vote. This is an exact early stop for the selection rule and says nothing about whether the selected answer is correct. A utility model U(B)=Q(B)-lambda*C(B) can peak at a different budget than accuracy Q(B), and Q(B) need not be monotone in B."
+    provenance: DERIVED
+    domain: compute_control
+    concepts: [stopping_policy, exact_early_stop, marginal_utility, nonmonotonic_utility]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions:
+      - "Votes are counted on normalized answers with a fixed tie rule, and each remaining candidate contributes at most one vote to one answer."
+      - "For the utility statement: Q and C are measured on the same items at each budget and lambda is a declared trade-off in compatible units."
+    derivation: "Any answer other than the leader has at most b votes now and can gain at most k_max-j more, reaching at most b+k_max-j < a, so it cannot tie or overtake the leader. Example: k_max=5, first three candidates agree, a-b=3 > 2, stop and save two candidates. Synthetic sweep with Q=(0.60,0.68,0.71,0.70) at B=(1,2,4,8) thousand tokens, C=B, lambda=0.02: U=(0.58,0.64,0.63,0.54); accuracy peaks at B=4, utility at B=2, and accuracy falls from B=4 to B=8."
+    limitations:
+      - "The sweep values are synthetic exercise inputs, not measurements."
+      - "Sequential sampling to exploit the early stop changes the critical path relative to fully parallel sampling."
+      - "Hard latency, safety, or subgroup constraints may not be reducible to the scalar U."
+    applicability: "Designing and classifying stopping rules as resource stops, exact early stops, or heuristic stops."
+    related_claims: ["CLM-008", "CLM-012", "CLM-015"]
+    curriculum_usage: { lessons: ["6.5"], labs: ["LAB-A", "LAB-D"], assessments: ["Mastery-06"] }

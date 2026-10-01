@@ -1,7 +1,10 @@
 module: "06-reasoning-test-time-compute"
-registry_version: "1.0.0"
+registry_version: "1.1.0"
 
 required_concepts:
+  - "binomial_probability"
+  - "independent_draws_vs_dependent_candidates"
+  - "rationale_text_vs_internal_computation"
   - "reasoning_trace_contract"
   - "chain_of_thought"
   - "self_consistency"
@@ -17,15 +20,19 @@ required_concepts:
   - "verifier_gaming"
   - "overthinking"
 
+# Prerequisites and where they are taught. binomial_probability is not taught in an
+# earlier module, so it is a first-occurrence concept of this module (Lesson 6.2).
 prerequisite_concepts:
-  - "autoregressive_decoding"
-  - "sampling_and_temperature"
-  - "conditional_probability"
-  - "binomial_probability"
-  - "serving_latency_and_goodput"
-  - "experimental_design"
+  - "autoregressive_decoding"        # Module 01, Lesson 1.2
+  - "sampling_and_temperature"       # Module 01, Lesson 1.2 (sampling contract)
+  - "conditional_probability"        # general mathematics; at-least-once rule in Module 00, Lesson 0.4
+  - "serving_latency_and_goodput"    # Module 04, Lessons 4.1 and 4.4
+  - "experimental_design"            # Module 00, Lessons 0.3 and 0.5
 
 first_occurrence_concepts:
+  - "binomial_probability"
+  - "independent_draws_vs_dependent_candidates"
+  - "rationale_text_vs_internal_computation"
   - "reasoning_trace_contract"
   - "self_consistency"
   - "best_of_n"
@@ -40,11 +47,13 @@ first_occurrence_concepts:
 
 concept_dependencies:
   - concept: "chain_of_thought"
-    depends_on: ["autoregressive_decoding", "reasoning_trace_contract"]
+    depends_on: ["autoregressive_decoding", "reasoning_trace_contract", "rationale_text_vs_internal_computation"]
+  - concept: "independent_draws_vs_dependent_candidates"
+    depends_on: ["sampling_and_temperature", "conditional_probability"]
   - concept: "self_consistency"
     depends_on: ["sampling_and_temperature", "chain_of_thought", "conditional_probability"]
   - concept: "pass_at_k"
-    depends_on: ["conditional_probability", "binomial_probability", "best_of_n"]
+    depends_on: ["conditional_probability", "binomial_probability", "best_of_n", "independent_draws_vs_dependent_candidates"]
   - concept: "tree_search"
     depends_on: ["chain_of_thought", "outcome_verification", "process_verification"]
   - concept: "adaptive_budgeting"
@@ -59,8 +68,8 @@ mechanisms:
     derived_from: []
 
   - id: "MECH-02"
-    description: "Self-consistency and best-of-N spend parallel sampling compute to create a candidate set, then aggregate normalized final answers or select with a verifier. Candidate diversity, error correlation, parsing, and selector quality determine whether more samples improve deployed accuracy."
-    evidence_ids: ["CLM-002", "CLM-009", "CLM-010", "CLM-011", "CLM-013"]
+    description: "Self-consistency and best-of-N spend parallel sampling compute to create a candidate set, then aggregate normalized final answers (a plurality rule) or select with a verifier. Candidates are independent draws only under a declared protocol (one item, one sampling contract, separate random streams); greedy decoding, shared seeds, structured generation, and unequal item difficulty all produce dependent correctness. Candidate diversity, error correlation, parsing, and selector quality determine whether more samples improve deployed accuracy."
+    evidence_ids: ["CLM-002", "CLM-009", "CLM-010", "CLM-011", "CLM-013", "CLM-017"]
     derived_from: ["MECH-01"]
 
   - id: "MECH-03"
@@ -74,19 +83,19 @@ mechanisms:
     derived_from: []
 
   - id: "MECH-05"
-    description: "A test-time compute controller chooses strategy, budget, parallelism, and stopping per request. A fixed token cap, elapsed-time stop, sequential continuation cue, or adaptive marginal-value policy are distinct controls and can produce different quality, cost, and tail-latency surfaces."
-    evidence_ids: ["CLM-005", "CLM-006", "CLM-008", "CLM-014", "CLM-015"]
+    description: "A test-time compute controller chooses strategy, budget, parallelism, and stopping per request. A fixed token cap, elapsed-time stop, sequential continuation cue, or adaptive marginal-value policy are distinct controls and can produce different quality, cost, and tail-latency surfaces. Stops are of three kinds: resource stops (caps), exact early stops (further work cannot change the selected answer), and heuristic stops (estimated marginal value). Generated-token count measures work, not quality."
+    evidence_ids: ["CLM-005", "CLM-006", "CLM-008", "CLM-014", "CLM-015", "CLM-019"]
     derived_from: ["MECH-01", "MECH-02", "MECH-03", "MECH-04"]
 
 mathematical_models:
   - id: "MATH-01"
-    description: "IID oracle pass@k: P(any correct) = 1-(1-p)^k for k independent candidates with common correctness probability p. This is an analytical baseline, not a prediction when samples share correlated errors."
-    evidence_ids: ["CLM-009"]
+    description: "IID oracle pass@k: P(any correct) = 1-(1-p)^k for k independent candidates with common correctness probability p, which for repeated sampling means one item and independent draws. Over a population with item-specific p_i, pass@k is the mean of 1-(1-p_i)^k and is at most the pooled value 1-(1-pbar)^k. This is an analytical baseline, not a prediction when draws are dependent."
+    evidence_ids: ["CLM-009", "CLM-017"]
     derived_from: ["MECH-02"]
 
   - id: "MATH-02"
-    description: "Finite-sample pass@k: 1-C(n-c,k)/C(n,k), for n observed candidates containing c correct and a uniformly chosen size-k subset without replacement. It estimates oracle set success, not verifier-selected or majority-vote accuracy."
-    evidence_ids: ["CLM-010"]
+    description: "Finite-sample pass@k: 1-C(n-c,k)/C(n,k), for n observed candidates containing c correct and a uniformly chosen size-k subset without replacement, averaged over items. It is unbiased for the per-item IID quantity when the n samples are independent draws; the plug-in 1-(1-c/n)^k underestimates it. It estimates oracle set success, not verifier-selected or majority-vote accuracy."
+    evidence_ids: ["CLM-010", "CLM-018"]
     derived_from: ["MECH-02"]
 
   - id: "MATH-03"
@@ -95,14 +104,19 @@ mathematical_models:
     derived_from: ["MECH-02"]
 
   - id: "MATH-04"
-    description: "Compute ledger: C_total is the unit-normalized sum of generator, verifier, tool, and orchestration work over executed branches. Wall-clock latency is governed by the dependency critical path under declared parallel resources and therefore need not equal summed work."
+    description: "Compute ledger: C_total is the unit-normalized sum of generator, verifier, tool, and orchestration work over executed branches, including cancelled ones. Wall-clock latency is governed by the dependency critical path under declared parallel resources and therefore need not equal summed work; the same total work has different critical paths under different worker counts."
     evidence_ids: ["CLM-012"]
     derived_from: ["MECH-02", "MECH-03", "MECH-04", "MECH-05"]
 
   - id: "MATH-05"
-    description: "Decision model U(B)=Q(B)-lambda*C(B), where B is a declared test-time budget, Q is measured task utility, C is measured cost, and lambda encodes a stakeholder trade-off in compatible units. This is an engineering objective, not a universal law; constraints for latency, safety, and subgroup quality may not be reducible to one scalar."
-    evidence_ids: ["CLM-005", "CLM-008", "CLM-015"]
+    description: "Decision model U(B)=Q(B)-lambda*C(B), where B is a declared test-time budget, Q is measured task utility, C is measured cost, and lambda encodes a stakeholder trade-off in compatible units. This is an engineering objective, not a universal law; constraints for latency, safety, and subgroup quality may not be reducible to one scalar. The utility-maximizing budget can differ from the accuracy-maximizing budget, and Q need not be monotone in B."
+    evidence_ids: ["CLM-005", "CLM-008", "CLM-015", "CLM-019"]
     derived_from: ["MECH-05", "MATH-04"]
+
+  - id: "MATH-06"
+    description: "Exact early stop for plurality voting: after j of at most k_max candidates, with leader count a and best other count b, stop when a-b > k_max-j; the selected answer equals the full-vote answer. It preserves the selection, not correctness."
+    evidence_ids: ["CLM-019"]
+    derived_from: ["MECH-02", "MECH-05"]
 
 implementation_mechanisms:
   - id: "IMPL-01"
@@ -121,14 +135,14 @@ implementation_mechanisms:
     derived_from: ["MECH-05", "MATH-04"]
 
   - id: "IMPL-04"
-    description: "Pinned Transformers source trace: GenerationMixin.generate prepares generated length and builds a StoppingCriteriaList; max_new_tokens is translated into total max_length from prompt length, and the criteria list ORs per-row length, time, stop-string, EOS, confidence, and custom stops."
+    description: "Pinned Transformers source trace: GenerationMixin.generate prepares generated length and builds a StoppingCriteriaList; max_new_tokens is translated into total max_length from prompt length, and the criteria list ORs per-row results of the configured length, time, stop-string, EOS, assistant-only confidence, and custom criteria. These are resource and protocol stops in one runtime snapshot, not a semantic reasoning controller and not a cross-runtime default."
     evidence_ids: ["CLM-014"]
     derived_from: ["MECH-05"]
 
 failure_modes:
   - id: "FAIL-01"
-    description: "Correlated-candidate collapse: more samples reproduce the same error, so oracle pass@k and voting improve less than an IID model predicts while cost grows. Measure pairwise answer/path diversity and correctness correlation, not sample count alone."
-    evidence_ids: ["CLM-002", "CLM-009", "CLM-011"]
+    description: "Correlated-candidate collapse: more samples reproduce the same error, or items differ in difficulty, so oracle pass@k and voting improve less than a pooled IID model predicts while cost grows. Measure per-item correct counts, pairwise answer/path diversity, and correctness correlation, not sample count alone."
+    evidence_ids: ["CLM-002", "CLM-009", "CLM-011", "CLM-017"]
     derived_from: ["MECH-02", "MATH-01", "MATH-03"]
 
   - id: "FAIL-02"
@@ -142,8 +156,8 @@ failure_modes:
     derived_from: ["MECH-03", "MECH-04"]
 
   - id: "FAIL-04"
-    description: "Overthinking or premature stopping: extra generation can revise a correct answer, loop, or waste cost, while an aggressive stop can truncate useful work. Measure correctness transitions over prefixes and conditional marginal gains rather than assuming monotonic quality."
-    evidence_ids: ["CLM-006", "CLM-008", "CLM-014", "CLM-015"]
+    description: "Overthinking or premature stopping: extra generation can revise a correct answer, loop, or waste cost, while an aggressive stop can truncate useful work. Measure correctness transitions over prefixes and conditional marginal gains rather than assuming monotonic quality or reading token count as quality."
+    evidence_ids: ["CLM-006", "CLM-008", "CLM-014", "CLM-015", "CLM-019"]
     derived_from: ["MECH-05"]
 
   - id: "FAIL-05"
@@ -181,11 +195,13 @@ research_connections:
 candidate_capabilities:
   - capability: "Separate elicited reasoning text, candidate-set opportunity, selection quality, and final task utility."
     mapped_mechanisms: ["MECH-01", "MECH-02", "MECH-04", "FAIL-02", "FAIL-05"]
-  - capability: "Derive and audit pass@k and majority baselines without hiding independence or oracle assumptions."
-    mapped_mechanisms: ["MATH-01", "MATH-02", "MATH-03", "FAIL-01"]
+  - capability: "Derive and audit pass@k and majority baselines without hiding independence or oracle assumptions, and distinguish independent draws from dependent or heterogeneous candidates."
+    mapped_mechanisms: ["MECH-02", "MATH-01", "MATH-02", "MATH-03", "FAIL-01"]
   - capability: "Implement parallel sampling and verifier-guided search with complete candidate, verifier, and compute telemetry."
     mapped_mechanisms: ["MECH-02", "MECH-03", "IMPL-01", "IMPL-02", "IMPL-03"]
-  - capability: "Choose and falsify adaptive test-time budgets under quality, cost, latency, capacity, and subgroup constraints."
-    mapped_mechanisms: ["MECH-05", "MATH-04", "MATH-05", "FAIL-04", "FAIL-06", "PROD-01"]
+  - capability: "Choose and falsify adaptive test-time budgets and stopping rules under quality, cost, latency, capacity, and subgroup constraints, separating total work from critical path."
+    mapped_mechanisms: ["MECH-05", "MATH-04", "MATH-05", "MATH-06", "FAIL-04", "FAIL-06", "PROD-01"]
+  - capability: "Trace a pinned generation and stopping implementation and scope what it does and does not control."
+    mapped_mechanisms: ["IMPL-04", "MECH-05"]
   - capability: "Diagnose faithfulness, verifier gaming, correlated samples, and production regressions using discriminating experiments."
     mapped_mechanisms: ["FAIL-01", "FAIL-02", "FAIL-03", "FAIL-04", "FAIL-05", "FAIL-06", "PROD-02"]

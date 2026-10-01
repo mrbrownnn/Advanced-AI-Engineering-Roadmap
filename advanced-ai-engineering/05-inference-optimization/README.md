@@ -14,7 +14,7 @@ $$
 
 The scope is single-node inference mechanisms: IO-aware attention, kernel fusion and Triton fundamentals, FP8/INT8/INT4 quantization, SmoothQuant/GPTQ/AWQ, and speculative decoding including Medusa and EAGLE. Scheduling policy remains in Module 04, KV allocation internals in Module 03, and distributed inference specialization in Module 20. This module considers those systems only where an optimization changes their inputs or costs.
 
-**Research Cutoff:** 2026-09-27.
+**Research Cutoff:** 2026-09-30. The sources in Section 05 were re-read on 2026-10-01 at the depth stated per entry. No exhaustive search for work published between 2026-09-27 and the cutoff was done; that gap is an open verification item, not a claim that nothing new exists.
 
 **Module Orientation**
 
@@ -25,7 +25,7 @@ The scope is single-node inference mechanisms: IO-aware attention, kernel fusion
 
 ## 01 Baseline Assumptions
 
-- **Model semantics (Module 01):** causal attention, MHA/GQA tensor shapes, autoregressive decoding, logits, sampling, and the difference between semantic equivalence and bitwise identity.
+- **Model semantics (Module 01):** causal attention and MHA/GQA tensor shapes (Lesson 1.3); autoregressive factorization, softmax with temperature, greedy/top-k/top-p, and the sampling contract (Lesson 1.2). Lesson 5.5 uses exactly these: the target and draft distributions are the *post-processing* next-token distributions of Lesson 1.2. The difference between semantic equivalence and bitwise identity is taught here at first use (Lesson 5.1), not assumed.
 - **GPU performance (Module 02):** memory hierarchy, arithmetic intensity, Roofline bounds, launch overhead, warm-up and synchronization, kernel timelines, and profiler-counter limitations.
 - **KV cache (Module 03):** logical KV payload, cache growth, layouts, and paged addressing. This module uses these facts but does not reteach allocation lifecycle.
 - **Serving metrics (Module 04):** TTFT, ITL/TPOT, throughput, goodput, batching, arrival load, and scheduler interference. Optimization experiments must declare whether they are isolated kernels, offline model runs, or loaded serving runs.
@@ -52,13 +52,14 @@ depth_contract:
   research_connection: REQUIRED
 
 estimated_effort:
-  instruction: 6h
-  guided_practice: 3h
-  labs: 14h
-  assessment: 3h
-  source_trace: 2h
-  total: 28h
+  instruction: 6.25h      # lesson instruction lines: 60+50+50+50+70+45+50 min
+  guided_practice: 3.5h   # lesson practice lines: 30+30+30+30+35+25+30 min
+  labs: 16h               # LAB A 4h + LAB B 4h + LAB C 4h + LAB D 4h
+  assessment: 3h          # Mastery transfer problem 2.5h + Incident 05.1 0.5h
+  source_trace: 2h        # Section 09 Production Source Trace; LAB A attaches this artifact and does not count it again
+  total: 30.75h
 ```
+Each category is counted once. Lab analysis is not counted again as guided practice, and the source trace is not counted inside LAB A's 4h.
 
 ---
 
@@ -108,7 +109,31 @@ $$
 S = QK^T/\sqrt{d}, \qquad P=\operatorname{softmax}(S), \qquad O=PV.
 $$
 
-A straightforward implementation can materialize the $N_q\times N_k$ score or probability matrix in HBM. FlashAttention instead tiles Q, K, and V, maintains online softmax statistics, and avoids full intermediate materialization. The original paper classifies this as an exact dense-attention algorithm: it does not prune attention entries or approximate the softmax. “Exact” does not mean bitwise-identical results because tiling and reduction order change floating-point behavior.
+A straightforward implementation can materialize the $N_q\times N_k$ score or probability matrix in HBM. FlashAttention instead tiles Q, K, and V, maintains online softmax statistics, and avoids full intermediate materialization. The original paper classifies this as an exact dense-attention algorithm: it does not prune attention entries or approximate the softmax (**O**, CLM-001). “Exact” does not mean bitwise-identical results because tiling and reduction order change floating-point behavior. Two implementations are *semantically equivalent* when they compute the same mathematical function and agree within a declared numerical tolerance; they are *bitwise identical* only if every floating-point operation happens in the same order and precision.
+
+**Online softmax: the state carried between tiles**
+
+Softmax couples every key in a row through one normalizer, so a tile cannot be normalized on its own. The tiled algorithm keeps three pieces of state per query row (**O**, CLM-017):
+
+- $m$ — the running maximum score over the keys seen so far;
+- $\ell$ — the running normalizer $\sum_j e^{s_j-m}$ over the keys seen so far, expressed relative to the current $m$;
+- an output accumulator — the partial weighted sum of value rows.
+
+For one query row, let the key tiles be $s^{(1)},\dots,s^{(T)}$ with value rows $V^{(t)}$. Start from $m_0=-\infty$, $\ell_0=0$, $\tilde o_0=0$. For each tile $t$:
+
+$$
+m_t=\max\bigl(m_{t-1},\max_j s^{(t)}_j\bigr),\qquad
+\alpha_t=e^{m_{t-1}-m_t},\qquad
+\tilde p^{(t)}_j=e^{s^{(t)}_j-m_t},
+$$
+
+$$
+\ell_t=\alpha_t\,\ell_{t-1}+\sum_j\tilde p^{(t)}_j,\qquad
+\tilde o_t=\alpha_t\,\tilde o_{t-1}+\sum_j\tilde p^{(t)}_jV^{(t)}_j,\qquad
+o=\tilde o_T/\ell_T .
+$$
+
+Here $\alpha_1=e^{-\infty}=0$. The factor $\alpha_t$ re-expresses the old state relative to the new maximum; it equals 1 when the maximum did not change. This is the unscaled-accumulator form described in FlashAttention-2 Section 3.1.1, which divides by $\ell$ once at the end. FlashAttention Algorithm 1 instead keeps a normalized accumulator and rescales it on every tile, $o_t=(\ell_{t-1}\alpha_t\,o_{t-1}+\sum_j\tilde p^{(t)}_jV^{(t)}_j)/\ell_t$ (**O**, CLM-017). Both produce $\operatorname{softmax}(s)V$ in exact arithmetic: by induction, after tile $t$ the state is $\ell_t=\sum_{\text{seen}}e^{s_j-m_t}$ and $\tilde o_t=\sum_{\text{seen}}e^{s_j-m_t}V_j$, so their ratio is the softmax-weighted sum over all keys once every tile is processed (**D**, CLM-018).
 
 **Mechanistic invariants**
 
@@ -117,19 +142,40 @@ A straightforward implementation can materialize the $N_q\times N_k$ score or pr
 - Backward support, dropout, head dimension, dtype, device generation, sequence shape, and variable-length packing are implementation capabilities, not properties implied by the name.
 - A kernel can win its attention microbenchmark while leaving end-to-end inference unchanged if MLP, collectives, sampling, host work, or queueing dominates.
 
-**Currentness:** the original IO-aware exact-attention mechanism is **REFERENCE**, while selection of a particular backend is **WORKLOAD-DEPENDENT**. FlashAttention-3 is Hopper-specific; FlashAttention-4 is a 2026 Blackwell-oriented **FRONTIER** design. Neither paper establishes portable speedups across other accelerators.
+**Pinned interface path (static inspection, not executed).** At `Dao-AILab/flash-attention` commit `e9cf2c1651d2303191eb40a739a3c135fda00999`, `flash_attn_func` calls `FlashAttnFunc.apply`. `FlashAttnFunc.forward` sets the default scale to $d_h^{-1/2}$, pads the head dimension to a multiple of 8 when needed, and calls the wrapped `_flash_attn_forward`, which invokes `flash_attn_gpu.fwd`. `flash_attn_gpu` is bound at import time to the compiled `flash_attn_2_cuda` module, or to a Triton implementation when `FLASH_ATTENTION_TRITON_AMD_ENABLE=TRUE` or when a ROCm build cannot import the compiled module. The forward call returns the output together with `softmax_lse`, the per-row log-sum-exp of the scaled scores, which is the stored form of the $(m,\ell)$ statistics ($m+\log\ell$). `flash_attn_with_kvcache` calls `flash_attn_gpu.fwd_kvcache` directly and its docstring states that it does not support the backward pass (**O**, CLM-014). This shows which Python symbol dispatches to which backend object. It does not show which CUDA kernel variant ran for a given shape; that needs an executed trace.
 
-**Worked Example:** Process one score row in two key tiles while carrying its running maximum and normalization term; changing tile order can change floating-point results without changing dense-attention semantics.
+**Currentness:** the original IO-aware exact-attention mechanism is **REFERENCE**, while selection of a particular backend is **WORKLOAD-DEPENDENT**. FlashAttention-3 targets Hopper GPUs and FlashAttention-4 (arXiv v1, March 2026) targets Blackwell GPUs; both are **FRONTIER** designs scoped to those hardware generations (**O**, CLM-002). Neither paper establishes portable speedups across other accelerators, and this module retains none of their reported speedup figures as general numbers.
 
-**Knowledge Check:** Why does “exact” not imply bitwise identity, and why does a faster attention kernel not establish service speedup?
+**Worked Example (synthetic values).** One query row, four keys, two tiles of two keys each. Values are scalars so that the output is a single number.
 
-**Guided Practice:** Build a shape matrix over batch, $N_q$, $N_k$, head dimension, causal mode, dtype, and GQA ratio. For each cell, predict the likely traffic advantage, validate outputs against a reference with declared tolerances, and measure warm kernel time, peak allocated memory, and end-to-end share. Identify at least one shape where dispatch or unsupported-path overhead weakens the expected benefit.
+- *Input*: scaled scores $s=[1,3\mid 2,5]$ and values $v=[10,20\mid 30,40]$.
+- *Direct reference*: $m=5$; $e^{s-m}=[0.0183156,\,0.1353353,\,0.0497871,\,1]$; $\ell=1.2034380$; $p=[0.01522,\,0.11246,\,0.04137,\,0.83095]$; $o=\sum_jp_jv_j=36.88057$.
+- *Tile 1*, $s=[1,3]$: $m_1=3$, $\alpha_1=0$, $\tilde p=[0.1353353,\,1]$, $\ell_1=1.1353353$, $\tilde o_1=0.1353353\cdot10+1\cdot20=21.3533528$.
+- *Tile 2*, $s=[2,5]$: $m_2=5$, $\alpha_2=e^{3-5}=0.1353353$, $\tilde p=[0.0497871,\,1]$.
+  - $\ell_2=0.1353353\cdot1.1353353+1.0497871=1.2034380$.
+  - $\tilde o_2=0.1353353\cdot21.3533528+(0.0497871\cdot30+1\cdot40)=2.8898621+41.4936121=44.3834741$.
+- *Result*: $o=44.3834741/1.2034380=36.88057$. It equals the direct reference, and $\ell_2$ equals the direct normalizer, which is the normalization check ($\sum_jp_j=1$).
+- *Normalized-accumulator form*: $o_1=21.3533528/1.1353353=18.8079708$, then $o_2=(1.1353353\cdot0.1353353\cdot18.8079708+41.4936121)/1.2034380=36.88057$. Same result, one extra division per tile.
+- *Tile order*: processing $[2,5]$ first gives $m=5$ immediately, $\ell: 1.0497871\to1.2034380$ and $\tilde o: 41.4936121\to44.3834741$ with $\alpha_2=1$. The mathematical result is unchanged.
+- *The error this state prevents*: normalizing each tile by its own maximum and adding without $\alpha$ gives $\ell=1.1353353+1.0497871=2.1851224$, $\tilde o=62.8469649$, and $o=28.76130$. That is not attention over the four keys.
+- *Interpretation and limits*: the four-key example was bit-identical in both tile orders in a float32 NumPy check. In 2,000 random eight-key float32 rows, 470 gave last-bit differences between the two tile orders. That is an illustrative CPU check of reduction-order sensitivity, not a measurement of any GPU kernel. Validate a kernel against a reference with a declared tolerance, not with bit equality.
 
-**Feedback Contract:** Require semantic coverage, tolerance, selected backend, traffic/time boundaries, unsupported cases, and an end-to-end denominator.
+**Knowledge Check:**
+1. Why does “exact” not imply bitwise identity?
+2. In the worked example, why must the tile-1 state be multiplied by $e^{m_1-m_2}$ before tile 2 is added?
+3. Why does a faster attention kernel not establish service speedup?
 
-**Learning Outcome:** Explain FlashAttention as a tiled IO transformation, validate semantic coverage, and refuse to infer service speedup from an isolated favorable kernel result.
+**Guided Practice:** (a) By hand, process $s=[0,2\mid4,1]$, $v=[1,2\mid3,4]$ in two tiles and confirm the result against a direct softmax. (b) Build a shape matrix over batch, $N_q$, $N_k$, head dimension, causal mode, dtype, and GQA ratio. For each cell, predict the likely traffic advantage, validate outputs against a reference with declared tolerances, and measure warm kernel time, peak allocated memory, and end-to-end share. Identify at least one shape where dispatch or unsupported-path overhead weakens the expected benefit.
 
-*(Effort: 50m instruction, 30m practice)*
+**Feedback Contract:**
+- *Expected Evidence*: (a) tile 1 gives $m_1=2$, $\ell_1=1.1353353$, $\tilde o_1=2.1353353$; tile 2 gives $m_2=4$, $\alpha_2=0.1353353$, $\ell_2=1.2034380$, $\tilde o_2=3.4881345$, $o=2.89847$, equal to the direct softmax. (b) a shape matrix with semantic coverage, tolerance, selected backend, traffic and time boundaries, unsupported cases, and an end-to-end denominator. Knowledge check: reduction order changes rounding; the old state is relative to the old maximum; attention may be a small share of end-to-end time.
+- *Common Failure*: adding per-tile normalizers without rescaling, initializing $m$ to 0 instead of $-\infty$ (wrong when all scores are negative), or reporting a kernel speedup as a service speedup.
+- *Diagnostic Hint*: does your final $\ell$ equal $\sum_je^{s_j-\max s}$ computed directly? If not, find the first tile where the maximum changed.
+- *Concept to Revisit*: online softmax state $(m,\ell,\text{accumulator})$; semantic equivalence versus bitwise identity.
+
+**Learning Outcome:** Explain FlashAttention as a tiled IO transformation, carry the online-softmax state by hand, validate semantic coverage, and refuse to infer service speedup from an isolated favorable kernel result.
+
+*(Effort: 60m instruction, 30m practice)*
 
 ---
 
@@ -141,7 +187,7 @@ A straightforward implementation can materialize the $N_q\times N_k$ score or pr
 
 Vertical fusion can keep producer output on chip for a consumer and avoid intermediate HBM writes/reads. Horizontal fusion can combine independent small operations to amortize launch overhead. Compiler capture, legality, aliases, dynamic shapes, and graph breaks determine what can fuse. Generated code determines what actually fused.
 
-A Triton kernel expresses a grid of program instances. Each program computes offsets, loads tiles under masks, transforms values, and stores results. Compile-time meta-parameters such as block sizes determine mappings and can be autotuned. This programming model lowers the barrier to custom kernels; it does not make an arbitrary kernel correct or fast.
+A Triton kernel expresses a grid of program instances. Each program computes offsets, loads tiles under masks, transforms values, and stores results. Compile-time meta-parameters such as block sizes determine mappings and can be autotuned. This programming model lowers the barrier to custom kernels; it does not make an arbitrary kernel correct or fast (**O**, CLM-013).
 
 **Fusion cost ledger**
 
@@ -159,13 +205,24 @@ This is an accounting decomposition, not a guarantee that terms add independentl
 - output error versus reference across adversarial sizes and boundary conditions;
 - performance distribution over representative shapes, not one favorable tensor.
 
-**Worked Example:** Eliminating one intermediate write/read can reduce traffic while a wider live range raises register use and spills; measure both before accepting the fusion.
+**Worked Example (synthetic exercise values, not measurements of any device).** Fuse `y = act(x + b)` from two kernels into one.
+
+- *Input*: $N$ FP16 elements (2 bytes each); assumed launch cost 8 µs per kernel; assumed effective memory bandwidth 400 GB/s; compute time ignored.
+- *Traffic*: unfused reads $x$, writes a temporary, reads it back, and writes $y$: $4\times2N$ bytes. Fused reads $x$ and writes $y$: $2\times2N$ bytes.
+- *Large tensor*, $N=10^6$: unfused $8\times10^6$ B $\to$ 20 µs traffic + 16 µs launch = 36 µs. Fused $4\times10^6$ B $\to$ 10 µs + 8 µs = 18 µs.
+- *Tiny tensor*, $N=10^3$: unfused 0.02 µs + 16 µs = 16.02 µs. Fused 0.01 µs + 8 µs = 8.01 µs. The whole gain is the removed launch.
+- *Result*: this lower-bound ledger predicts a factor of two in both cases, for different reasons.
+- *Interpretation and limits*: the ledger is **D**, not a measurement. If the fused kernel measures 30 µs on the large tensor, launch and traffic explain only 18 µs. The remaining 12 µs is unexplained by this model. Wider live ranges, register spills, lower occupancy, or a slower code path are candidate explanations (**H**) to test with generated code and counters (CLM-003).
 
 **Knowledge Check:** Which cost term does fusion target, and which resource changes can reverse the expected gain?
 
 **Guided Practice:** Fuse a bias-add plus activation or RMSNorm-like chain in Triton. Compare with a strong framework/compiler baseline. Sweep widths that are aligned and misaligned to the chosen block, and include a tiny tensor where launch overhead dominates and a large tensor where resource pressure matters. A slower fused result is valid evidence, not a failed lab.
 
-**Feedback Contract:** Require parity, cold/warm separation, launch/generated-code evidence, resource counters, representative shapes, and rollback criteria.
+**Feedback Contract:**
+- *Expected Evidence*: numerical parity against the unfused reference; cold and warm times reported separately; launch counts and a generated-code excerpt showing what fused; resource counters where available; results over the swept shapes; a rollback criterion. Knowledge check: fusion targets launch and intermediate-traffic terms; register, shared-memory, occupancy, compile, and specialization costs can reverse the gain.
+- *Common Failure*: timing the first (compiling) call as steady state, or comparing against an unoptimized eager baseline only.
+- *Diagnostic Hint*: subtract the ledger's launch and traffic terms from the measured time. What is left, and which counter would explain it?
+- *Concept to Revisit*: fusion cost ledger; cold versus warm boundaries (Module 02).
 
 **Learning Outcome:** Implement and inspect a fused kernel, then attribute its outcome to measured traffic, launch, compilation, or resource effects.
 
@@ -186,7 +243,7 @@ q=\operatorname{clamp}(\operatorname{round}(x/s)+z,q_{min},q_{max}),
 \qquad \hat{x}=s(q-z).
 $$
 
-The scale $s$, zero point $z$, clipping range, rounding rule, and granularity may be per tensor, channel, group, token, or block. Symmetric quantization often fixes $z=0$. Floating formats instead define exponent/mantissa encodings and are still commonly paired with scaling policies. FP8 E4M3 and E5M2 trade precision and dynamic range differently; “FP8” alone is incomplete.
+The scale $s$, zero point $z$, clipping range, rounding rule, and granularity may be per tensor, channel, group, token, or block. Symmetric quantization often fixes $z=0$. Floating formats instead define exponent/mantissa encodings and are still commonly paired with scaling policies. FP8 E4M3 and E5M2 trade precision and dynamic range differently; “FP8” alone is incomplete (**O**, CLM-008). More generally, a bit-width label does not identify a quantized configuration (**D**, CLM-004).
 
 For $N$ logical weights at $w$ packed payload bits:
 
@@ -208,13 +265,24 @@ This is a nominal lower bound. Add scales, zero points, padding, alignment, code
 - quality suite and numerical tolerances;
 - memory, cold/warm latency, throughput, and goodput boundaries.
 
-**Worked Example:** Under the explicit assumption that a hypothetical model has $N=8\times10^9$ weights densely packed at 4 bits, the nominal payload is $4\times10^9$ bytes. This does not establish GB versus GiB reporting, checkpoint size, GPU allocation, or speed. List every additional byte category required before a deployment claim.
+**Worked Example (hypothetical model; exercise assumptions).**
+
+- *Input*: $N=8\times10^9$ weights, densely packed at $w=4$ bits; symmetric INT4 range $[-8,7]$; scale $s=0.05$, $z=0$; groups of 128 weights, each storing one 16-bit scale and one 16-bit zero point.
+- *Step 1 — payload* (**D**, CLM-009): $M_{payload}=8\times10^9\times4/8=4\times10^9$ bytes $=4$ GB $\approx3.725$ GiB.
+- *Step 2 — per-group metadata*: $32/128=0.25$ extra bits per weight, so $8\times10^9\times4.25/8=4.25\times10^9$ bytes $\approx3.958$ GiB. The "4-bit" artifact already costs 4.25 bits per weight before padding, unquantized layers, or runtime workspace.
+- *Step 3 — one value*: $x=0.37\Rightarrow x/s=7.4\Rightarrow q=7\Rightarrow\hat x=0.35$, rounding error $0.02$. $x=0.52\Rightarrow x/s=10.4\Rightarrow$ clamp to $7\Rightarrow\hat x=0.35$, clipping error $0.17$.
+- *Result*: bit width fixes neither total bytes nor error. The same $w=4$ gives different bytes under a different group size and different error under a different scale or clipping range.
+- *Interpretation and limits*: these numbers do not establish checkpoint size, device allocation, quality, or speed. Each needs its own measurement on the deployed artifact and runtime.
 
 **Knowledge Check:** Why is bit width insufficient to identify arithmetic, kernel selection, total memory, or quality?
 
-**Guided Practice:** Build a complete quantization manifest for two artifacts and reconcile packed payload, metadata, file bytes, device allocation, selected kernels, and quality gates.
+**Guided Practice:** (a) For $N=7\times10^9$ weights at 4 bits with groups of 64, each storing a 16-bit scale and a 4-bit zero point, compute payload bytes, effective bits per weight, and total bytes in GB and GiB. (b) Build a complete quantization manifest for two artifacts and reconcile packed payload, metadata, file bytes, device allocation, selected kernels, and quality gates.
 
-**Feedback Contract:** Reject labels without scale/granularity/coverage and any performance claim inferred from payload ratio alone.
+**Feedback Contract:**
+- *Expected Evidence*: (a) payload $3.5\times10^9$ B $\approx3.260$ GiB; metadata $20/64=0.3125$ bits per weight; total $3.7734375\times10^9$ B $\approx3.514$ GiB. (b) a manifest with every field in the list above filled or marked unknown, and file bytes reconciled against payload plus metadata. Knowledge check: bit width names storage width only; scale, granularity, coverage, accumulator dtype, packing, and kernel support are separate fields.
+- *Common Failure*: reporting GB as GiB, omitting per-group metadata, or converting a 4× payload ratio into a 4× memory or latency claim.
+- *Diagnostic Hint*: divide the artifact's file bytes by the logical weight count. If the answer is not close to your effective bits per weight, which byte category is missing?
+- *Concept to Revisit*: quantization manifest; nominal payload as a lower bound.
 
 **Learning Outcome:** Specify low precision as a reproducible artifact/runtime contract and separate representation, arithmetic, memory, quality, and performance.
 
@@ -228,9 +296,9 @@ This is a nominal lower bound. Add scales, zero points, padding, alignment, code
 
 **Concepts & Definitions:** Calibration distribution, activation outliers, reconstruction objective, salient weights, artifact packing, and runtime kernel support determine different parts of the method contract.
 
-- **SmoothQuant:** uses an equivalent offline rescaling to migrate activation-outlier difficulty into weights, enabling a W8A8 path. The smoothing parameter and calibration distribution influence the resulting ranges.
-- **GPTQ:** performs one-shot weight quantization using approximate second-order information to control reconstruction error. The resulting artifact still needs a packing scheme and executable matrix kernel.
-- **AWQ:** uses observed activations to identify/protect salient weights through searched per-channel scaling for low-bit weight-only quantization. Its system results include a tailored runtime.
+- **SmoothQuant:** uses an equivalent offline rescaling to migrate activation-outlier difficulty into weights, enabling a W8A8 path (**O**, CLM-005). The smoothing parameter and calibration distribution influence the resulting ranges.
+- **GPTQ:** performs one-shot weight quantization using approximate second-order information to control reconstruction error (**O**, CLM-006). The resulting artifact still needs a packing scheme and executable matrix kernel.
+- **AWQ:** uses observed activations to identify/protect salient weights through per-channel scaling for low-bit weight-only quantization. Its system results include a tailored runtime (**O**, CLM-007).
 
 These methods solve different problems. SmoothQuant is not “GPTQ for activations”; AWQ is not defined only by a bit width; and a GPTQ-format checkpoint does not prove that a selected runtime executes an optimized kernel rather than unpacking or dequantizing inefficiently.
 
@@ -247,13 +315,24 @@ These methods solve different problems. SmoothQuant is not “GPTQ for activatio
 
 **Break cases:** calibration drift; rare activation outliers; sensitive output heads; unsupported group size; small batches where unpack overhead dominates; long-prefill compute shapes where weight bandwidth is not dominant; and mixed batches that select a fallback path.
 
-**Worked Example:** A weight-only artifact can reduce nominal weight bytes yet regress a small-batch workload if its selected path repeatedly converts or unpacks weights.
+**Worked Example (synthetic values).** The equivalent rescaling that SmoothQuant relies on, on one output of a two-input linear map $y=\sum_jx_jw_j$.
+
+- *Input*: activations $x=[40,\,0.5]$, weights $w=[0.1,\,0.2]$, per-channel smoothing factors $s=[8,\,1]$ (chosen by hand for the exercise, not by the paper's rule).
+- *Step 1 — original*: $y=40\cdot0.1+0.5\cdot0.2=4.1$. Activation channel range ratio is $40/0.5=80$; weight ratio is $0.2/0.1=2$.
+- *Step 2 — rescale*: $x'_j=x_j/s_j=[5,\,0.5]$ and $w'_j=s_jw_j=[0.8,\,0.2]$.
+- *Step 3 — check*: $y'=5\cdot0.8+0.5\cdot0.2=4.1$. The function is unchanged in exact arithmetic (**D**).
+- *Result*: the activation range ratio fell from 80 to 10, and the weight range ratio rose from 2 to 4. Difficulty moved from activations to weights; it did not disappear.
+- *Interpretation and limits*: the identity holds before quantization. Whether the rescaled tensors quantize with acceptable error depends on the smoothing factors, calibration data, and granularity, and is an empirical question. A weight-only artifact from GPTQ or AWQ is a different case: it can reduce nominal weight bytes yet regress a small-batch workload if the selected path repeatedly converts or unpacks weights (**H**; verify from selected-operator logs).
 
 **Knowledge Check:** Which method targets activation outliers, and why does a compatible checkpoint format not prove an optimized kernel executes?
 
 **Guided Practice:** Compare two methods under a shared calibration/quality/runtime matrix, then shift the prompt domain and force one unsupported shape.
 
-**Feedback Contract:** Require artifact inspection, calibration provenance, selected operators, quality uncertainty, memory breakdown, and loaded-serving metrics.
+**Feedback Contract:**
+- *Expected Evidence*: for each method, inspected tensor dtypes and scale tensors, calibration provenance, the selected operators for a supported and an unsupported shape, quality with uncertainty on the original and shifted domain, a memory breakdown, and loaded-serving metrics. Knowledge check: SmoothQuant targets activation outliers; a checkpoint format describes stored tensors, not the kernel the runtime selects.
+- *Common Failure*: comparing methods with different calibration sets or runtimes, or reading "W4" from a file name instead of from the tensors.
+- *Diagnostic Hint*: list the operators that actually executed for one decode step. Is there a dequantize or unpack operator in the list?
+- *Concept to Revisit*: evaluation matrix; error source versus executable path.
 
 **Learning Outcome:** Select and falsify a quantization method based on error source, runtime support, workload, and quality—not label popularity.
 
@@ -265,17 +344,51 @@ These methods solve different problems. SmoothQuant is not “GPTQ for activatio
 
 **Engineering Question:** When does doing extra draft work reduce time per committed target token?
 
-**Concepts & Definitions:** Proposal length, committed reward, draft cost, verification cost, bookkeeping, exactness/quality contract, and scheduler context form the speculative cycle.
+**Concepts & Definitions:**
 
-The reference algorithm uses a cheaper approximation model to draft multiple tokens. The target scores the continuation in parallel and applies a modified rejection/resampling procedure that preserves the target distribution under its assumptions. That guarantee belongs to the specified algorithm; relaxed thresholds, greedy variants, tree methods, or auxiliary heads need their own correctness/quality statement.
+- **Target and draft distributions** $p(x)$, $q(x)$: the next-token distributions of the target and draft models for the same prefix, *after* the sampling contract of Module 01 Lesson 1.2 (temperature, top-k, top-p) has been applied to each. Greedy decoding is the special case where the processed distribution is one-hot (**O**, CLM-019).
+- **Proposal length** $\gamma$ (often `k` in runtimes): draft tokens generated per cycle.
+- **Committed reward** $A$: tokens appended to the output in one cycle. In the reference algorithm $A=n+1$, where $n\in[0,\gamma]$ is the number of accepted draft tokens and the extra token always comes from the target, so $1\le A\le\gamma+1$.
+- **Per-position acceptance probability** $\beta=\sum_x\min(p(x),q(x))$ for one prefix. An "acceptance rate" is meaningless until its denominator is stated: proposed tokens, verified positions, or cycles.
+- **Cycle time** $T_{cycle}$: draft, verification, and bookkeeping time for one cycle at a declared boundary.
+- **Distribution contract**: the statement of what the speculative output is guaranteed to equal, and under which assumptions.
 
-Let a cycle propose $k$ tokens, take
+**Mechanism: the exact rule.** One cycle of the reference algorithm (Leviathan et al., Section 2.3 and Algorithm 1; Chen et al., Algorithm 2) is (**O**, CLM-019):
+
+1. *Draft*: for $i=1,\dots,\gamma$, compute $q_i$ on the prefix plus earlier draft tokens and sample $x_i\sim q_i$.
+2. *Verify*: one parallel target pass yields $p_1,\dots,p_{\gamma+1}$ for the prefix extended by $0,\dots,\gamma$ draft tokens.
+3. *Accept or reject in order*: draw $r_i\sim U(0,1)$. Accept $x_i$ when $r_i\le p_i(x_i)/q_i(x_i)$, that is, with probability $\min(1,p_i(x_i)/q_i(x_i))$. Stop at the first rejection; $n$ is the number accepted before it.
+4. *Emit one target token*: if a rejection happened at position $n+1$, sample from the **residual distribution**
+   $$p'(x)=\frac{\max(0,\,p_{n+1}(x)-q_{n+1}(x))}{\sum_{x'}\max(0,\,p_{n+1}(x')-q_{n+1}(x'))}$$
+   and discard all later draft tokens. If all $\gamma$ were accepted, sample from $p_{\gamma+1}$ unchanged.
+
+**Why the emitted token is distributed as the target** (**D**, CLM-020, following Appendix A.1 of Leviathan et al.). For one position, token $x$ can be emitted in two ways: drafted and accepted, with probability $q(x)\min(1,p(x)/q(x))=\min(p(x),q(x))$; or after a rejection, with probability $(1-\beta)\,p'(x)$. The residual normalizer is $\sum_x\max(0,p-q)=1-\sum_x\min(p,q)=1-\beta$, so the second term is $p(x)-\min(p(x),q(x))$. The sum is $p(x)$ for every $x$ and for any $q$. Applying the rule position by position, with every draft after the first rejection discarded, gives a sequence distributed as target-only sampling.
+
+**Assumptions behind the guarantee**
+
+- $p$ and $q$ are the distributions that would actually be sampled: both are processed by the same sampling contract as the target-only decoder being matched.
+- Each draft token is truly *sampled* from the $q_i$ used in the ratio. Drafting by argmax while plugging the full $q$ into the ratio breaks the guarantee (see the worked example).
+- The uniform draws are independent of the draft tokens.
+- The verification pass computes the same conditionals as sequential target decoding (same prefix, mask, cache, and precision). Chen et al. state the result as holding "within hardware numerics"; a batched verification kernel can differ in floating point from a sequential one.
+- The guarantee is about the output *distribution*. With the same seed, a speculative run and a target-only run generally produce different text.
+
+**Variants are separate contracts.** Do not carry the guarantee above to another acceptance rule.
+
+| Variant | Acceptance rule | What it preserves | Status |
+|---|---|---|---|
+| Exact speculative sampling | $\min(1,p/q)$ plus residual resampling | The target's sampling distribution, under the assumptions above | **O**, CLM-019; hand check **D**, CLM-020 |
+| Greedy verification | Both distributions one-hot: accept iff the draft token equals the target argmax, else emit the target argmax | The target's greedy sequence in exact arithmetic. It is the exact rule applied to argmax-processed distributions, so it says nothing about a sampled distribution. Near-ties need a stated rule | **D**, CLM-020 |
+| Typical acceptance (Medusa, Section 2.3.1) | Accept when $p_{orig}(x)>\min(\epsilon,\delta e^{-H(p_{orig})})$; the first token is greedy and always accepted | Not the target distribution. The authors state that matching it is typically unnecessary and argue for quality empirically | **O**, CLM-021 |
+| Tree or multi-candidate verification (Medusa trees, EAGLE draft trees) | A rule applied per tree node | Depends on the rule. EAGLE states that it applies speculative sampling recursively at each node and preserves the distribution. This module has not re-derived the multi-candidate proof | **O**, CLM-021 for the papers' statements; `TODO_VERIFY` for any specific runtime's tree verifier |
+| Retrained backbone (Medusa-2) | Any | The backbone itself is fine-tuned, so the comparison target is the original model's quality, not its distribution | **O**, CLM-021 |
+
+**Cost model.** Let a cycle propose $\gamma$ tokens, take
 
 $$
-T_{cycle}=T_{draft}(k)+T_{verify}(k)+T_{bookkeeping},
+T_{cycle}=T_{draft}(\gamma)+T_{verify}(\gamma)+T_{bookkeeping},
 $$
 
-and commit random reward $A$ output tokens. Under stationary ergodic renewal-style cycles with finite expectations:
+and commit random reward $A$ output tokens. Under stationary ergodic renewal-style cycles with finite expectations (**D**, CLM-011):
 
 $$
 \text{token rate}=\frac{\mathbb{E}[A]}{\mathbb{E}[T_{cycle}]},
@@ -283,7 +396,9 @@ $$
 \text{time/token}=\frac{\mathbb{E}[T_{cycle}]}{\mathbb{E}[A]}.
 $$
 
-This is not generally $\mathbb{E}[T_{cycle}/A]$. “Acceptance rate” is insufficient unless its denominator and proposal structure are defined. Record proposed tokens, committed tokens, first-rejection position, target calls, draft/verify times, synchronization, memory, and scheduler/batch context.
+This is not generally $\mathbb{E}[T_{cycle}/A]$. For a finite set of measured cycles, the aggregate time per committed token is $\sum_cT_c/\sum_cA_c$, which equals the *token-weighted* mean of $T_c/A_c$, not the unweighted cycle mean. “Acceptance rate” is insufficient unless its denominator and proposal structure are defined. Record proposed tokens, committed tokens, first-rejection position, target calls, draft/verify times, synchronization, memory, and scheduler/batch context.
+
+**What the reference paper's analytical model assumes.** If the per-position acceptance probabilities are treated as i.i.d. with mean $\alpha$, then $A$ is a capped geometric variable and $\mathbb{E}[A]=(1-\alpha^{\gamma+1})/(1-\alpha)$ (Leviathan et al., Eq. 1). If, in addition, $\gamma+1$ positions verify in the time of one target step and one draft step costs $c$ target steps, the expected wall-time improvement is $(1-\alpha^{\gamma+1})/((1-\alpha)(\gamma c+1))$ for long generations (their Theorem 3.8) (**O**, CLM-019). This is an analytical model, not a measurement. The same paper's Appendix A.3 compares it with measured run times, reports cases where the measured improvement is below the prediction, and attributes the gap to implementation differences and to the i.i.d. simplification.
 
 **Adversarial regimes**
 
@@ -294,17 +409,55 @@ This is not generally $\mathbb{E}[T_{cycle}/A]$. “Acceptance rate” is insuff
 - extra model/KV/workspace memory reduces serving concurrency;
 - long accepted bursts change streaming event semantics and ITL measurement.
 
-**Worked Example:** Two cycles with different reward and duration show why $\sum T/\sum A$ answers aggregate time per committed token while averaging $T/A$ weights cycles differently.
+**Worked Example A — acceptance and residual on a three-token vocabulary (synthetic distributions).**
 
-**Knowledge Check:** Why is acceptance percentage insufficient, and which assumptions support the renewal-style ratio?
+- *Input*: vocabulary $\{a,b,c\}$; target $p=[0.5,\,0.3,\,0.2]$; draft $q=[0.2,\,0.2,\,0.6]$; one position.
+- *Steps*:
 
-**Guided Practice:** With measured cycle records—not a supplied speedup—compute both ratio-of-means and mean-of-ratios, explain the difference, and compare against target-only decoding at identical output distribution, batch/concurrency, and timing boundaries.
+| Token | $p$ | $q$ | Accept prob. $\min(1,p/q)$ | Drafted and accepted $\min(p,q)$ | $\max(0,p-q)$ | Residual $p'$ | Emitted after rejection $(1-\beta)p'$ | Total |
+|---|---|---|---|---|---|---|---|---|
+| a | 0.5 | 0.2 | 1 | 0.2 | 0.3 | 0.75 | 0.3 | 0.5 |
+| b | 0.3 | 0.2 | 1 | 0.2 | 0.1 | 0.25 | 0.1 | 0.3 |
+| c | 0.2 | 0.6 | 1/3 | 0.2 | 0 | 0 | 0 | 0.2 |
+| Sum | 1 | 1 | — | $\beta=0.6$ | 0.4 | 1 | 0.4 | 1 |
 
-**Feedback Contract:** Require cycle-level reward/cost, denominator semantics, equivalence/quality gate, memory, batching/load context, and target-only baseline.
+- *Result*: the Total column equals $p$. The rejection mass $1-\beta=0.4$ equals the residual normalizer, which is the normalization check.
+- *Counterexample 1 — resample from $p$ instead of the residual*: output $=\min(p,q)+(1-\beta)p=[0.40,\,0.32,\,0.28]\ne p$. Token c is over-produced because it can arrive both ways.
+- *Counterexample 2 — draft by argmax but use the full $q$ in the ratio*: the draft is always c, accepted with probability $1/3$, else the residual is sampled: output $=[0.5,\,1/6,\,1/3]\ne p$.
+- *Greedy contract*: argmax processing turns $p$ into $[1,0,0]$ and $q$ into $[0,0,1]$. The draft c is always rejected ($p/q=0$), the residual is $[1,0,0]$, and a is emitted. The output is the target's greedy token and the reward is $A=1$ in every such cycle: correct, with no speculative gain.
+- *Under the i.i.d. model*, $\alpha=0.6$ and $\gamma=2$ give $P(A=1,2,3)=0.4,\,0.24,\,0.36$ and $\mathbb{E}[A]=(1-0.6^3)/0.4=1.96$. The model's wall-time factor is $1.96/(2c+1)$: $1.63$ at $c=0.1$ and $0.98$ at $c=0.5$. The same acceptance gives a predicted gain or a predicted loss depending on draft cost.
+- *Interpretation and limits*: the table proves the single-position identity for these distributions; the algebra above proves it for any $p$, $q$. It says nothing about speed. LAB D extends the check to two positions by exact enumeration.
 
-**Learning Outcome:** Prove or disprove speculative benefit using total cycle reward/cost and explicit equivalence guarantees.
+**Worked Example B — two cycles with different reward and time (synthetic records).**
 
-*(Effort: 55m instruction, 30m practice)*
+- *Input*: $\gamma=4$; target-only decoding at the same boundary takes 25 ms per token (synthetic).
+
+| Cycle | Accepted drafts $n$ | $A=n+1$ | $T_{cycle}$ (ms) | $T/A$ (ms/token) |
+|---|---|---|---|---|
+| 1 | 3 | 4 | 60 | 15 |
+| 2 | 0 | 1 | 40 | 40 |
+
+- *Steps*: $\sum T/\sum A=100/5=20$ ms/token. Mean of $T/A=(15+40)/2=27.5$ ms/token. Token-weighted mean of $T/A=(4\cdot15+1\cdot40)/5=20$ ms/token.
+- *Result*: five tokens were committed in 100 ms, so the aggregate is 20 ms/token and the speedup on these records is $25/20=1.25$. The unweighted mean of ratios, 27.5 ms/token, would report a regression that did not happen.
+- *Same acceptance, opposite outcome*: keep the token counts (3 of 8 proposed drafts accepted, 37.5%) but let the cycles take 80 ms and 55 ms because the draft is slower. Then $\sum T/\sum A=135/5=27$ ms/token and the factor is $25/27\approx0.93$, a regression.
+- *Interpretation and limits*: two cycles are not a stationary sample. A decision needs many cycles per workload stratum with uncertainty, the same output-distribution contract in both arms, and the memory and batching context. Acceptance rate alone fixed neither result.
+
+**Knowledge Check:**
+1. Why is the residual $\max(0,p-q)$ normalized by $1-\beta$, and what goes wrong if the rejected position is resampled from $p$?
+2. Why is acceptance percentage insufficient to infer speedup?
+3. Which assumptions support the renewal-style ratio, and which extra assumptions does the i.i.d. wall-time formula add?
+
+**Guided Practice:** (a) For $p=[0.6,0.3,0.1]$ and $q=[0.3,0.3,0.4]$, compute the acceptance probabilities, $\beta$, the residual, and the emitted distribution. (b) For cycle records $(T,A)=(90,5),(30,1),(45,2)$ in ms and tokens, compute $\sum T/\sum A$ and the mean of $T/A$. (c) With your own measured cycle records—not a supplied speedup—compute both ratios, explain the difference, and compare against target-only decoding at an identical output-distribution contract, batch/concurrency, and timing boundary.
+
+**Feedback Contract:**
+- *Expected Evidence*: (a) acceptance probabilities $[1,\,1,\,0.25]$; $\beta=0.7$; residual $[1,0,0]$; emitted $[0.6,0.3,0.1]=p$. (b) $165/8=20.625$ ms/token versus $(18+30+22.5)/3=23.5$ ms/token. (c) cycle-level reward and cost, the denominator of every rate, the distribution contract of the variant used, memory, batching/load context, and a target-only baseline. Knowledge check 3: the ratio needs stationary cycles with finite means; the wall-time formula adds i.i.d. acceptance, free parallel verification, a single cost ratio $c$, and long generations.
+- *Common Failure*: resampling the rejected position from $p$; counting the bonus target token as an "accepted draft"; averaging $T/A$ over cycles; inferring speedup from acceptance rate.
+- *Diagnostic Hint*: does $\sum_x\max(0,p-q)$ equal $1-\beta$ in your table? Does your aggregate equal total time divided by total committed tokens?
+- *Concept to Revisit*: acceptance and residual rule; ratio of sums versus mean of ratios.
+
+**Learning Outcome:** State and hand-verify the exact acceptance/residual rule and its assumptions, keep other acceptance variants under their own contracts, and prove or disprove speculative benefit using total cycle reward and cost rather than acceptance rate.
+
+*(Effort: 70m instruction, 35m practice)*
 
 ---
 
@@ -314,7 +467,7 @@ This is not generally $\mathbb{E}[T_{cycle}/A]$. “Acceptance rate” is insuff
 
 **Concepts & Definitions:** Auxiliary heads, draft models, feature-level prediction, candidate trees, verification shape, retraining, and approximation guarantees distinguish speculative families.
 
-Medusa adds decoding heads that propose multiple future tokens and uses tree-based verification. Its variants differ in whether the backbone remains frozen and in their quality/training trade-offs. EAGLE predicts at the target model's feature level with a shifted token sequence to address feature uncertainty. EAGLE-3 changes the learned-draft design to direct token prediction with multi-layer feature fusion and reports both latency and batched-serving experiments.
+Medusa adds decoding heads that propose multiple future tokens and uses tree-based verification. Its variants differ in whether the backbone remains frozen (Medusa-1) or is fine-tuned with the heads (Medusa-2), and in their quality/training trade-offs (**O**, CLM-012). Medusa can verify with rejection sampling or with its typical-acceptance rule; the latter does not target the original model's distribution (**O**, CLM-021). EAGLE predicts at the target model's second-to-top-layer feature level and feeds a token sequence advanced by one step to resolve feature uncertainty; its paper states that it keeps the speculative-sampling acceptance rule and so preserves the output distribution (**O**, CLM-012, CLM-021). EAGLE-3 replaces feature prediction with direct token prediction and multi-layer feature fusion, and reports both batch-size-1 latency and batched throughput in a serving framework. The same paper notes that the spare compute speculation exploits shrinks as batch size grows (**O**, CLM-016).
 
 The comparison contract is broader than speed:
 
@@ -328,13 +481,22 @@ The comparison contract is broader than speed:
 
 Treat Medusa, EAGLE, and later variants as **WORKLOAD-DEPENDENT** or **FRONTIER**, not universal defaults. Their paper results motivate experiments but do not select a production method without replication on the target stack.
 
-**Worked Example:** A learned draft with higher acceptance can still lose if training/serving memory lowers target concurrency or tree verification becomes expensive at the chosen batch.
+**Worked Example (synthetic cycle summaries for two hypothetical drafts on one workload).**
+
+- *Input*: draft X commits $\mathbb{E}[A]=3.2$ tokens per cycle with $\mathbb{E}[T_{cycle}]=70$ ms. Draft Y commits $\mathbb{E}[A]=2.4$ with $\mathbb{E}[T_{cycle}]=48$ ms. Both use the exact acceptance rule.
+- *Steps*: X costs $70/3.2=21.875$ ms/token. Y costs $48/2.4=20$ ms/token.
+- *Result*: the draft with the higher committed reward is slower per token, because its wider tree or larger draft makes each cycle more expensive.
+- *Interpretation and limits*: this compares single-request time per token only. If X also holds more draft parameters, tree workspace, or KV state, it can lower the number of concurrent sequences the device can hold. That effect is a hypothesis (**H**) until memory and loaded throughput are measured on the target stack. If X used typical acceptance instead, the two would not even share an output contract, and a quality gate would be needed before any speed comparison.
 
 **Knowledge Check:** Which comparisons require a distribution-preservation statement, and which costs lie outside acceptance rate?
 
 **Guided Practice:** Build a comparison table covering training, target compatibility, proposal structure, quality contract, memory, verification, batching, and fallback behavior.
 
-**Feedback Contract:** Reject rankings based on one paper speedup or acceptance value without matched workload and full cost ledger.
+**Feedback Contract:**
+- *Expected Evidence*: one row per family with the acceptance rule and its distribution contract (exact, greedy-equivalent, typical/approximate, or unverified), whether the backbone is modified, added parameters and runtime memory, verification shape, the batch conditions of any cited result, and fallback behavior. Knowledge check: any comparison of sampled outputs needs the statement; draft time, verification shape, memory, training, and batching interaction lie outside acceptance rate.
+- *Common Failure*: ranking families by one paper's speedup or acceptance value, or comparing an exact method with an approximate one on speed alone.
+- *Diagnostic Hint*: for each row, can you state what the output is guaranteed to equal? If not, what quality gate replaces the guarantee?
+- *Concept to Revisit*: variant contracts table in Lesson 5.5; cycle cost ledger.
 
 **Learning Outcome:** Distinguish speculative families mechanistically and design a fair comparison that includes training, quality, memory, batching, and operations.
 
@@ -375,13 +537,25 @@ $$
 - lower kernel time does not prove better TTFT, ITL, throughput, or goodput;
 - close perplexity does not prove application-quality equivalence.
 
-**Worked Example:** An Amdahl screen can bound the benefit of accelerating attention only while non-attention work stays fixed; quantization or speculation can change kernel shapes, memory headroom, and scheduler behavior, invalidating that fixed-fraction assumption.
+**Worked Example (synthetic step times).**
+
+- *Input*: a baseline decode step takes 40 ms: attention 10 ms, all other work 30 ms. Candidate 1 halves attention time. Candidate 2 (quantization) cuts other work to 20 ms.
+- *Step 1 — candidate 1 alone*: $10\to5$ ms, step $=35$ ms, $S=40/35\approx1.143$. Amdahl bound if attention cost nothing: $40/30\approx1.333$.
+- *Step 2 — candidate 2 alone*: step $=10+20=30$ ms, $S=40/30\approx1.333$.
+- *Step 3 — both, if the two effects are independent and additive*: step $=5+20=25$ ms, $S=40/25=1.6$. The product of the two separate speedups is $1.143\times1.333\approx1.524$, which is not $1.6$. Speedups measured one at a time do not multiply, even with no interaction.
+- *Step 4 — both, with an interaction*: suppose the quantized path changes the attention inputs' dtype and the attention kernel then takes 6 ms instead of 5 ms. Step $=26$ ms, $S=40/26\approx1.538$. Only a measurement of the combined configuration reveals this.
+- *Result*: after candidate 2, attention is $10/30=33\%$ of the step instead of $25\%$, so the bottleneck share moved; the fixed-fraction assumption behind the Step 1 bound no longer describes the system.
+- *Interpretation and limits*: all values are exercise inputs. The example shows why the plan measures main effects first, then the combination, at the same boundary (CLM-015 states the diagnostic hypothesis this supports).
 
 **Knowledge Check:** Which observation indicates a bottleneck shift, and why should combined changes follow main-effect measurements?
 
-**Guided Practice:** Design a factorial toggle matrix for attention, fusion, quantization, and speculation with quality gates and a workload that can falsify each local win.
+**Guided Practice:** (a) A baseline step takes 50 ms: attention 20 ms, other 30 ms. An attention kernel is twice as fast. Compute the new step time, the speedup, and the Amdahl bound. (b) Design a factorial toggle matrix for attention, fusion, quantization, and speculation with quality gates and a workload that can falsify each local win.
 
-**Feedback Contract:** Require pinned baseline, ablations, interaction analysis, matched boundaries, competing hypotheses, canary metrics, and rollback triggers.
+**Feedback Contract:**
+- *Expected Evidence*: (a) 40 ms, $S=1.25$, bound $50/30\approx1.667$. (b) a pinned baseline; every single-factor toggle and the needed combinations; a quality gate per mechanism; matched kernel, model, and loaded-serving boundaries; competing hypotheses for any interaction; canary metrics and rollback triggers. Knowledge check: a change in the time or resource share of the non-target work indicates a shift; without main effects, a combined result cannot be attributed.
+- *Common Failure*: multiplying separately measured speedups, or enabling everything at once and attributing the net change to one mechanism.
+- *Diagnostic Hint*: after each toggle, recompute each component's share of the step. Which share grew?
+- *Concept to Revisit*: end-to-end speedup at identical boundaries; incident protocol.
 
 **Learning Outcome:** Construct an optimization evidence chain that survives bottleneck shifts, interactions, and adversarial workloads.
 
@@ -389,36 +563,50 @@ $$
 
 ## 05 Literature & Production Source Map
 
+Each entry states what was read on 2026-10-01 and what the module uses it for. "Abstract only" means the method and results sections were not re-read in this pass; such entries support only the scoped statement beside them. No reported speedup is used as a general number.
+
 **REFERENCE / BASELINE**
 
-- *FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness* — Dao, Fu, Ermon, Rudra, and Ré (2022). Read the IO model and online-softmax tiling, not only headline speedups.
-- *FP8 Formats for Deep Learning* — Micikevicius et al. (2022). Use for E4M3/E5M2 format semantics; scaling and kernel policy remain separate.
-- *SmoothQuant: Accurate and Efficient Post-Training Quantization for Large Language Models* — Xiao et al. (ICML 2023).
-- *GPTQ: Accurate Post-Training Quantization for Generative Pre-trained Transformers* — Frantar et al. (ICLR 2023).
-- *Fast Inference from Transformers via Speculative Decoding* — Leviathan, Kalman, and Matias (ICML 2023), alongside Chen et al., *Accelerating Large Language Model Decoding with Speculative Sampling* (2023).
+- [FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness](https://arxiv.org/abs/2205.14135) — Dao, Fu, Ermon, Rudra, and Ré (arXiv v2, 2022).
+  - *Read*: Section 3.1 (tiling, the $m$/$f$/$\ell$ softmax decomposition, recomputation) and Algorithm 1.
+  - *Scope*: the exact tiled algorithm and its per-row statistics in Lesson 5.1 (CLM-001, CLM-017).
+- [FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning](https://arxiv.org/abs/2307.08691) — Dao (arXiv v1, 2023).
+  - *Read*: Section 2.3.1 (online softmax in two blocks) and Section 3.1.1 (unscaled accumulator, stored log-sum-exp) with Algorithm 1.
+  - *Scope*: the recurrence form used in the Lesson 5.1 worked example (CLM-017).
+- [Fast Inference from Transformers via Speculative Decoding](https://arxiv.org/abs/2211.17192) — Leviathan, Kalman, and Matias (ICML 2023; arXiv v2).
+  - *Read*: Sections 2.2–2.3 and Algorithm 1 (standardized sampling, acceptance, residual), Sections 3.1–3.5 (acceptance rate, Eq. 1, Theorem 3.8 and its assumptions), Appendix A.1 (correctness proof), Appendix A.3 (predicted versus measured).
+  - *Scope*: the exact rule, its proof, and the analytical model in Lesson 5.5 (CLM-010, CLM-019).
+- [Accelerating Large Language Model Decoding with Speculative Sampling](https://arxiv.org/abs/2302.01318) — Chen et al. (arXiv v1, 2023).
+  - *Read*: Algorithm 2 and the modified-rejection-sampling section, including the "within hardware numerics" qualification.
+  - *Scope*: independent statement of the same acceptance/residual rule (CLM-010, CLM-019).
+- [FP8 Formats for Deep Learning](https://arxiv.org/abs/2209.05433) — Micikevicius et al. (arXiv v2, 2022). *Read*: abstract only. *Scope*: E4M3/E5M2 encodings exist with different range/precision trade-offs (CLM-008); scaling and kernel policy remain separate.
+- [SmoothQuant](https://arxiv.org/abs/2211.10438) — Xiao et al. (ICML 2023; arXiv v7). *Read*: abstract, and the smoothing-factor passage that defines migration strength. *Scope*: equivalent offline rescaling for W8A8 (CLM-005). The Lesson 5.4 example uses hand-chosen factors, not the paper's rule.
+- [GPTQ](https://arxiv.org/abs/2210.17323) — Frantar et al. (ICLR 2023; arXiv v2). *Read*: abstract only. *Scope*: one-shot weight quantization from approximate second-order information (CLM-006).
 
 **WORKLOAD-DEPENDENT**
 
-- *AWQ: Activation-aware Weight Quantization for On-Device LLM Compression and Acceleration* — Lin et al. (MLSys 2024).
-- *Medusa: Simple LLM Inference Acceleration Framework with Multiple Decoding Heads* — Cai et al. (ICML 2024).
-- *EAGLE: Speculative Sampling Requires Rethinking Feature Uncertainty* — Li et al. (2024; arXiv revision 2025).
-- Triton and compiler fusion are current tool/mechanism families; an implementation is selected only after correctness and workload-specific measurement.
+- [AWQ](https://arxiv.org/abs/2306.00978) — Lin et al. (MLSys 2024; arXiv v6). *Read*: abstract and the scaling-search passage. *Scope*: activation-aware per-channel scaling, with system results that include its own runtime (CLM-007).
+- [Medusa](https://arxiv.org/abs/2401.10774) — Cai et al. (ICML 2024; arXiv v3). *Read*: abstract, Section 2 overview, Section 2.3.1 (typical acceptance). *Scope*: heads plus tree verification; Medusa-1 versus Medusa-2; typical acceptance does not target the original distribution (CLM-012, CLM-021).
+- [EAGLE](https://arxiv.org/abs/2401.15077) — Li et al. (arXiv v3, March 2025). *Read*: abstract and the passages stating that it keeps the speculative-sampling rule, including for its draft tree. *Scope*: feature-level drafting and the paper's own distribution statement (CLM-012, CLM-021). The tree-verification proof it cites was not opened: `TODO_VERIFY`.
+- [Triton documentation](https://triton-lang.org/main/index.html) — project landing page and the vector-addition tutorial, unversioned `main` docs as served on 2026-10-01. *Scope*: the program-instance, masked load/store, and `constexpr` block-size model in Lesson 5.2 (CLM-013). The docs are not pinned to a release.
+- [PyTorch compiler FAQ](https://docs.pytorch.org/docs/main/user_guide/torch_compiler/torch.compiler_faq.html) — `main` docs as served on 2026-10-01. *Read*: the sections on how compilation speeds up code (vertical and horizontal fusion), graph breaks, and guard-triggered recompilation. *Scope*: the fusion vocabulary and failure conditions in Lesson 5.2 (CLM-003). The `torch.compile` API page cited in the registry was not re-read in this pass.
+- Triton and compiler fusion are tool/mechanism families. No claim is made here that either is a default in any runtime; an implementation is selected only after correctness and workload-specific measurement.
 
 **FRONTIER**
 
-- *FlashAttention-3* — Shah et al. (2024), specialized for Hopper.
-- *EAGLE-3* — Li et al. (2025), learned direct-token drafting with multi-layer feature fusion.
-- *FlashAttention-4* — Zadouri et al. (2026), Blackwell-oriented algorithm/kernel pipeline co-design. Do not treat its paper benchmarks as a default for other devices.
+- [FlashAttention-3](https://arxiv.org/abs/2407.08608) — Shah et al. (arXiv v2, July 2024). *Read*: abstract only. *Scope*: a Hopper-targeted design using asynchrony and FP8 (CLM-002).
+- [EAGLE-3](https://arxiv.org/abs/2503.01840) — Li et al. (arXiv v3, April 2025). *Read*: abstract, contribution list, and Section 4.3. *Scope*: direct token prediction with multi-layer feature fusion; results at batch size 1 and in a batched serving framework; the paper's remark that spare compute shrinks with batch size (CLM-016).
+- [FlashAttention-4](https://arxiv.org/abs/2603.05451) — Zadouri et al. (arXiv v1, 5 March 2026). *Read*: abstract, contribution list, and Section 3.1.4 (which restates the online-softmax state). *Scope*: a Blackwell-targeted algorithm/kernel co-design (CLM-002). It is a preprint about one hardware generation, not evidence of adoption or of portable gains.
 
 **PRODUCTION SOURCE TRACE**
 
 - Repository: `Dao-AILab/flash-attention`
-- Revision: `e9cf2c1651d2303191eb40a739a3c135fda00999`
-- Verified: 2026-09-26 by static inspection; not executed here.
+- Revision: `e9cf2c1651d2303191eb40a739a3c135fda00999` — [flash_attn_interface.py](https://github.com/Dao-AILab/flash-attention/blob/e9cf2c1651d2303191eb40a739a3c135fda00999/flash_attn/flash_attn_interface.py)
+- Verified: 2026-09-26 by static inspection; the same revision, file, and symbols were statically re-inspected on 2026-10-01. Not executed here.
 - File: `flash_attn/flash_attn_interface.py`
-- Symbols: `flash_attn_func`, `flash_attn_varlen_func`, `flash_attn_with_kvcache`.
-- Trace: public Python function to `FlashAttnFunc`/`FlashAttnVarlenFunc.apply`, or the KV-cache wrapper to `flash_attn_gpu.fwd_kvcache`, then the selected compiled CUDA/ROCm backend.
-- Scope: this proves behavior of the pinned upstream interface, not every wheel, fork, backend, or serving runtime.
+- Symbols: `flash_attn_func`, `flash_attn_varlen_func`, `flash_attn_with_kvcache`, `FlashAttnFunc.forward`, `_flash_attn_forward`.
+- Trace: `flash_attn_func` → `FlashAttnFunc.apply` → `FlashAttnFunc.forward` → `_flash_attn_forward` → `flash_attn_gpu.fwd`; `flash_attn_varlen_func` → `FlashAttnVarlenFunc.apply` → `flash_attn_gpu.varlen_fwd`; `flash_attn_with_kvcache` → `flash_attn_gpu.fwd_kvcache`. `flash_attn_gpu` is the compiled `flash_attn_2_cuda` module or a Triton ROCm implementation, selected at import.
+- Scope: this proves behavior of the pinned upstream interface, not every wheel, fork, backend, or serving runtime. It is one repository snapshot, not an industry default.
 
 ---
 
@@ -440,9 +628,9 @@ $$
 - **Independent Variables**: Device, dtype, batch, query/key lengths, head dimension, causal/local mask, MHA/GQA ratio, and packed/variable-length representation.
 - **Dependent Variables**: Correctness tolerance, NaN/Inf, warm kernel time, cold dispatch/compile time, peak memory, achieved bandwidth/FLOPs where reliable, and end-to-end attention share.
 - **Break & Falsify**: Include tiny queries, unsupported or fallback-prone head sizes, ragged sequences, extreme logits, and shapes where attention is a small end-to-end fraction.
-- **Required Artifact**: Pinned environment, raw shape-level results, profiler traces for at least three regimes, and a source trace of the pinned interface.
+- **Required Artifact**: Pinned environment, raw shape-level results, profiler traces for at least three regimes, a reference online-softmax implementation that carries $(m,\ell,\text{accumulator})$ and reproduces the Lesson 5.1 worked example, and the Section 09 source trace of the pinned interface (attached, not redone here).
 - **Alignment**: Lesson 5.1.
-- **Effort Estimate**: 4h.
+- **Effort Estimate**: 4h (the 2h source trace is counted separately).
 
 ### LAB B — Fusion and Triton Resource Trade-Off
 
@@ -472,8 +660,13 @@ $$
 - **Pre-Registered Hypothesis**: Speculation will improve the declared objective only where committed reward amortizes draft, verification, bookkeeping, and memory/concurrency cost.
 - **Independent Variables**: Proposal length, draft family/size, prompt domain, sampling, output length, batch/concurrency, and scheduler load.
 - **Dependent Variables**: Proposed/committed tokens, first rejection, component time, target calls, memory, client token-event timing, throughput, and goodput.
-- **Break & Falsify**: Use a low-acceptance domain, expensive draft, and high target batching; locate where speculation loses using the full ledger.
-- **Required Artifact**: Cycle records, ratio-of-means calculation, equivalence/quality check, and measured enable/disable policy.
+- **Break & Falsify**: Use a low-acceptance domain, expensive draft, and high target batching; locate where speculation loses using the full ledger. Replace the residual with the unmodified target distribution in the toy model and show that the enumeration check fails.
+- **Required Artifact**:
+  1. A toy reference implementation of the exact rule on a three-token vocabulary with fixed target and draft tables for two positions. Enumerate every draft path exactly (no sampling) and show that the joint distribution of the first two emitted tokens equals the target's $p_1(x_1)\,p_2(x_2\mid x_1)$. A sampled frequency test alone is not sufficient.
+  2. Cycle records with proposed tokens, accepted drafts, committed tokens, and component times.
+  3. $\sum T/\sum A$ and the mean of $T/A$ on the same records, with the difference explained.
+  4. The distribution contract of the variant actually run (exact, greedy-equivalent, approximate, or unverified) and the matching equivalence or quality check.
+  5. A measured enable/disable policy by workload stratum.
 - **Alignment**: Lessons 5.5–5.7.
 - **Effort Estimate**: 4h.
 
@@ -508,8 +701,8 @@ Produce an evidence-backed optimization plan with:
 1. a pinned baseline and workload distribution, including prompt/output correlations, arrival or concurrency model, batch shapes, and SLO-goodput definition;
 2. a profile-based bottleneck model for each workload class;
 3. attention, fusion, quantization, and speculation candidates with explicit applicability and failure conditions;
-4. derivations for nominal weight payload and speculative cycle throughput with units and assumptions;
-5. a correctness/numerical/task-quality gate appropriate to each mechanism;
+4. derivations for nominal weight payload and speculative cycle throughput with units and assumptions, with time per committed token computed as total cycle time over total committed tokens;
+5. a correctness/numerical/task-quality gate appropriate to each mechanism, including the acceptance rule of the chosen speculative variant and the distribution contract it does or does not carry;
 6. a main-effect and interaction experiment design with warm/cold and isolated/loaded boundaries;
 7. source inspection of one production kernel/interface at an exact revision;
 8. a decision table that accepts, rejects, or gates each optimization by shape/domain/load;
@@ -522,26 +715,66 @@ No supplied speedup is accepted as a substitute for measurement. If the availabl
 
 ### Required Artifact: Production Source Trace
 
-The reference trace uses FlashAttention commit `e9cf2c1651d2303191eb40a739a3c135fda00999`. The learner must record repository, revision, verification date, file, symbol, entry point, backend dispatch, configuration conditions, observed behavior, static-versus-executed status, and whether each conclusion generalizes.
+The reference trace uses FlashAttention commit `e9cf2c1651d2303191eb40a739a3c135fda00999`. The learner's trace must contain:
+
+1. repository, exact revision, verification date, and file;
+2. the public entry symbol and each symbol on the path to the backend call (for the reference: `flash_attn_func` → `FlashAttnFunc.forward` → `_flash_attn_forward` → `flash_attn_gpu.fwd`);
+3. how the backend object is selected and under which configuration conditions;
+4. one observed behavior with its condition (for example head-dimension padding, or the KV-cache path's lack of backward support);
+5. static-versus-executed status for every statement, and whether each conclusion generalizes beyond the pinned revision.
+
+### Reference Checks (arithmetic only; not a design answer)
+
+Reviewers use these to check a submission's calculations. A submission with different declared inputs is checked against its own inputs.
+
+- **Online softmax** (Lesson 5.1 inputs): final $m=5$, $\ell=1.2034380$, unscaled accumulator $44.3834741$, output $36.88057$.
+- **Exact speculation** (Lesson 5.5 inputs): $\beta=0.6$, residual $[0.75,0.25,0]$, emitted distribution $[0.5,0.3,0.2]$. Resampling from $p$ gives $[0.40,0.32,0.28]$ and must be flagged as wrong.
+- **Cycle ratio** (Lesson 5.5 records): $\sum T/\sum A=20$ ms/token; mean of $T/A=27.5$ ms/token.
+- **Payload** (Lesson 5.3 inputs): $4\times10^9$ B payload; $4.25\times10^9$ B with the stated per-group metadata.
 
 ### Rubric Dimensions
 
-- **Mechanistic reasoning:** distinguishes mathematical function, representation, kernel, runtime dispatch, and serving behavior.
-- **Quantitative reasoning:** supplies equations, units, assumptions, boundaries, and exclusions; does not convert bit ratio or acceptance rate into a performance claim.
-- **Correctness and quality:** tests numerical parity and application quality with declared tolerances, populations, decoding settings, and uncertainty.
-- **Experimental rigor:** pins revisions/configuration; warms and synchronizes correctly; uses representative shape/workload distributions; reports raw results and variability.
-- **Failure diagnosis:** ranks competing causes through discriminating measurements and controlled ablations; allows interacting bottlenecks and transitions.
-- **Architecture defense:** selects or gates mechanisms by evidence and defines operational rollback rather than naming a fashionable stack.
+- **Mechanistic reasoning** (Mastery 2–3; LAB A, LAB D artifact 1)
+  - *Insufficient*: names mechanisms without their state or rule, or applies the exact-speculation guarantee to a different acceptance rule.
+  - *Competent*: distinguishes mathematical function, representation, kernel, runtime dispatch, and serving behavior; states the online-softmax state and the acceptance/residual rule correctly.
+  - *Strong*: also identifies which assumption fails in a given variant or implementation and how a test would expose it.
+- **Quantitative reasoning** (Mastery 4; Reference Checks)
+  - *Insufficient*: converts a bit ratio or an acceptance rate into a performance claim, or averages per-cycle ratios.
+  - *Competent*: supplies equations, units, assumptions, boundaries, and exclusions; uses total time over total committed tokens.
+  - *Strong*: also shows the sensitivity of the conclusion to the unmeasured inputs, such as draft cost or metadata overhead.
+- **Correctness and quality** (Mastery 5; LAB A, LAB C, LAB D artifacts 1 and 4)
+  - *Insufficient*: reports speed without a parity, distribution, or quality gate.
+  - *Competent*: tests numerical parity and application quality with declared tolerances, populations, decoding settings, and uncertainty; states the distribution contract of the speculative variant.
+  - *Strong*: also includes a negative control that the gate is shown to catch.
+- **Experimental rigor** (Mastery 1, 6; all labs)
+  - *Insufficient*: unpinned revisions, cold and warm runs mixed, or one favorable shape.
+  - *Competent*: pins revisions and configuration; warms and synchronizes correctly; uses representative shape and workload distributions; reports raw results and variability.
+  - *Strong*: also measures main effects before combinations and reports interaction terms at matched boundaries.
+- **Failure diagnosis** (Incident 05.1 steps 1–7)
+  - *Insufficient*: names one cause from a symptom.
+  - *Competent*: ranks competing causes through discriminating measurements and controlled ablations.
+  - *Strong*: allows interacting bottlenecks, states what evidence would overturn the ranking, and remeasures after intervention.
+- **Source trace** (Mastery 7; Required Artifact items 1–5)
+  - *Insufficient*: cites a repository or a comment without revision, symbol, or path.
+  - *Competent*: all five items present and consistent with the pinned source.
+  - *Strong*: also separates what static inspection cannot establish and lists the executed check that would.
+- **Architecture defense** (Mastery 8–10)
+  - *Insufficient*: recommends the full stack because each part is individually favorable.
+  - *Competent*: accepts, rejects, or gates each mechanism by evidence and defines operational rollback.
+  - *Strong*: also names the workload shift that would reverse each decision.
 
 ## 10 Capability Traceability Matrix
 
 | Capability | Taught | Practiced | Assessed | Evidence |
 |---|---|---|---|---|
-| IO-aware attention and parity | Lesson 5.1 | LAB A | Mastery 3, 5, 7 | Shape map, parity tests, source trace |
-| Fusion and Triton kernel reasoning | Lesson 5.2 | LAB B | Incident / Mastery 3, 6 | Kernel, generated code, profile |
-| Quantization contract and methods | Lessons 5.3–5.4 | LAB C | Incident / Mastery 3–6 | Manifest, quality and kernel report |
-| Speculative reward/cost modeling | Lessons 5.5–5.6 | LAB D | Mastery 3–6 | Cycle telemetry and falsification map |
-| Optimization composition diagnosis | Lesson 5.7 | All labs | Incident / Mastery 6, 8–10 | Factorial ablation and rollback plan |
+| IO-aware attention, online-softmax state, and parity | Lesson 5.1 | Lesson 5.1 Guided Practice (a); LAB A | Mastery 3, 5; Reference Check "Online softmax" | Reference online-softmax implementation, shape map, parity tests; rubric: Mechanistic reasoning, Correctness and quality |
+| Fusion and Triton kernel reasoning | Lesson 5.2 | Lesson 5.2 Guided Practice; LAB B | Incident 05.1 steps 1–3 (fusion hypotheses and toggles); Mastery 3, 6 | Kernel, tests, generated-code excerpt, cold/warm profile; rubric: Experimental rigor |
+| Quantization contract and methods | Lessons 5.3–5.4 | Lesson 5.3 Guided Practice (a)–(b); LAB C | Incident 05.1 steps 1–3 (quantization hypotheses); Mastery 3, 4, 5; Reference Check "Payload" | Quantization manifest, calibration provenance, selected-operator log, quality report; rubric: Quantitative reasoning |
+| Exact speculation: acceptance/residual rule and distribution contract | Lesson 5.5 (mechanism, Worked Example A) | Lesson 5.5 Guided Practice (a); LAB D artifact 1 | Mastery 5; Reference Check "Exact speculation" | Toy reference implementation with exact enumeration; rubric: Mechanistic reasoning, Correctness and quality |
+| Speculative reward/cost modeling | Lesson 5.5 (cost model, Worked Example B); Lesson 5.6 | Lesson 5.5 Guided Practice (b)–(c); LAB D artifacts 2–5 | Mastery 4, 6, 8; Reference Check "Cycle ratio" | Cycle records, ratio calculations, enable/disable policy; rubric: Quantitative reasoning |
+| Draft-family comparison | Lesson 5.6 | Lesson 5.6 Guided Practice | Mastery 3, 8 | Comparison table with a distribution contract per family |
+| Production source trace | Lesson 5.1 (pinned interface path); Section 05 trace | LAB A (attaches the trace) | Mastery 7; Section 09 Required Artifact items 1–5 | Trace pinned to commit `e9cf2c16…`; rubric: Source trace |
+| Optimization composition diagnosis | Lesson 5.7 | Lesson 5.7 Guided Practice (a)–(b); LAB D Break & Falsify | Incident 05.1 steps 1–7; Mastery 6, 8–10 | Factorial ablation table, ranked hypotheses, rollback plan; rubric: Failure diagnosis, Architecture defense |
 
 ## 11 Exit Criteria & Module Wrap-Up
 
@@ -549,14 +782,15 @@ The reference trace uses FlashAttention commit `e9cf2c1651d2303191eb40a739a3c135
 
 A learner passes when they can:
 
-1. explain how IO-aware attention changes traffic while preserving dense-attention semantics within numerical tolerance;
+1. explain how IO-aware attention changes traffic while preserving dense-attention semantics within numerical tolerance, and carry the online-softmax state across tiles by hand;
 2. write, test, profile, and break a fused GPU kernel;
 3. specify a quantized artifact beyond its bit width and measure its real memory, quality, and executable kernel path;
 4. distinguish SmoothQuant, GPTQ, and AWQ by mechanism and applicability;
-5. derive and measure speculative cycle reward/cost without treating acceptance rate as speedup;
-6. compare draft families by training, quality, memory, batch, and operational trade-offs;
-7. trace a current production source path at a pinned revision;
-8. diagnose an interacting optimization regression and defend a rollback with remeasurement.
+5. state the exact acceptance/residual rule, verify by hand that it reproduces the target distribution on a small vocabulary, and say which variants do not carry that guarantee;
+6. derive and measure speculative cycle reward/cost without treating acceptance rate as speedup;
+7. compare draft families by training, quality, memory, batch, and operational trade-offs;
+8. trace a production source path at a pinned revision;
+9. diagnose an interacting optimization regression and defend a rollback with remeasurement.
 
 ### Module Wrap-Up (Final Mental Model Reconstruction)
 

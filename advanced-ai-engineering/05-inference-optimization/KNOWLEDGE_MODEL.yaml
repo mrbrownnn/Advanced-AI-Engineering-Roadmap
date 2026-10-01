@@ -1,9 +1,10 @@
 module: "05-inference-optimization"
-registry_version: "1.0.0"
+registry_version: "1.1.0"
 
 required_concepts:
   - "bottleneck_driven_optimization"
   - "io_aware_exact_attention"
+  - "online_softmax_state"
   - "kernel_fusion"
   - "triton_kernel_model"
   - "quantization_contract"
@@ -12,6 +13,8 @@ required_concepts:
   - "gptq"
   - "awq"
   - "speculative_decoding"
+  - "exact_acceptance_and_residual_rule"
+  - "speculative_distribution_contract"
   - "acceptance_cost_model"
   - "medusa_and_eagle"
   - "numerical_and_quality_validation"
@@ -20,6 +23,7 @@ required_concepts:
 prerequisite_concepts:
   - "transformer_attention_semantics"
   - "autoregressive_decode"
+  - "sampling_contract"
   - "gpu_memory_hierarchy"
   - "roofline_model"
   - "arithmetic_intensity"
@@ -29,6 +33,9 @@ prerequisite_concepts:
 
 first_occurrence_concepts:
   - "io_aware_exact_attention"
+  - "online_softmax_state"
+  - "exact_acceptance_and_residual_rule"
+  - "speculative_distribution_contract"
   - "kernel_fusion"
   - "triton_kernel_model"
   - "quantization_contract"
@@ -46,15 +53,23 @@ concept_dependencies:
     depends_on: ["gpu_memory_hierarchy", "profiler_synchronization"]
   - concept: "quantization_contract"
     depends_on: ["arithmetic_intensity", "gpu_memory_hierarchy", "numerical_and_quality_validation"]
+  - concept: "online_softmax_state"
+    depends_on: ["transformer_attention_semantics", "io_aware_exact_attention"]
   - concept: "speculative_decoding"
     depends_on: ["autoregressive_decode", "serving_latency_and_goodput"]
+  - concept: "exact_acceptance_and_residual_rule"
+    depends_on: ["sampling_contract", "speculative_decoding"]
+  - concept: "speculative_distribution_contract"
+    depends_on: ["exact_acceptance_and_residual_rule", "numerical_and_quality_validation"]
+  - concept: "acceptance_cost_model"
+    depends_on: ["speculative_decoding", "serving_latency_and_goodput"]
   - concept: "optimization_interaction_diagnosis"
     depends_on: ["bottleneck_driven_optimization", "numerical_and_quality_validation", "serving_latency_and_goodput"]
 
 mechanisms:
   - id: "MECH-01"
-    description: "IO-aware attention tiles dense attention so intermediate score and probability matrices need not be fully materialized in HBM. The algorithm preserves dense-attention semantics within numerical tolerance, while its performance remains shape, dtype, hardware, and integration dependent."
-    evidence_ids: ["CLM-001", "CLM-002"]
+    description: "IO-aware attention tiles dense attention so intermediate score and probability matrices need not be fully materialized in HBM. Per query row it carries online-softmax state between key tiles: a running maximum m, a running normalizer l relative to m, and an output accumulator that is rescaled by exp(m_old - m_new) whenever the maximum changes. The algorithm preserves dense-attention semantics within numerical tolerance, while its performance remains shape, dtype, hardware, and integration dependent."
+    evidence_ids: ["CLM-001", "CLM-002", "CLM-017"]
     derived_from: []
 
   - id: "MECH-02"
@@ -73,13 +88,13 @@ mechanisms:
     derived_from: []
 
   - id: "MECH-05"
-    description: "Exact speculative decoding drafts a token block with a cheaper model and verifies it with the target using a distribution-preserving acceptance/resampling rule. It wins only when accepted-token reward repays drafting, verification-shape, synchronization, memory, and scheduling costs."
-    evidence_ids: ["CLM-010", "CLM-011"]
+    description: "Exact speculative decoding drafts a token block with a cheaper model and verifies it with the target: each draft token sampled from q is accepted with probability min(1, p/q); at the first rejection one token is sampled from the residual norm(max(0, p - q)) and later drafts are discarded; if all are accepted one extra target token is sampled. Under the stated assumptions (identically processed p and q, draft truly sampled from q, independent uniforms, same target conditionals) the output is distributed as target-only sampling. Greedy, typical-acceptance, tree, and retrained-backbone variants carry their own contracts. Speculation wins only when committed-token reward repays drafting, verification-shape, synchronization, memory, and scheduling costs."
+    evidence_ids: ["CLM-010", "CLM-011", "CLM-019", "CLM-020", "CLM-021"]
     derived_from: []
 
   - id: "MECH-06"
-    description: "Auxiliary-head and learned-draft families such as Medusa and EAGLE change how candidate continuations are produced and verified. Training requirements, model compatibility, memory overhead, batch behavior, and quality guarantees must be evaluated per variant."
-    evidence_ids: ["CLM-012", "CLM-016"]
+    description: "Auxiliary-head and learned-draft families such as Medusa and EAGLE change how candidate continuations are produced and verified. Training requirements, model compatibility, memory overhead, batch behavior, and quality guarantees must be evaluated per variant; the acceptance rule in use (speculative sampling, typical acceptance, or a tree rule) determines whether any distribution guarantee applies."
+    evidence_ids: ["CLM-012", "CLM-016", "CLM-021"]
     derived_from: []
 
 mathematical_models:
@@ -94,8 +109,8 @@ mathematical_models:
     derived_from: ["MECH-03"]
 
   - id: "MATH-03"
-    description: "Speculative renewal-reward model: token rate = E[A]/E[T_cycle], where T_cycle includes draft, verification, synchronization, and bookkeeping and A is committed tokens. It requires a stationary cycle boundary and does not substitute acceptance percentage for accepted tokens per cycle."
-    evidence_ids: ["CLM-011"]
+    description: "Speculative renewal-reward model: token rate = E[A]/E[T_cycle], where T_cycle includes draft, verification, synchronization, and bookkeeping and A is committed tokens. For a finite record set the aggregate time per committed token is sum(T)/sum(A), the token-weighted mean of T/A, not the unweighted cycle mean. It requires a stationary cycle boundary and does not substitute acceptance percentage for accepted tokens per cycle. The i.i.d.-acceptance formulas E[A]=(1-alpha^(gamma+1))/(1-alpha) and improvement E[A]/(gamma*c+1) are an analytical special case with additional assumptions, not a measurement."
+    evidence_ids: ["CLM-011", "CLM-019"]
     derived_from: ["MECH-05"]
 
   - id: "MATH-04"
@@ -103,9 +118,19 @@ mathematical_models:
     evidence_ids: ["CLM-015"]
     derived_from: ["MECH-01", "MECH-02", "MECH-03", "MECH-05"]
 
+  - id: "MATH-05"
+    description: "Online-softmax recurrence for one query row: m_t = max(m_{t-1}, max_j s_j); alpha_t = exp(m_{t-1} - m_t); l_t = alpha_t*l_{t-1} + sum_j exp(s_j - m_t); acc_t = alpha_t*acc_{t-1} + sum_j exp(s_j - m_t) v_j; output = acc_T/l_T, with m_0=-inf, l_0=0, acc_0=0. Exact in real arithmetic; floating-point results depend on tile order."
+    evidence_ids: ["CLM-017", "CLM-018"]
+    derived_from: ["MECH-01"]
+
+  - id: "MATH-06"
+    description: "Speculative-sampling identity for one position: P(emit x) = min(p(x), q(x)) + (1 - beta) * max(0, p(x) - q(x))/(1 - beta) = p(x), with beta = sum_x min(p(x), q(x)). Replacing the residual by p, or drafting by argmax while using the full q, breaks the identity."
+    evidence_ids: ["CLM-019", "CLM-020"]
+    derived_from: ["MECH-05"]
+
 implementation_mechanisms:
   - id: "IMPL-01"
-    description: "Pinned FlashAttention API trace: flash_attn_func and flash_attn_varlen_func dispatch through autograd function wrappers, while flash_attn_with_kvcache exposes an inference-only in-place cache-update and attention path."
+    description: "Pinned FlashAttention API trace: flash_attn_func and flash_attn_varlen_func dispatch through autograd function wrappers to flash_attn_gpu.fwd / varlen_fwd and return the output with the per-row softmax log-sum-exp, while flash_attn_with_kvcache exposes an inference-only in-place cache-update and attention path through flash_attn_gpu.fwd_kvcache. The backend object is chosen at import (compiled CUDA module or Triton ROCm implementation)."
     evidence_ids: ["CLM-014"]
     derived_from: ["MECH-01"]
 
@@ -120,8 +145,8 @@ implementation_mechanisms:
     derived_from: ["MECH-03"]
 
   - id: "IMPL-04"
-    description: "A speculative runtime records proposal length, accepted-token count, first rejection, draft time, target verification time, committed output, and fallback path on the same request and scheduler timeline."
-    evidence_ids: ["CLM-010", "CLM-011", "CLM-016"]
+    description: "A speculative runtime records proposal length, accepted-token count, first rejection, draft time, target verification time, committed output, and fallback path on the same request and scheduler timeline. A toy reference implementation with exact enumeration over a small vocabulary checks that the implemented acceptance and residual rule reproduces the target distribution."
+    evidence_ids: ["CLM-010", "CLM-011", "CLM-016", "CLM-020"]
     derived_from: ["MECH-05", "MECH-06"]
 
 failure_modes:
@@ -149,6 +174,16 @@ failure_modes:
     description: "Speculation regression: low accepted tokens per verification, an over-expensive draft, large verification trees, extra KV/workspace pressure, or poor batching interaction makes target-only decoding faster."
     evidence_ids: ["CLM-010", "CLM-011", "CLM-012", "CLM-016"]
     derived_from: ["MECH-05", "MECH-06"]
+
+  - id: "FAIL-07"
+    description: "Speculative distribution-contract failure: the implemented acceptance path does not match the claimed guarantee, for example resampling a rejected position from the unmodified target, drafting by argmax while using the full draft distribution in the ratio, applying different sampling processors to target and draft, or describing a typical-acceptance or unverified tree rule as exact. Detected by exact enumeration on a toy model and by stating the contract of the deployed variant."
+    evidence_ids: ["CLM-019", "CLM-020", "CLM-021"]
+    derived_from: ["MECH-05", "MECH-06", "MATH-06"]
+
+  - id: "FAIL-08"
+    description: "Online-softmax state failure: per-tile normalizers or outputs are combined without rescaling by exp(m_old - m_new), or the running maximum is initialised to 0 instead of -inf, producing outputs that are not dense attention. Detected by comparing the final normalizer and output with a direct softmax on small inputs."
+    evidence_ids: ["CLM-017", "CLM-018"]
+    derived_from: ["MECH-01", "MATH-05"]
 
   - id: "FAIL-06"
     description: "Optimization composition failure: individually favorable changes interact through layouts, dtypes, memory pools, compiler graphs, or scheduler batch shapes and shift the dominant bottleneck."
@@ -180,10 +215,12 @@ research_connections:
 candidate_capabilities:
   - capability: "Select an inference optimization from measured bottlenecks rather than popularity."
     mapped_mechanisms: ["MECH-01", "MECH-02", "MECH-03", "MECH-05", "PROD-01"]
-  - capability: "Implement and validate an IO-aware or fused GPU kernel against a reference."
-    mapped_mechanisms: ["MECH-01", "MECH-02", "IMPL-01", "IMPL-02"]
+  - capability: "Implement and validate an IO-aware or fused GPU kernel against a reference, including the online-softmax state."
+    mapped_mechanisms: ["MECH-01", "MECH-02", "MATH-05", "IMPL-01", "IMPL-02", "FAIL-08"]
   - capability: "Build a reproducible low-precision artifact and defend its quality/performance contract."
     mapped_mechanisms: ["MECH-03", "MECH-04", "MATH-01", "MATH-02", "IMPL-03"]
+  - capability: "State and hand-verify the exact speculative acceptance/residual rule and keep other acceptance variants under their own contracts."
+    mapped_mechanisms: ["MECH-05", "MECH-06", "MATH-06", "IMPL-04", "FAIL-07"]
   - capability: "Model and measure speculative decoding using accepted-token reward and full cycle cost."
     mapped_mechanisms: ["MECH-05", "MECH-06", "MATH-03", "IMPL-04"]
   - capability: "Diagnose and falsify regressions caused by interacting inference optimizations."
