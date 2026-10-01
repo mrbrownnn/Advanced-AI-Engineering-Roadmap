@@ -1,0 +1,404 @@
+module: "22-ai-economics"
+registry_version: "1.0.0"
+previous_version: ""
+research_cutoff: "2026-09-30"
+change_reason: "First evidence-backed version (audit.md AUD-N22). Replaces an outline that had the wrong module number, treated reading pricing pages and TCO analyses as source-code reading, and gave no task denominators, cost classes, price-snapshot rules, sensitivity analysis, or constrained decision frontier. Pinned implementation traces: LiteLLM cost accounting and RouteLLM threshold routing."
+changed_claims: []
+out_of_scope_candidates:
+  - "Serving capacity math (service curves, saturation, KV sizing): Module 04."
+  - "Evaluation gates, paired intervals, noninferiority margins: Module 15."
+  - "Harness rollout, canary, rollback: Module 17."
+  - "Cost attribution in telemetry pipelines, metric cardinality, alerting: Module 23."
+  - "Training-cost economics of fine-tuning: Module 19 (decision record only)."
+
+claims:
+  - id: CLM-001
+    claim: "FrugalGPT models the cost of one LLM API call as c_i(p) = c_i2*|f_i(p)| + c_i1*|p| + c_i0 (output length, prompt length, optional fixed per-query fee), reports that the fees of the APIs it reviewed differed by up to two orders of magnitude, and defines an LLM cascade that queries a list of APIs in order and returns the first answer whose learned reliability score exceeds a per-stage threshold; its authors report matching the best single model with up to 98% cost reduction on their evaluated datasets."
+    provenance: VERIFIED_FACT
+    domain: cascades
+    concepts: [per_call_cost_model, llm_cascade, generation_scoring_function]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "FrugalGPT: How to Use Large Language Models While Reducing Cost and Improving Performance", authors: "Lingjiao Chen, Matei Zaharia, James Zou", year: "2023", url: "https://arxiv.org/abs/2305.05176", version: "v1", section: "Section 2 (LLM marketplace cost model; problem statement); Section 3 (Strategy 3: LLM cascade; constrained optimization over list and thresholds); Section 5 (limitations: needs labeled in-distribution training data)", accessed_at: "2026-10-01" }]
+    limitations: ["The 98% figure is author-reported on HEADLINES with 2023 API prices; it is not a general savings rate.", "Cascade training needs labeled examples from the deployment distribution (the paper's Section 5).", "Prices used in the paper are historical and are not used in this module."]
+    applicability: "Per-call cost model and the reference cascade mechanism."
+    curriculum_usage: { lessons: ["22.3", "22.5"], labs: ["LAB-D"], assessments: ["Mastery-22"] }
+
+  - id: CLM-002
+    claim: "RouteLLM routes each query to a strong or weak model by comparing a learned estimate of the strong model's win probability with a threshold alpha (strong if the estimate is at least alpha), evaluates routers by call-performance threshold (CPT, the minimum share of strong-model calls that recovers a target share of the performance gap) and APGR, reports cost reductions of over 2x in certain cases without quality loss on its benchmarks, and reports router serving overhead small relative to generation cost in its Table 7."
+    provenance: VERIFIED_FACT
+    domain: routing
+    concepts: [threshold_router, call_performance_threshold, router_overhead]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "RouteLLM: Learning to Route LLMs with Preference Data", authors: "Isaac Ong, Amjad Almahairi, Vincent Wu, Wei-Lin Chiang, Tianhao Wu, Joseph E. Gonzalez, M Waleed Kadous, Ion Stoica", year: "2024", url: "https://arxiv.org/abs/2406.18665", version: "v4 (2025-02-23)", section: "Section 3.1 (routing rule with threshold alpha); Section 3.2 (PGR, APGR, CPT); Section 5.5 and Table 7 (routing overhead)", accessed_at: "2026-10-01" }]
+    limitations: ["Results are for the paper's model pairs, benchmarks, and prices; the overhead table is for its hardware and router types.", "Quality is benchmark or judge quality, not the deployment's success predicate."]
+    applicability: "Two-model threshold routing and its evaluation metrics."
+    curriculum_usage: { lessons: ["22.5"], labs: ["LAB-D"], assessments: ["Mastery-22"] }
+
+  - id: CLM-003
+    claim: "Dekoninck et al. show that, with estimators of per-model quality and cost, the budget-constrained optimal router selects per query the model maximizing q_hat - lambda*c_hat (with randomized tie-breaking to meet the budget exactly), that cascading can be cast as sequential routing, and that quality estimation is the critical factor: ex-ante estimates for routing and post-hoc estimates for cascading."
+    provenance: VERIFIED_FACT
+    domain: routing
+    concepts: [optimal_routing, cascade_routing, quality_estimation]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "A Unified Approach to Routing and Cascading for LLMs", authors: "Jasper Dekoninck, Maximilian Baader, Martin Vechev", year: "2024", url: "https://arxiv.org/abs/2410.10347", version: "v3 (2025-05-22)", section: "Section 1 (Importance of Quality Estimation); Section 2 (Definition 2, Theorem 1, Ex-Ante Quality Estimation); Section 3 (Post-Hoc Quality Estimation)", accessed_at: "2026-10-01" }]
+    limitations: ["Optimality is relative to the estimators; with poor estimates the 'optimal' policy is not optimal on true quality.", "Reported percentage gains are for the paper's benchmarks only and are not quoted here."]
+    applicability: "Scalar quality-cost trade-off and why estimator quality limits routing and cascades."
+    curriculum_usage: { lessons: ["22.5", "22.6"], labs: ["LAB-D"], assessments: ["Mastery-22"] }
+
+  - id: CLM-004
+    claim: "Bouchard (2026) characterizes threshold-cascade cost-quality frontiers with constrained optimization and reports, on five benchmarks and eight models, that a lightweight pre-generation router exceeded the best cascade policy on four of five datasets, mainly because cascades pay the cheap model's generation cost before any escalation decision (structural cost) rather than because the router had a stronger signal."
+    provenance: VERIFIED_FACT
+    domain: cascades
+    concepts: [structural_cascade_cost, cascade_frontier, pre_generation_routing]
+    confidence: medium
+    currentness_status: "FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "Is Escalation Worth It? A Decision-Theoretic Characterization of LLM Cascades", authors: "Dylan Bouchard", year: "2026", url: "https://arxiv.org/abs/2605.06350", version: "v1 (2026-05-07)", section: "Abstract; Section 3.2 (first-order conditions, economic interpretation: equal marginal quality-per-cost across stages)", accessed_at: "2026-10-01" }]
+    limitations: ["Single-author preprint, not yet independently reproduced.", "Results are for deterministic threshold cascades and the evaluated benchmarks."]
+    applicability: "Why a cascade's cost floor includes every cheap-model call."
+    curriculum_usage: { lessons: ["22.5"], labs: ["LAB-D"], assessments: ["Mastery-22"] }
+
+  - id: CLM-005
+    claim: "Mahmood (ICLR 2026) models routing as a Stackelberg game between a provider with a standard and a reasoning model and a user who can re-prompt or abandon, and reports that the provider-optimal policy is in nearly all cases static with no cascading, that provider-optimal and user-preferred routes can be misaligned, and that under some conditions the provider is incentivized to throttle latency."
+    provenance: VERIFIED_FACT
+    domain: routing
+    concepts: [user_reprompt_cost, provider_user_misalignment]
+    confidence: medium
+    currentness_status: "FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "Routing, Cascades, and User Choice for LLMs", authors: "Rafid Mahmood", year: "2026", url: "https://arxiv.org/abs/2602.09902", version: "v1 (2026-02-10); comments state accepted in ICLR 2026", section: "Abstract only", accessed_at: "2026-10-01" }]
+    limitations: ["Abstract-only inspection.", "A stylized single-provider, single-user game; it is not a measurement of a deployed system."]
+    applicability: "Why offered-user cost (re-prompts, abandonment) belongs in the denominator."
+    curriculum_usage: { lessons: ["22.1", "22.5"], labs: [], assessments: ["Mastery-22"] }
+
+  - id: CLM-006
+    claim: "vCache reports that semantic caches using one static embedding-similarity threshold give no formal correctness guarantee, produce unexpected error rates, and give suboptimal hit rates, and proposes an online-learned per-prompt threshold that meets a user-defined error-rate bound on its benchmarks."
+    provenance: VERIFIED_FACT
+    domain: semantic_caching
+    concepts: [semantic_cache, static_similarity_threshold, cache_error_rate]
+    confidence: high
+    currentness_status: "FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "vCache: Verified Semantic Prompt Caching", authors: "Luis Gaspar Schroeder, Aditya Desai, Alejandro Cuadron, Kyle Chu, Shu Liu, Mark Zhao, Stephan Krusche, Alfons Kemper, Matei Zaharia, Joseph E. Gonzalez", year: "2025", url: "https://arxiv.org/abs/2502.03771", version: "v5 (2026-02-21); comments state ICLR 2026 (accepted)", section: "Abstract; Section 3 (Overview of Semantic Caching); Section 4.1 (User Guarantee)", accessed_at: "2026-10-01" }]
+    limitations: ["Hit-rate and error multipliers are author-reported on the paper's benchmarks and are not quoted as general results.", "The guarantee is on the error rate as the paper defines correctness of a cached response."]
+    applicability: "Semantic-cache error must be measured and priced, not assumed zero."
+    curriculum_usage: { lessons: ["22.4"], labs: ["LAB-C"], assessments: ["Mastery-22"] }
+
+  - id: CLM-007
+    claim: "Lumer et al. (2026) evaluate provider prompt caching on DeepResearch Bench over more than 500 agent sessions with 10,000-token system prompts and report API cost reductions of 41-80% and time-to-first-token improvements of 13-31% across providers; they report that naive full-context caching can increase latency, that cache-boundary control (dynamic content at the end, excluding dynamic tool results) gives more consistent benefits, and that benefits apply only above each provider's minimum cacheable prompt length."
+    provenance: VERIFIED_FACT
+    domain: prompt_caching
+    concepts: [prefix_cache, cache_boundary, cache_minimum_length]
+    confidence: high
+    currentness_status: "FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "Don't Break the Cache: An Evaluation of Prompt Caching for Long-Horizon Agentic Tasks", authors: "Elias Lumer, Faheem Nizar, Akshaya Jangiti, Kevin Frank, Anmol Gulati, Mandar Phadate, Vamse Kumar Subbiah", year: "2026", url: "https://arxiv.org/abs/2601.06007", version: "v2 (2026-01-31)", section: "Abstract; Section 3.3 (cost computed from reported standard, cache-read, and cache-creation tokens); Section 4.2 and Table 2; Appendix A Tables 3-4 (prices and minimums as of early January 2026)", accessed_at: "2026-10-01" }]
+    limitations: ["Savings depend on the large stable system prompt of this benchmark; the paper attributes most savings to it.", "Prices are January 2026 snapshots; one provider's TTFT regressed under one mode.", "Author-reported; not reproduced here."]
+    applicability: "Prompt-cache savings are workload- and boundary-dependent."
+    curriculum_usage: { lessons: ["22.4"], labs: ["LAB-C"], assessments: ["Mastery-22", "Incident-22.1"] }
+
+  - id: CLM-008
+    claim: "Price snapshot (official documentation, accessed 2026-10-01): Anthropic's prompt-caching page states that 5-minute cache writes cost 1.25x and 1-hour writes 2x the base input price, cache reads 0.1x (with listed per-model exceptions), that the default cache lifetime is 5 minutes and is refreshed at no additional cost on use, that prompts below a per-model minimum length are processed without caching and without error, and that these multipliers stack with the Batch API discount and data-residency pricing; its table lists Claude Haiku 4.5 at $1/MTok base input, $1.25 5m write, $2 1h write, $0.10 cache hit, $5/MTok output."
+    provenance: VERIFIED_FACT
+    domain: pricing_snapshot
+    concepts: [price_snapshot, cache_write_premium, cache_read_discount, cache_ttl]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT (one vendor, snapshot dated 2026-10-01 only)"
+    evidence: [{ source_type: official_docs, tier: 2, title: "Prompt caching", authors: "Anthropic", year: "2026", url: "https://platform.claude.com/docs/en/build-with-claude/prompt-caching", section: "Pricing (table and multiplier note); How long the cache lives; Cache limitations (minimum cacheable length)", accessed_at: "2026-10-01" }]
+    limitations: ["Accessed one day after the research cutoff; prices change without notice and must be re-read before use.", "Used only in the clearly labeled snapshot example of Lesson 22.3; every decision fixture uses synthetic prices.", "Negotiated or volume discounts are not visible on a public page."]
+    applicability: "Lesson 22.3 snapshot example and the multiplier structure of Lesson 22.4."
+    curriculum_usage: { lessons: ["22.3", "22.4"], labs: ["LAB-A", "LAB-C"], assessments: ["Mastery-22"] }
+
+  - id: CLM-009
+    claim: "Price-structure snapshot (official documentation, accessed 2026-10-01): OpenAI's prompt-caching guide states that reuse requires the entire rendered prefix to match, that the minimum cacheable prompt length is 1,024 tokens for GPT-5.6 and later, that for those models cache writes cost 1.25x the uncached input rate and reads 0.1x on most models, that reported cached_tokens is rounded down to a multiple of 128, and that cached entries expire unless reused."
+    provenance: VERIFIED_FACT
+    domain: pricing_snapshot
+    concepts: [price_snapshot, prefix_cache, cache_write_premium]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT (one vendor, snapshot dated 2026-10-01 only)"
+    evidence: [{ source_type: official_docs, tier: 2, title: "Prompt caching", authors: "OpenAI", year: "2026", url: "https://developers.openai.com/api/docs/guides/prompt-caching", section: "Cache breakpoints and pricing paragraph; How prefix matching works; cache lifetime and retention", accessed_at: "2026-10-01" }]
+    limitations: ["Accessed one day after the cutoff; terms differ by model and organization retention setting.", "Used only to show that write-premium/read-discount structure is not unique to one vendor; no decision uses these numbers."]
+    applicability: "Cross-vendor check of the prefix-cache cost structure."
+    curriculum_usage: { lessons: ["22.4"], labs: ["LAB-C"], assessments: [] }
+
+  - id: CLM-010
+    claim: "Price-modifier snapshot (official documentation, accessed 2026-10-01): Anthropic's pricing and batch-processing pages state that the Message Batches API charges 50% of standard prices on input and output tokens with results available within 24 hours, that US-only inference on Claude 4.6 and later applies a 1.1x multiplier to all token categories, and that volume discounts are negotiated case by case."
+    provenance: VERIFIED_FACT
+    domain: pricing_snapshot
+    concepts: [batch_discount, data_residency_multiplier, negotiated_price]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT (one vendor, snapshot dated 2026-10-01 only)"
+    evidence:
+      - { source_type: official_docs, tier: 2, title: "Pricing", authors: "Anthropic", year: "2026", url: "https://platform.claude.com/docs/en/about-claude/pricing", section: "Batch processing; Data residency pricing; Volume discounts", accessed_at: "2026-10-01" }
+      - { source_type: official_docs, tier: 2, title: "Batch processing", authors: "Anthropic", year: "2026", url: "https://platform.claude.com/docs/en/build-with-claude/batch-processing", section: "Pricing; How the Message Batches API works (24-hour window)", accessed_at: "2026-10-01" }
+    limitations: ["Snapshot only; the list price is not the effective price under a negotiated contract."]
+    applicability: "Price modifiers that a per-task cost model must carry as explicit terms."
+    curriculum_usage: { lessons: ["22.3"], labs: ["LAB-A"], assessments: ["Mastery-22"] }
+
+  - id: CLM-011
+    claim: "Pan et al. model on-premise versus API break-even as C_local(t) = C_hardware + C_electricity*t against C_API(t) = C_API(Q_capacity)*t, where Q_capacity is the token volume the local hardware can produce at an assumed 8 hours/day, 20 days/month and API cost assumes a 1:2 input:output token split; their cost model includes hardware and electricity, lists staffing and maintenance as future work, and reports break-even ranging from under a month to about 69 months across 54 model/API scenarios."
+    provenance: VERIFIED_FACT
+    domain: build_vs_api
+    concepts: [break_even, capex_opex, full_utilization_assumption]
+    confidence: high
+    currentness_status: "WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "A Cost-Benefit Analysis of On-Premise Large Language Model Deployment: Breaking Even with Commercial LLM Services", authors: "Guanzhong Pan, Vishal Chodnekar, Abinas Roy, Haibo Wang", year: "2025", url: "https://arxiv.org/abs/2509.18101", version: "v3 (2025-11-11)", section: "Section V (CapEx/OpEx decomposition); Section VI-B to VI-E (Eqs. 1-7, Table IV); Conclusion (future work: staffing and maintenance)", accessed_at: "2026-10-01" }]
+    limitations: ["Break-even assumes the hardware's full capacity is consumed; it omits staffing, maintenance, redundancy, and utilization below capacity.", "API prices and hardware prices are the paper's snapshots; no figure from Table IV is used as guidance."]
+    applicability: "A published build-versus-API model whose omitted terms the learner must add."
+    curriculum_usage: { lessons: ["22.2"], labs: ["LAB-B"], assessments: ["Mastery-22"] }
+
+  - id: CLM-012
+    claim: "The Google SRE book chapter on handling overload describes a per-request retry budget of up to three attempts and a per-client retry budget that allows retries only while retries are below 10% of requests, and states that the first alone can grow load to just below 3X in the worst case while the per-client budget reduces growth to about 1.1x in the general case."
+    provenance: VERIFIED_FACT
+    domain: retries
+    concepts: [retry_budget, retry_amplification]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: official_docs, tier: 2, title: "Site Reliability Engineering, Chapter 21: Handling Overload", authors: "Alejandro Forero Cuervo (chapter author as credited on sre.google)", year: "2016", url: "https://sre.google/sre-book/handling-overload/", section: "Deciding to Retry", accessed_at: "2026-10-01" }]
+    limitations: ["Generic RPC overload practice at Google; the 3-attempt and 10% values are that system's choices, not LLM constants."]
+    applicability: "Retry amplification as a cost multiplier."
+    curriculum_usage: { lessons: ["22.1"], labs: ["LAB-A"], assessments: ["Incident-22.1"] }
+
+  - id: CLM-013
+    claim: "At LiteLLM commit ed4caebb652728143276e71f27a0d92e6635e261, generic_cost_per_token prices a call from the usage block: uncached text input tokens at the input rate, cache-hit tokens at the cache-read rate, cache-creation tokens at the write rate (5-minute and 1-hour write tokens separately when reported), output text at the output rate, reasoning and other modality tokens at their own rates when a breakdown exists, then multiplies by regional uplift factors; _get_token_base_cost resolves a missing cache-read or cache-write rate to the input rate and switches all rates to above-threshold keys when prompt tokens exceed a configured threshold."
+    provenance: VERIFIED_FACT
+    domain: cost_accounting_runtime
+    concepts: [usage_based_cost, cache_token_pricing, tiered_pricing]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT (scoped to this LiteLLM snapshot)"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "LiteLLM token cost utilities", repository: "https://github.com/BerriAI/litellm", commit: "ed4caebb652728143276e71f27a0d92e6635e261", verification_date: "2026-10-01", file: "litellm/litellm_core_utils/llm_cost_calc/utils.py", symbol: "generic_cost_per_token; _get_token_base_cost; parse_prompt_tokens_details; _calculate_input_cost; calculate_cache_writing_cost; calculate_prompt_caching_savings", entry_point: "litellm.cost_calculator.cost_per_token (generic branch and provider delegates such as litellm/llms/anthropic/cost_calculation.py::cost_per_token)", execution_path: "cost_per_token -> generic_cost_per_token -> parse_prompt_tokens_details (cache hit/creation/text split) -> double-count guard -> _get_token_base_cost (rates, thresholds, missing cache rate -> input rate) -> _calculate_input_cost -> output split (text/reasoning/audio/image/video) -> regional uplift", url: "https://github.com/BerriAI/litellm/blob/ed4caebb652728143276e71f27a0d92e6635e261/litellm/litellm_core_utils/llm_cost_calc/utils.py", accessed_at: "2026-10-01" }
+    limitations: ["Static inspection only; no test was executed.", "Rates come from the library's model price map at that revision, which was not inspected; a map entry is not an invoice.", "Commit dated 2026-09-30T23:40:11Z, the last upstream commit on or before the cutoff; not a tagged release."]
+    applicability: "Source trace for usage-based cost accounting."
+    curriculum_usage: { lessons: ["22.3"], labs: ["LAB-A"], assessments: ["Production-Source-Trace"] }
+
+  - id: CLM-014
+    claim: "At the same LiteLLM commit, cost is zero on three paths: response_cost_calculator and Logging._response_cost_calculator return 0.0 when cache_hit is true (a response served from the gateway's own cache); cost_per_token returns (0.0, 0.0) with only a debug log when the model has no per-token, tiered, or per-second pricing; and Logging._failure_handler_helper_fn sets response_cost to 0 on a failed call unless partial usage was stashed (record_partial_usage_for_failure, used for interrupted streams)."
+    provenance: VERIFIED_FACT
+    domain: cost_accounting_runtime
+    concepts: [zero_cost_paths, unpriced_model, failure_cost]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT (scoped to this LiteLLM snapshot)"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "LiteLLM cost calculator", repository: "https://github.com/BerriAI/litellm", commit: "ed4caebb652728143276e71f27a0d92e6635e261", verification_date: "2026-10-01", file: "litellm/cost_calculator.py", symbol: "response_cost_calculator; cost_per_token (final else branch)", entry_point: "Logging success handlers calling litellm.response_cost_calculator", execution_path: "response_cost_calculator: cache_hit True -> 0.0; else provider-reported cost header if present, else completion_cost -> cost_per_token; cost_per_token else-branch: no token/tiered pricing -> (0.0, 0.0)", url: "https://github.com/BerriAI/litellm/blob/ed4caebb652728143276e71f27a0d92e6635e261/litellm/cost_calculator.py", accessed_at: "2026-10-01" }
+      - { source_type: source_code, tier: 1, title: "LiteLLM logging object", repository: "https://github.com/BerriAI/litellm", commit: "ed4caebb652728143276e71f27a0d92e6635e261", verification_date: "2026-10-01", file: "litellm/litellm_core_utils/litellm_logging.py", symbol: "Logging._response_cost_calculator; Logging._failure_handler_helper_fn; Logging.record_partial_usage_for_failure", entry_point: "Logging.success_handler / failure handlers", execution_path: "_response_cost_calculator: cache_hit -> 0.0; _failure_handler_helper_fn: response_cost = 0 unless combined_usage_object was stashed by record_partial_usage_for_failure", url: "https://github.com/BerriAI/litellm/blob/ed4caebb652728143276e71f27a0d92e6635e261/litellm/litellm_core_utils/litellm_logging.py", accessed_at: "2026-10-01" }
+    limitations: ["Static inspection only.", "Whether a provider bills a failed non-streamed request is provider-specific and not established by this code; the code records what the gateway logs, not what the provider invoices.", "The provider-response-cost header path was not traced further."]
+    applicability: "Why gateway cost logs can understate billed spend and why denominators must be reconciled with invoices."
+    curriculum_usage: { lessons: ["22.1", "22.3"], labs: ["LAB-A"], assessments: ["Production-Source-Trace", "Incident-22.1"] }
+
+  - id: CLM-015
+    claim: "At the same LiteLLM commit, completion_cost adds built-in tool and additional costs, then applies _apply_cost_discount (a configured per-provider percentage) and then _apply_cost_margin (a provider or global percentage and/or fixed amount); batch_cost_calculator uses configured batch rates and otherwise falls back to half the per-token input and output cost, with a code comment that batch cost is usually half."
+    provenance: VERIFIED_FACT
+    domain: cost_accounting_runtime
+    concepts: [discount_and_margin, batch_pricing_fallback, fully_loaded_cost]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT (scoped to this LiteLLM snapshot)"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "LiteLLM cost calculator", repository: "https://github.com/BerriAI/litellm", commit: "ed4caebb652728143276e71f27a0d92e6635e261", verification_date: "2026-10-01", file: "litellm/cost_calculator.py", symbol: "completion_cost; _apply_cost_discount; _apply_cost_margin; batch_cost_calculator; _batch_prompt_cost", entry_point: "completion_cost", execution_path: "completion_cost -> cost_per_token -> + built-in tool and additional costs -> _apply_cost_discount (if cost_discount_config) -> _apply_cost_margin (if cost_margin_config); batch path: get_batch_cost_rates else input/output cost / 2", url: "https://github.com/BerriAI/litellm/blob/ed4caebb652728143276e71f27a0d92e6635e261/litellm/cost_calculator.py", accessed_at: "2026-10-01" }
+    limitations: ["Static inspection only; the half-price fallback is a library heuristic, not a vendor statement."]
+    applicability: "Where negotiated discounts and internal margins enter a cost path."
+    curriculum_usage: { lessons: ["22.3"], labs: ["LAB-A"], assessments: ["Production-Source-Trace"] }
+
+  - id: CLM-016
+    claim: "At RouteLLM commit 0b64fdafe049e596a3f5657c219329f24af24198, Router.route returns the strong model when calculate_strong_win_rate(prompt) >= threshold and the weak model otherwise; Controller routes on the content of the last message only (a code comment says routers were trained on first-turn data) and validates threshold in [0,1]; CausalLLMRouter returns 1 (strong) when its classifier output is invalid; calibrate_threshold.py picks the threshold as the (1 - strong_model_pct) quantile of precomputed win rates on an Arena dataset."
+    provenance: VERIFIED_FACT
+    domain: routing_runtime
+    concepts: [threshold_router, threshold_calibration, fail_to_strong]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE (research implementation; last commit 2024-08-10)"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "RouteLLM routers and controller", repository: "https://github.com/lm-sys/RouteLLM", commit: "0b64fdafe049e596a3f5657c219329f24af24198", verification_date: "2026-10-01", file: "routellm/routers/routers.py; routellm/controller.py; routellm/calibrate_threshold.py", symbol: "Router.route; CausalLLMRouter.calculate_strong_win_rate; Controller._get_routed_model_for_completion; Controller._validate_router_threshold; calibrate (__main__ calibrate task)", entry_point: "Controller.completion(model='router-<name>-<threshold>', messages=...)", execution_path: "completion -> _parse_model_name -> _validate_router_threshold -> _get_routed_model_for_completion(messages[-1]['content']) -> Router.route -> calculate_strong_win_rate >= threshold ? strong : weak -> litellm completion", url: "https://github.com/lm-sys/RouteLLM/blob/0b64fdafe049e596a3f5657c219329f24af24198/routellm/routers/routers.py", accessed_at: "2026-10-01" }
+    limitations: ["Static inspection only; the repository is not actively maintained (HEAD 2024-08-10), so this is a reference mechanism, not a current default.", "Calibration to a strong-call share on Arena prompts does not transfer to a deployment distribution."]
+    applicability: "Source trace for a threshold router and its calibration."
+    curriculum_usage: { lessons: ["22.5"], labs: ["LAB-D"], assessments: ["Production-Source-Trace"] }
+
+  - id: CLM-017
+    claim: "Cost per successful task equals billed spend divided by tasks that met the success predicate; it factors as (cost per billed attempt) x (billed attempts per accepted task) x (accepted tasks per successful task), and reporting it per accepted task or per call hides retries, billed failures, and late or invalid answers, while reporting it per offered task additionally charges rejected demand."
+    provenance: DERIVED
+    domain: denominators
+    concepts: [offered_task, accepted_task, successful_task, cost_per_successful_task]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions: ["Offered, accepted, and successful are counted over the same window and population; the success predicate is declared (Module 04 goodput, Module 15 contract).", "Spend is reconciled to billed attempts, not to gateway logs alone."]
+    derivation: "C/N_succ = (C/N_billed)(N_billed/N_acc)(N_acc/N_succ) is an identity when all counts are nonzero. In the Lesson 22.1 fixture, 0.006 x 1.0925 x 1.0787 = 0.00707 USD, 17.8% above the per-call price."
+    limitations: ["The identity does not say which factor to fix; that needs the ledger rows.", "Undefined when N_succ = 0; report counts instead."]
+    applicability: "Every cost comparison in this module."
+    related_claims: [CLM-014, CLM-018]
+    curriculum_usage: { lessons: ["22.1"], labs: ["LAB-A"], assessments: ["Mastery-22", "Incident-22.1"] }
+
+  - id: CLM-018
+    claim: "With independent attempts of success probability p and a cap of k attempts, expected attempts are (1-(1-p)^k)/p and success probability 1-(1-p)^k, so for one homogeneous class retries raise success at constant expected cost per success 1/p; with a mixture of easy and hard tasks, retries spend disproportionately on hard tasks and raise cost per success, so the marginal cost of the added successes, not the average, decides the retry cap."
+    provenance: DERIVED
+    domain: retries
+    concepts: [retry_cap, marginal_cost_per_success, task_heterogeneity]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions: ["Attempts are independent with a fixed per-class success probability; each attempt costs the same.", "Deterministic failures (same input, same error) violate independence and make retries pure waste."]
+    derivation: "Truncated geometric sum: sum_{i=0}^{k-1} (1-p)^i = (1-(1-p)^k)/p; ratio to 1-(1-p)^k is 1/p. Fixture (90% p=0.95, 10% p=0.2): k=1 gives 1.0 attempts and 0.875 success (1.143 per success); k=3 gives 1.19125 and 0.94869 (1.256); added successes cost 2.595 attempts each."
+    limitations: ["Real retries are correlated with load and with the input; measure per-class retry success."]
+    applicability: "Retry caps and their cost."
+    related_claims: [CLM-012, CLM-017]
+    curriculum_usage: { lessons: ["22.1"], labs: ["LAB-A"], assessments: ["Mastery-22"] }
+
+  - id: CLM-019
+    claim: "Self-hosted monthly cost is a fixed term plus replicas provisioned for peak, C = F + R*c_rep with R = max(R_min, ceil(lambda_avg*PAR/(mu*h))), so cost per task falls with volume, utilization averaged over the month stays well below the headroom factor h whenever peak-to-average PAR > 1, and the comparison with a per-task API price is a step function whose winner can switch back and forth near a replica boundary."
+    provenance: DERIVED
+    domain: build_vs_api
+    concepts: [fixed_cost, marginal_cost, fully_loaded_cost, provisioned_utilization, break_even]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions: ["mu is a measured per-replica sustainable task rate under the latency SLO (Module 04 Lesson 4.7), not a peak benchmark.", "Replicas are provisioned for peak with headroom h and a redundancy floor R_min; F includes staff time, platform, and amortized setup."]
+    derivation: "Average utilization = lambda_avg/(R*mu) <= h/PAR once R exceeds R_min. Fixture: F=9000, c_rep=1825, mu=2.0, h=0.7, PAR=3: at 8e6 tasks/month R=7 and 0.00272 USD/task; versus an equivalent 0.002362 USD/task the self-hosted option first wins at 10.763e6, loses again on 11.038e6-11.534e6 and 12.265e6-12.307e6, and wins from 12.308e6."
+    limitations: ["Ignores contract minimums, reserved-instance terms, and lead time for capacity.", "Quality and latency of a self-hosted model are separate constraints (Lesson 22.6)."]
+    applicability: "Build-versus-API and capacity cost."
+    related_claims: [CLM-011]
+    curriculum_usage: { lessons: ["22.2", "22.6"], labs: ["LAB-B"], assessments: ["Mastery-22"] }
+
+  - id: CLM-020
+    claim: "For a prefix cache priced as write multiple w and read multiple r of the base input rate, a prefix written once and read n times costs less than no cache when n > (w-1)/(1-r), and the per-request cost factor is (1-h)*w + h*r, which is below 1 only when the hit probability h > (w-1)/(w-r); with w=1.25, r=0.1 that is any reuse and h > 0.217, and with w=2, r=0.1 it is n > 1.11 and h > 0.526."
+    provenance: DERIVED
+    domain: prompt_caching
+    concepts: [cache_break_even, hit_probability, cache_ttl]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions: ["Every miss rewrites the prefix at w; hits pay r; the uncached suffix and output are unaffected.", "For the gap model only: request gaps for one prefix are exponential with mean g and the TTL tau is refreshed on each hit, so h = 1 - exp(-tau/g)."]
+    derivation: "No cache costs (1+n) units; cache costs w + n*r; difference positive iff n(1-r) > w-1. Per request: (1-h)w + hr < 1 iff h(w-r) > w-1. Gap model: mean gap 10 min gives h = 0.393 at tau=5 (factor 0.798) and h = 0.998 at tau=60 (factor 0.105)."
+    limitations: ["Provider minimum lengths, eviction under load, routing to machines without the entry, and exact-prefix breaks make real h lower than the gap model.", "Multipliers are the snapshot's structure (CLM-008, CLM-009), not constants."]
+    applicability: "Prompt-cache design and TTL choice."
+    related_claims: [CLM-007, CLM-008]
+    curriculum_usage: { lessons: ["22.4"], labs: ["LAB-C"], assessments: ["Mastery-22", "Incident-22.1"] }
+
+  - id: CLM-021
+    claim: "A semantic cache with lookup cost c_e, hit rate h, and wrong-hit rate epsilon changes cost per task to c_e + (1-h)*c_L and success to s*(1 - h*epsilon) when hits replace otherwise-successful answers, so a higher-hit, higher-error configuration can lower cost per successful task while violating a quality floor."
+    provenance: DERIVED
+    domain: semantic_caching
+    concepts: [semantic_cache, cache_error_rate, cost_per_successful_task]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions: ["Wrong hits are failures; a correct hit counts as a success; the hit/miss split is independent of task difficulty.", "c_L is the uncached model cost; staleness is part of epsilon."]
+    derivation: "Fixture c_L=0.006, s=0.93, c_e=0.00002: (h=0.30, eps=0.02) gives 0.00422 and 0.92442 (0.004565 per success); (h=0.55, eps=0.15) gives 0.00272 and 0.853275 (0.003188 per success) but fails a 0.90 floor."
+    limitations: ["If hits concentrate on easy questions, s on misses falls; measure success separately on hits and misses."]
+    applicability: "Semantic-cache acceptance decisions."
+    related_claims: [CLM-006]
+    curriculum_usage: { lessons: ["22.4"], labs: ["LAB-C"], assessments: ["Mastery-22"] }
+
+  - id: CLM-022
+    claim: "A two-stage cascade that always runs the cheap model and a verifier, accepting with true-accept rate t on correct cheap answers and false-accept rate f on wrong ones, has cost per task c_W + c_v + e*c_S with escalation share e = 1 - (a*t + (1-a)*f) and success a*t + e*b, so it pays c_W + c_v on every task, admits (1-a)*f wrong answers, and is cheaper than always-strong only while e < 1 - (c_W + c_v)/c_S."
+    provenance: DERIVED
+    domain: cascades
+    concepts: [cascade_cost, escalation_rate, false_accept, verifier_cost]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions: ["a is the cheap model's accuracy on the traffic; b is the strong model's accuracy on escalated (harder) tasks; t and f are measured on held-out traffic.", "Latency of escalated tasks is the sum of both stages."]
+    derivation: "Fixture a=0.70, t=0.90, f=0.20, b=0.88, c_W=0.0006, c_v=0.0002, c_S=0.006: accepted 0.69, e=0.31, cost 0.00266, success 0.9028, wrong accepted 0.06, cost-only break-even e < 0.8667."
+    limitations: ["Under distribution shift a, t, f change together; the cost and quality of a cascade must be remeasured on the shifted traffic (Lab D)."]
+    applicability: "Cascade and router comparison."
+    related_claims: [CLM-001, CLM-004]
+    curriculum_usage: { lessons: ["22.5"], labs: ["LAB-D"], assessments: ["Mastery-22", "Incident-22.1"] }
+
+  - id: CLM-023
+    claim: "A defensible model-system choice first removes options that fail hard constraints (the lower confidence bound of success below the quality floor, or measured P95 latency above the SLO, or a policy constraint), then ranks the remainder by cost per successful task, and reports the input values at which the ranking flips; a scalar utility Q - lambda*C or a frontier plot alone can select an option that violates a hard constraint."
+    provenance: DERIVED
+    domain: decision_frontier
+    concepts: [hard_constraint, decision_frontier, sensitivity_analysis, flip_point]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions: ["Quality is estimated on the same items for every option with a declared interval (Module 15); latency is measured under the target load (Module 04).", "Inputs are declared with their source: measurement, snapshot, or synthetic."]
+    derivation: "Lesson 22.6 fixture: the cascade (Wilson lower bound 0.8800 < 0.88, P95 3.1 s > 2.5 s) and always-cheap fail; among the rest the cached router wins at 8e6 tasks/month (0.002582 vs 0.002975 USD per success for self-hosting); the winner flips at a prefix hit rate of 0.705, a PAR of 2.30, or a fixed self-hosting cost of 6,124 USD/month."
+    limitations: ["Flip points are conditional on all other inputs held fixed; joint uncertainty needs a scenario or Monte Carlo analysis."]
+    applicability: "Final decisions in Lesson 22.6, Lab D, and the Mastery problem."
+    related_claims: [CLM-003, CLM-019, CLM-020, CLM-022]
+    curriculum_usage: { lessons: ["22.6"], labs: ["LAB-D"], assessments: ["Mastery-22"] }
+
+  - id: CLM-024
+    claim: "Hypothesis for LAB D: when the traffic mix shifts toward tasks the cheap model gets wrong, a cascade's escalation share rises and its false-accept count rises, so its cost per successful task increases more than a pre-generation router's whose routing share is held fixed."
+    provenance: HYPOTHESIS
+    domain: cascades
+    concepts: [distribution_shift, escalation_rate, false_accept]
+    confidence: medium
+    currentness_status: "WORKLOAD-DEPENDENT"
+    hypothesis:
+      prediction: "On the shifted slice, escalation share and wrong-accepted count rise, and cascade cost per success rises by more than the router's."
+      measurement_target: "Escalation share, false-accept count, cost per successful task, with Wilson intervals on success for both policies on the same shifted items."
+      falsifying_observation: "The cascade's cost per success rises by no more than the router's, or its success interval on the shifted slice stays at or above the floor with unchanged escalation share."
+    limitations: ["A router with a fixed share also loses quality under shift; the comparison is about which cost moves."]
+    applicability: "LAB D break condition."
+    curriculum_usage: { lessons: ["22.5"], labs: ["LAB-D"], assessments: [] }
+
+  - id: CLM-025
+    claim: "Hypothesis for LAB C: inserting a per-request dynamic field (for example a timestamp) before the stable prefix drives the measured prefix-cache hit share toward zero and raises input cost per accepted task toward the write multiple w, while moving the field after the cached prefix restores the hit share."
+    provenance: HYPOTHESIS
+    domain: prompt_caching
+    concepts: [cache_boundary, prefix_cache]
+    confidence: medium
+    currentness_status: "WORKLOAD-DEPENDENT"
+    hypothesis:
+      prediction: "Hit share of prefix tokens falls below 0.05 with the dynamic field first and returns above 0.8 with it last, at fixed request gaps below the TTL."
+      measurement_target: "Reported cache-read and cache-creation tokens per request, input cost per accepted task, and TTFT."
+      falsifying_observation: "Hit share stays above 0.5 with the dynamic field first, or does not recover when the field is moved."
+    limitations: ["Provider routing, minimum lengths, and eviction can also lower hit share; control them before attributing the change."]
+    applicability: "LAB C and Incident 22.1."
+    curriculum_usage: { lessons: ["22.4"], labs: ["LAB-C"], assessments: ["Incident-22.1"] }
+
+  - id: CLM-026
+    claim: "Hypothesis for LAB B: at low monthly volume the self-hosted option's cost per successful task exceeds the API option's because of the fixed term and the replica floor, and the volume at which it wins rises with the peak-to-average ratio of arrivals."
+    provenance: HYPOTHESIS
+    domain: build_vs_api
+    concepts: [break_even, provisioned_utilization]
+    confidence: medium
+    currentness_status: "WORKLOAD-DEPENDENT"
+    hypothesis:
+      prediction: "In the simulator, the first winning volume increases monotonically when PAR goes 1.5 -> 3 -> 4."
+      measurement_target: "Cost per successful task for both options over a volume sweep, replicas provisioned, and average utilization."
+      falsifying_observation: "The first winning volume does not increase with PAR, or self-hosting wins at the lowest volume."
+    limitations: ["A simulator with a measured mu tests the model, not the real fleet."]
+    applicability: "LAB B pre-registered hypothesis."
+    curriculum_usage: { lessons: ["22.2"], labs: ["LAB-B"], assessments: [] }
+
+  - id: CLM-027
+    claim: "All prices, rates, quality counts, latencies, and volumes in Module 22's decision fixtures (strong/weak models S and W at 2.4/12 and 0.24/1.2 USD per million input/output tokens, the self-hosting fixtures, the Lesson 22.1 ledger, and the Mastery fixture) are synthetic exercise inputs, not any provider's prices or any system's measurements."
+    provenance: EXERCISE_ASSUMPTION
+    domain: exercise_fixture
+    concepts: [synthetic_fixture]
+    confidence: high
+    currentness_status: "SYNTHETIC EXERCISE INPUT"
+    assumptions: ["Values were chosen so that every decision and flip point can be recomputed by hand and so that options differ on cost, quality, and latency."]
+    limitations: ["Not calibrated to any vendor, model, or hardware."]
+    applicability: "Worked examples, guided practice, labs, and Mastery reference checks."
+    curriculum_usage: { lessons: ["22.1", "22.2", "22.4", "22.5", "22.6"], labs: ["LAB-A", "LAB-B", "LAB-C", "LAB-D"], assessments: ["Mastery-22"] }
+
+  - id: CLM-028
+    claim: "A price used in a cost model must be recorded as a dated snapshot (source URL, access date, model identifier, token class, tier, region, batch or cache modifiers, and any negotiated discount); a gateway's price map at a code revision and a public price page are both snapshots, and neither equals billed spend until reconciled with the invoice."
+    provenance: DERIVED
+    domain: pricing_snapshot
+    concepts: [price_snapshot, invoice_reconciliation]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions: ["Public list prices and modifiers change over time (CLM-008, CLM-010); contracts can differ from list prices (CLM-010)."]
+    derivation: "The pinned cost path multiplies usage by rates resolved from a map at a revision and can return zero for unpriced models or cache hits (CLM-013, CLM-014); a public page lists modifiers that stack (CLM-008, CLM-010). Any of these can diverge from the invoice, so the snapshot's provenance and a reconciliation step are required."
+    limitations: ["Does not specify reconciliation tooling; Module 23 owns cost attribution in telemetry."]
+    applicability: "Lesson 22.3 and every lab that uses a price."
+    related_claims: [CLM-008, CLM-013, CLM-014]
+    curriculum_usage: { lessons: ["22.3"], labs: ["LAB-A"], assessments: ["Mastery-22", "Incident-22.1"] }
+
+  - id: CLM-029
+    claim: "RouteNLP (ACL 2026 Industry Track) reports, from an 8-week pilot at one enterprise customer-service division processing about 5K queries/day, a 58% inference cost reduction with 91% response acceptance after combining a difficulty-aware router, conformal-calibrated cascading, and targeted distillation."
+    provenance: VERIFIED_FACT
+    domain: routing
+    concepts: [production_routing_report, conformal_cascade]
+    confidence: low
+    currentness_status: "FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "RouteNLP: Closed-Loop LLM Routing with Conformal Cascading and Distillation Co-Optimization", authors: "Dongxin Guo, Jikun Wu, Siu Ming Yiu", year: "2026", url: "https://arxiv.org/abs/2604.23577", version: "v1 (2026-04-26); comments state accepted at ACL 2026 Industry Track", section: "Abstract only", accessed_at: "2026-10-01" }]
+    limitations: ["Abstract-only inspection; one partner, author-reported; acceptance rate is not the same as task success.", "Used only to show that published deployment reports state their denominator (acceptance) and must be read for it."]
+    applicability: "Reading a production cost claim for its denominator."
+    curriculum_usage: { lessons: ["22.5"], labs: [], assessments: [] }
+
+  - id: CLM-030
+    claim: "How widely production LLM systems use cascades, routers, or semantic caches, and what savings they realize on offered-user cost per successful task, is not established by any source inspected for this module."
+    provenance: TODO_VERIFY
+    domain: adoption
+    concepts: [industry_adoption]
+    confidence: low
+    currentness_status: "TODO_VERIFY"
+    limitations: ["Availability in libraries and vendor features does not establish adoption; deployment reports (CLM-029) are single cases."]
+    applicability: "Prevents the module from calling these mechanisms industry defaults."
+    curriculum_usage: { lessons: ["22.5"], labs: [], assessments: [] }

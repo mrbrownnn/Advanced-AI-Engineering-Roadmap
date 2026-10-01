@@ -1,0 +1,78 @@
+module: "22-ai-economics"
+registry_version: "1.0.0"
+status: ready
+
+required_concepts: [offered_task, accepted_task, successful_task, attempt_ledger, retry_amplification, cost_per_successful_task, marginal_cost, fixed_cost, fully_loaded_cost, provisioned_utilization, break_even, build_vs_api, price_snapshot, invoice_reconciliation, prefix_cache_economics, semantic_cache_economics, threshold_router, cascade, escalation_rate, decision_frontier, hard_constraint, sensitivity_analysis, flip_point]
+prerequisite_concepts: [measurement_boundary, goodput, admitted_arrival, saturation_knee, workload_distribution, confidence_interval, noninferiority_margin, budget_reservation, attempt_amplification, canary_rollback]
+first_occurrence_concepts: [offered_task, accepted_task, successful_task, cost_per_successful_task, fully_loaded_cost, provisioned_utilization, price_snapshot, invoice_reconciliation, prefix_cache_economics, semantic_cache_economics, cascade_cost, escalation_rate, decision_frontier, flip_point]
+
+concept_dependencies:
+  - { concept: offered_task, depends_on: [measurement_boundary] }
+  - { concept: accepted_task, depends_on: [offered_task, admitted_arrival] }
+  - { concept: successful_task, depends_on: [accepted_task, goodput] }
+  - { concept: attempt_ledger, depends_on: [measurement_boundary, attempt_amplification] }
+  - { concept: cost_per_successful_task, depends_on: [attempt_ledger, successful_task] }
+  - { concept: provisioned_utilization, depends_on: [workload_distribution, saturation_knee] }
+  - { concept: break_even, depends_on: [fixed_cost, marginal_cost, provisioned_utilization] }
+  - { concept: fully_loaded_cost, depends_on: [fixed_cost, marginal_cost] }
+  - { concept: price_snapshot, depends_on: [measurement_boundary] }
+  - { concept: invoice_reconciliation, depends_on: [price_snapshot, attempt_ledger] }
+  - { concept: prefix_cache_economics, depends_on: [price_snapshot, cost_per_successful_task] }
+  - { concept: semantic_cache_economics, depends_on: [cost_per_successful_task, confidence_interval] }
+  - { concept: cascade, depends_on: [successful_task] }
+  - { concept: escalation_rate, depends_on: [cascade] }
+  - { concept: decision_frontier, depends_on: [cost_per_successful_task, confidence_interval, noninferiority_margin] }
+  - { concept: flip_point, depends_on: [decision_frontier, sensitivity_analysis] }
+
+mechanisms:
+  - { id: "MECH-01", description: "One immutable task ledger records offered root task, admission outcome, every physical and billed attempt, terminal outcome, quality/latency gate, cache path, model route, and spend; the same rows support offered, accepted, and successful denominators without relabeling retries as users.", evidence_ids: ["CLM-012", "CLM-013", "CLM-014", "CLM-017", "CLM-018"], derived_from: [] }
+  - { id: "MECH-02", description: "Cost classification follows decision boundary: marginal cost changes with one more task, fixed cost does not within the horizon, and fully loaded cost includes fixed platform, labor, redundancy, idle provisioned capacity, evaluation, and variable execution; self-hosted replicas are provisioned from measured SLO capacity and peak-to-average load, not average accelerator activity.", evidence_ids: ["CLM-011", "CLM-019", "CLM-026"], derived_from: ["MECH-01"] }
+  - { id: "MECH-03", description: "A dated price snapshot records URL, access date, model/version, token classes, cache/batch/tier/region modifiers, and contract discount; actual usage is priced once per disjoint usage class then reconciled with invoices because a gateway map and public list price can diverge from billed spend.", evidence_ids: ["CLM-008", "CLM-009", "CLM-010", "CLM-013", "CLM-014", "CLM-015", "CLM-028"], derived_from: ["MECH-01"] }
+  - { id: "MECH-04", description: "Exact-prefix caching trades a write premium for read discounts and lower prefill; hit probability depends on stable-prefix placement, TTL, minimum length, traffic gaps, and eviction, so write/read/uncached tokens and TTFT are measured separately.", evidence_ids: ["CLM-007", "CLM-008", "CLM-009", "CLM-020", "CLM-025"], derived_from: ["MECH-03"] }
+  - { id: "MECH-05", description: "Semantic caching saves a model call on a hit but introduces embedding/lookup cost and wrong-hit quality loss; optimize cost only after an error-rate constraint is satisfied on held-out hits and misses.", evidence_ids: ["CLM-006", "CLM-021"], derived_from: ["MECH-01"] }
+  - { id: "MECH-06", description: "A pre-generation router pays router plus one chosen model; a cascade pays cheap-model and verifier cost on every task plus strong-model cost on escalations, and false acceptance leaks cheap-model errors. Both need workload-specific quality estimators and shift tests.", evidence_ids: ["CLM-001", "CLM-002", "CLM-003", "CLM-004", "CLM-005", "CLM-016", "CLM-022", "CLM-024", "CLM-029"], derived_from: ["MECH-01"] }
+  - { id: "MECH-07", description: "Decision procedure: predeclare hard quality, latency, policy, and capacity constraints; remove infeasible options using intervals and loaded measurements; compare survivors by cost per successful task; sweep uncertain inputs and report flip points, reservation, and rollback plan.", evidence_ids: ["CLM-003", "CLM-019", "CLM-020", "CLM-022", "CLM-023"], derived_from: ["MECH-01", "MECH-02", "MECH-04", "MECH-05", "MECH-06"] }
+
+mathematical_models:
+  - { id: "MATH-01", description: "Cost factorization: C/N_success = (C/N_billed_attempts)(N_billed_attempts/N_accepted)(N_accepted/N_success), with offered cost C/N_offered reported separately and zero-success windows reported as counts, not division by zero.", evidence_ids: ["CLM-017", "CLM-027"], derived_from: ["MECH-01"] }
+  - { id: "MATH-02", description: "Independent retry cap: E[A_k]=(1-(1-p)^k)/p and P(success by k)=1-(1-p)^k; in heterogeneous traffic, aggregate marginal attempts per added success can rise with k.", evidence_ids: ["CLM-018"], derived_from: ["MECH-01"] }
+  - { id: "MATH-03", description: "Self-hosted monthly cost: C=F+R*c_rep, R=max(R_min, ceil(lambda_avg*PAR/(mu*h))); average utilization lambda_avg/(R*mu) and per-success cost C/(N*q) expose idle headroom, redundancy, and quality.", evidence_ids: ["CLM-019"], derived_from: ["MECH-02"] }
+  - { id: "MATH-04", description: "Prefix-cache break-even: write once/read n beats uncached iff n>(w-1)/(1-r); repeated-request factor (1-h)w+hr beats 1 iff h>(w-1)/(w-r); under exponential gaps h=1-exp(-tau/g).", evidence_ids: ["CLM-020"], derived_from: ["MECH-04"] }
+  - { id: "MATH-05", description: "Semantic cache: cost c_e+(1-h)c_L and success s(1-h*epsilon) under the declared independence fixture; cost-per-success is their ratio and quality is a hard gate.", evidence_ids: ["CLM-021"], derived_from: ["MECH-05"] }
+  - { id: "MATH-06", description: "Two-stage cascade: e=1-[a*t+(1-a)f], cost=c_W+c_v+e*c_S, success=a*t+e*b, wrong-accepted=(1-a)f, and cost-only break-even against always-strong requires e<1-(c_W+c_v)/c_S.", evidence_ids: ["CLM-022"], derived_from: ["MECH-06"] }
+
+implementation_mechanisms:
+  - { id: "IMPL-01", description: "Pinned LiteLLM path parses disjoint usage classes, resolves cache/tier/service/region rates, adds tools, applies discount then margin, and contains zero-cost paths for gateway cache hits, unpriced models, and failures with no stashed partial usage.", evidence_ids: ["CLM-013", "CLM-014", "CLM-015"], derived_from: ["MECH-03"] }
+  - { id: "IMPL-02", description: "Pinned RouteLLM path extracts last-message content, scores strong-model win probability, compares it with a threshold, fails an invalid causal-classifier output to strong, and calibrates threshold to a requested strong-call share using an Arena-score quantile.", evidence_ids: ["CLM-016"], derived_from: ["MECH-06"] }
+
+failure_modes:
+  - { id: "FAIL-01", description: "Denominator laundering: reporting cost per call or accepted task while retries, billed failures, rejections, late outputs, and invalid outputs are outside the denominator.", evidence_ids: ["CLM-014", "CLM-017"], derived_from: ["MECH-01"] }
+  - { id: "FAIL-02", description: "Retry false economy: a cheap attempt triggers more work on hard inputs, raises offered load, and lowers cost efficiency; deterministic or correlated failures make the independence model optimistic.", evidence_ids: ["CLM-012", "CLM-018"], derived_from: ["MECH-01"] }
+  - { id: "FAIL-03", description: "Build-versus-API mirage: comparing an API invoice with accelerator rental only, assuming all provisioned capacity is consumed, or using average rather than peak SLO capacity omits labor, redundancy, headroom, and idle time.", evidence_ids: ["CLM-011", "CLM-019"], derived_from: ["MECH-02"] }
+  - { id: "FAIL-04", description: "Price drift and accounting holes: stale public rates, an unpriced model returning zero in the gateway, provider failures recorded as zero, cached-token double counting, or a negotiated rate absent from the map make reported cost differ from invoices.", evidence_ids: ["CLM-008", "CLM-010", "CLM-013", "CLM-014", "CLM-028"], derived_from: ["MECH-03"] }
+  - { id: "FAIL-05", description: "Prompt-cache false economy: a dynamic field before the stable prefix, TTL gaps, minimum lengths, or eviction turn intended hits into premium writes; full-context caching can add latency on dynamic agent traces.", evidence_ids: ["CLM-007", "CLM-020", "CLM-025"], derived_from: ["MECH-04"] }
+  - { id: "FAIL-06", description: "Semantic-cache quality debt: a permissive threshold lowers unit cost while wrong or stale hits push the success lower bound below the hard floor.", evidence_ids: ["CLM-006", "CLM-021"], derived_from: ["MECH-05"] }
+  - { id: "FAIL-07", description: "Router/cascade shift: ex-ante or post-hoc quality estimates drift, increasing expensive routes, escalations, or false accepts; a cascade always pays the cheap stage before escalation.", evidence_ids: ["CLM-003", "CLM-004", "CLM-022", "CLM-024"], derived_from: ["MECH-06"] }
+  - { id: "FAIL-08", description: "Weighted-score policy breach: selecting lowest scalar utility or lowest point-estimate cost before checking hard quality and latency constraints ships an infeasible option.", evidence_ids: ["CLM-023"], derived_from: ["MECH-07"] }
+
+production_connections:
+  - { id: "PROD-01", description: "Invoice reconciliation joins root task and physical attempt IDs to provider usage, retry/fallback path, gateway cache state, terminal success gate, price-snapshot version, and invoice total; Module 23 owns the operational telemetry implementation.", evidence_ids: ["CLM-013", "CLM-014", "CLM-028"], derived_from: ["MECH-01", "MECH-03"] }
+  - { id: "PROD-02", description: "Economic changes ship through Module 17's shadow/canary/rollback path only after Module 15 quality gates and Module 04 loaded-latency checks; Module 22 supplies cost and flip-point evidence, not rollout mechanics.", evidence_ids: ["CLM-023"], derived_from: ["MECH-07"] }
+
+research_connections:
+  - { id: "RESEARCH-01", description: "FrugalGPT, RouteLLM, unified cascade routing, Bouchard's decision theory, and Mahmood's user-choice game show that model selection is constrained by estimator error, structural cascade cost, and user/provider objective misalignment.", evidence_ids: ["CLM-001", "CLM-002", "CLM-003", "CLM-004", "CLM-005"], derived_from: ["MECH-06"] }
+  - { id: "RESEARCH-02", description: "vCache and the 2026 long-horizon prompt-caching evaluation make cache economics a joint cost-latency-quality problem, not a token-discount lookup.", evidence_ids: ["CLM-006", "CLM-007"], derived_from: ["MECH-04", "MECH-05"] }
+  - { id: "RESEARCH-03", description: "Published on-premise break-even and RouteNLP deployment reports are scoped examples; adoption and offered-success economics across industry remain unverified.", evidence_ids: ["CLM-011", "CLM-029", "CLM-030"], derived_from: ["MECH-02", "MECH-06"] }
+
+todo_verify:
+  - { id: "TODO-01", description: "Execute the pinned LiteLLM paths against fixtures for cache read/write splits, tier threshold, missing price, gateway cache hit, and interrupted stream; compare its logged cost with a mock invoice.", evidence_ids: ["CLM-013", "CLM-014", "CLM-015"], derived_from: ["IMPL-01"] }
+  - { id: "TODO-02", description: "Execute RouteLLM at the pinned commit and reproduce threshold/strong-call-share calibration on a current held-out deployment sample; source was inspected statically only.", evidence_ids: ["CLM-016"], derived_from: ["IMPL-02"] }
+  - { id: "TODO-03", description: "Industry adoption and offered-success savings of routing, cascades, and semantic caching are unknown; do not label them current industry defaults.", evidence_ids: ["CLM-030"], derived_from: ["RESEARCH-03"] }
+
+candidate_capabilities:
+  - { capability: "Build a denominator-safe task/attempt/spend ledger and compute cost per offered, accepted, billed, and successful task.", mapped_mechanisms: ["MECH-01", "MATH-01", "MATH-02", "FAIL-01", "FAIL-02"] }
+  - { capability: "Classify marginal, fixed, and fully loaded costs and perform build-versus-API break-even with measured capacity, headroom, redundancy, and utilization.", mapped_mechanisms: ["MECH-02", "MATH-03", "FAIL-03"] }
+  - { capability: "Create, trace, and reconcile a dated price snapshot through a production cost-accounting path.", mapped_mechanisms: ["MECH-03", "IMPL-01", "FAIL-04", "PROD-01"] }
+  - { capability: "Model and falsify prompt and semantic cache economics, including write premiums, TTL/minimums, hit probability, wrong-hit quality, and latency.", mapped_mechanisms: ["MECH-04", "MECH-05", "MATH-04", "MATH-05", "FAIL-05", "FAIL-06"] }
+  - { capability: "Compare routing and cascading with complete execution costs, verifier error, escalation, shift, and a pinned router source trace.", mapped_mechanisms: ["MECH-06", "MATH-06", "IMPL-02", "FAIL-07"] }
+  - { capability: "Construct a constrained decision frontier and defend a recommendation with intervals, sensitivity, flip points, and rollback triggers.", mapped_mechanisms: ["MECH-07", "FAIL-08", "PROD-02"] }
