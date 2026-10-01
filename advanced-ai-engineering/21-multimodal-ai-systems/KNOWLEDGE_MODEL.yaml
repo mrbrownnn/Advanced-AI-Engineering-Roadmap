@@ -1,0 +1,76 @@
+module: "21-multimodal-ai-systems"
+registry_version: "1.0.0"
+
+required_concepts: [modality_contract, stage_ledger, critical_path, image_preprocessing, audio_frontend, patch_embedding, tiling, patch_merge, learned_query_resampler, projector, placeholder_replacement, decoder_visible_tokens, cross_attention_memory, padding_efficiency, shape_bucketing, encoder_budget, processor_cache, encoder_cache, cache_identity, media_clock, timestamp_mapping, stream_skew, quality_boundary, token_compression, competing_hypotheses, allocator_evidence]
+prerequisite_concepts: [ttft_decomposition, kv_bytes_per_token, paged_kv, fragmentation_hierarchy, prefix_cache_identity, continuous_batching, littles_law, profiler_timeline, paired_evaluation, slices]
+first_occurrence_concepts: [modality_contract, stage_ledger, image_preprocessing, audio_frontend, patch_embedding, tiling, patch_merge, learned_query_resampler, projector, placeholder_replacement, decoder_visible_tokens, cross_attention_memory, encoder_budget, processor_cache, encoder_cache, media_clock, timestamp_mapping, stream_skew, quality_boundary, token_compression, allocator_evidence]
+
+concept_dependencies:
+  - { concept: stage_ledger, depends_on: [ttft_decomposition, profiler_timeline] }
+  - { concept: critical_path, depends_on: [stage_ledger] }
+  - { concept: patch_embedding, depends_on: [image_preprocessing] }
+  - { concept: tiling, depends_on: [image_preprocessing] }
+  - { concept: patch_merge, depends_on: [patch_embedding] }
+  - { concept: projector, depends_on: [patch_embedding] }
+  - { concept: placeholder_replacement, depends_on: [projector, decoder_visible_tokens] }
+  - { concept: decoder_visible_tokens, depends_on: [tiling, patch_merge, learned_query_resampler] }
+  - { concept: cross_attention_memory, depends_on: [decoder_visible_tokens] }
+  - { concept: padding_efficiency, depends_on: [continuous_batching] }
+  - { concept: shape_bucketing, depends_on: [padding_efficiency, littles_law] }
+  - { concept: encoder_budget, depends_on: [continuous_batching, decoder_visible_tokens] }
+  - { concept: cache_identity, depends_on: [prefix_cache_identity] }
+  - { concept: processor_cache, depends_on: [cache_identity, image_preprocessing] }
+  - { concept: encoder_cache, depends_on: [cache_identity, projector] }
+  - { concept: timestamp_mapping, depends_on: [media_clock] }
+  - { concept: stream_skew, depends_on: [timestamp_mapping, critical_path] }
+  - { concept: allocator_evidence, depends_on: [fragmentation_hierarchy, paged_kv] }
+  - { concept: competing_hypotheses, depends_on: [stage_ledger, allocator_evidence, padding_efficiency] }
+  - { concept: quality_boundary, depends_on: [paired_evaluation, slices, token_compression] }
+
+mechanisms:
+  - { id: "MECH-01", description: "A multimodal request crosses explicit stages: media decode/canonicalization, modality preprocessing, encoding, bridging/projection, placeholder or cross-attention insertion, language prefill/decode, and output delivery; time is attributed per stage and on the critical path.", evidence_ids: ["CLM-001", "CLM-016"], derived_from: [] }
+  - { id: "MECH-02", description: "Decoder-visible modality length is produced by a pinned processor plus architecture: fixed crop patching, AnyRes tiles plus newline/base features, dynamic resize plus spatial merge, or fixed learned queries; resolution alone is insufficient.", evidence_ids: ["CLM-002", "CLM-003", "CLM-004", "CLM-005", "CLM-006", "CLM-007"], derived_from: ["MECH-01"] }
+  - { id: "MECH-03", description: "Multimodal batches carry several shape dimensions—images, tiles, patches, audio frames, decoder positions—and dense padding or a single cross-stage batch policy can waste work or create head-of-line blocking.", evidence_ids: ["CLM-008", "CLM-011", "CLM-016", "CLM-017", "CLM-020"], derived_from: ["MECH-02"] }
+  - { id: "MECH-04", description: "Processor, encoder-output, and decoder-prefix caches avoid different work and require identities binding media, preprocessing, weights, positions, tenant policy, and output shape.", evidence_ids: ["CLM-013", "CLM-014", "CLM-015", "CLM-021"], derived_from: ["MECH-02"] }
+  - { id: "MECH-05", description: "Cross-stream alignment maps each media timestamp through its own clock to a shared reference, then chooses encoder blocks, interleaving, lookahead, and output deadlines.", evidence_ids: ["CLM-009", "CLM-010"], derived_from: ["MECH-01"] }
+  - { id: "MECH-06", description: "Quality, latency, and memory controls trade representation detail against encoder/decoder work and residency; the boundary is measured by task slices.", evidence_ids: ["CLM-006", "CLM-018", "CLM-019", "CLM-021"], derived_from: ["MECH-02", "MECH-03"] }
+
+mathematical_models:
+  - { id: "MATH-01", description: "Serialized stage ledger T_first = sum(stage spans); overlapping stages require the union/critical path.", evidence_ids: ["CLM-001"], derived_from: ["MECH-01"] }
+  - { id: "MATH-02", description: "Pinned token formulas: LLaVA crop (H/p)(W/p)+extra-feature adjustment; LLaVA-NeXT unpadded+newline+base-feature adjustment; Qwen2-VL smart-resized (H'/p)(W'/p)/m^2; BLIP-2 fixed query count.", evidence_ids: ["CLM-003", "CLM-004", "CLM-005", "CLM-006"], derived_from: ["MECH-02"] }
+  - { id: "MATH-03", description: "Logical decoder KV bytes = decoder-visible positions times architecture bytes per position, before physical allocation overhead.", evidence_ids: ["CLM-007"], derived_from: ["MECH-02"] }
+  - { id: "MATH-04", description: "Dense padding useful-position efficiency = sum_i L_i / (B max_i L_i).", evidence_ids: ["CLM-011"], derived_from: ["MECH-03"] }
+  - { id: "MATH-05", description: "Media-time conversion: t_ref = t_sr_ref + (rtp - rtp_sr)/clock_rate, with unsigned wrap handling outside the simple exercise.", evidence_ids: ["CLM-010"], derived_from: ["MECH-05"] }
+
+implementation_mechanisms:
+  - { id: "IMPL-01", description: "Transformers pinned processors expand placeholders from processed geometry, then models verify placeholder/features counts before replacement.", evidence_ids: ["CLM-003", "CLM-004", "CLM-005", "CLM-006"], derived_from: ["MECH-02"] }
+  - { id: "IMPL-02", description: "Transformers Whisper pads or truncates to a fixed 30 s mel contract before a stride-2 encoder stem.", evidence_ids: ["CLM-008"], derived_from: ["MECH-03"] }
+  - { id: "IMPL-03", description: "Pinned vLLM V1 couples decoder token scheduling to encoder budget, encoder-cache capacity, and cached encoder outputs; processor-cache configuration is separate.", evidence_ids: ["CLM-013", "CLM-014"], derived_from: ["MECH-03", "MECH-04"] }
+
+failure_modes:
+  - { id: "FAIL-01", description: "Resolution-to-token or resolution-to-KV shortcut omits resize, tiles, newline/base features, merge, resampling, cross-attention, or checkpoint configuration.", evidence_ids: ["CLM-003", "CLM-004", "CLM-005", "CLM-006", "CLM-007"], derived_from: ["MECH-02"] }
+  - { id: "FAIL-02", description: "Padding or mixed-shape batching inflates encoder/prefill work and latency while appearing as high device activity.", evidence_ids: ["CLM-011", "CLM-016", "CLM-017"], derived_from: ["MECH-03"] }
+  - { id: "FAIL-03", description: "Cache key omits processor or model dependencies, returning valid-looking but semantically wrong cached state.", evidence_ids: ["CLM-015"], derived_from: ["MECH-04"] }
+  - { id: "FAIL-04", description: "Direct comparison of independent media clocks or arrival times creates drift, skew, or false lag diagnosis.", evidence_ids: ["CLM-010"], derived_from: ["MECH-05"] }
+  - { id: "FAIL-05", description: "Compression meets aggregate speed and accuracy targets but loses required small, temporal, or late-needed evidence.", evidence_ids: ["CLM-018", "CLM-019"], derived_from: ["MECH-06"] }
+  - { id: "FAIL-06", description: "Premature fragmentation diagnosis from occupancy, image size, or reserved-minus-allocated gap while encoder work, padding, capacity, or host preprocessing explains the symptom.", evidence_ids: ["CLM-012", "CLM-022"], derived_from: ["MECH-01", "MECH-03"] }
+
+production_connections:
+  - { id: "PROD-01", description: "A production multimodal request record stores media identity, processor config/version, processed shape, encoder/decoder counts, cache hits, per-stage spans, and memory evidence.", evidence_ids: ["CLM-001", "CLM-013", "CLM-014", "CLM-015"], derived_from: ["MECH-01", "MECH-04"] }
+  - { id: "PROD-02", description: "Stage-aware serving separates preprocessing, encoding, and generation policies when measured stage shapes and contention justify it.", evidence_ids: ["CLM-016", "CLM-020"], derived_from: ["MECH-03"] }
+
+research_connections:
+  - { id: "RESEARCH-01", description: "Native multimodal streaming uses timestamp-aware positions and block-wise encoders, but its latency/quality contract needs local reproduction.", evidence_ids: ["CLM-009"], derived_from: ["MECH-05"] }
+  - { id: "RESEARCH-02", description: "Approximate encoder/KV reuse and dynamic pruning are frontier mechanisms requiring quality-boundary evaluation.", evidence_ids: ["CLM-019", "CLM-021"], derived_from: ["MECH-06"] }
+
+todo_verify:
+  - { id: "TODO-01", description: "Execute pinned Transformers and vLLM traces; current source evidence is static inspection only.", evidence_ids: ["CLM-003", "CLM-013"], derived_from: ["IMPL-01", "IMPL-03"] }
+  - { id: "TODO-02", description: "Read full texts and reproduce frontier TCM-Serve, VLCache, and DSTP results before using their numbers.", evidence_ids: ["CLM-019", "CLM-020", "CLM-021"], derived_from: ["RESEARCH-02"] }
+
+candidate_capabilities:
+  - { capability: "Instrument and decompose a multimodal first-output path.", mapped_mechanisms: ["MECH-01", "MATH-01", "PROD-01"] }
+  - { capability: "Compute decoder-visible modality tokens and logical KV by pinned architecture and processor.", mapped_mechanisms: ["MECH-02", "MATH-02", "MATH-03", "IMPL-01", "FAIL-01"] }
+  - { capability: "Design and falsify multimodal batching and cache policies.", mapped_mechanisms: ["MECH-03", "MECH-04", "MATH-04", "IMPL-02", "IMPL-03", "FAIL-02", "FAIL-03"] }
+  - { capability: "Align multiple media streams on a declared clock.", mapped_mechanisms: ["MECH-05", "MATH-05", "FAIL-04"] }
+  - { capability: "Discriminate encoder, padding, capacity, fragmentation, and host causes.", mapped_mechanisms: ["FAIL-06", "MECH-01", "MECH-03"] }
+  - { capability: "Choose representation controls inside measured quality-latency-memory bounds.", mapped_mechanisms: ["MECH-06", "FAIL-05"] }

@@ -1,0 +1,337 @@
+module: "21-multimodal-ai-systems"
+registry_version: "1.0.0"
+previous_version: ""
+research_cutoff: "2026-09-30"
+change_reason: "Replace the outline with an evidence-backed systems model for architecture-specific modality processing, token accounting, batching, caching, stream timing, resource boundaries, and discriminating diagnosis."
+changed_claims: [CLM-001, CLM-002, CLM-003, CLM-004, CLM-005, CLM-006, CLM-007, CLM-008, CLM-009, CLM-010, CLM-011, CLM-012, CLM-013, CLM-014, CLM-015, CLM-016, CLM-017, CLM-018, CLM-019, CLM-020, CLM-021, CLM-022]
+out_of_scope_candidates:
+  - "Model-family training recipes and benchmark depth belong to vision-language-models, speech-ai, and generative-media."
+  - "KV allocator internals belong to Module 03; scheduler policy internals to Module 04; kernels to Module 05; retrieval to Modules 09-10."
+
+claims:
+  - id: CLM-001
+    claim: "Multimodal time-to-first-output must be measured as a stage ledger with explicit boundaries; when stages serialize their elapsed times add, while overlap requires a critical-path timeline rather than a sum."
+    provenance: DERIVED
+    domain: latency_accounting
+    concepts: [stage_ledger, critical_path, ttft]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT (recommended measurement contract, not an industry adoption claim)"
+    assumptions: ["Every stage has timestamps on a common clock or a verified clock mapping.", "The output boundary is declared."]
+    derivation: "Elapsed time is conserved across a serialized path. Concurrent intervals contribute their union on the critical path, so adding their individual durations double-counts overlap."
+    limitations: ["Does not identify the slow stage without instrumentation.", "Client-visible latency also includes transport and buffering outside an engine trace."]
+    applicability: "Image, audio, video, and mixed-stream inference pipelines."
+    curriculum_usage: { lessons: ["21.1", "21.5"], labs: ["LAB-A", "LAB-D"], assessments: ["Mastery-21", "Incident-21.1"] }
+
+  - id: CLM-002
+    claim: "The Vision Transformer reference divides an image into fixed-size patches, linearly embeds the flattened patches, prepends a learnable class token, and adds position embeddings; this patch sequence is an encoder input, not by itself a universal decoder visual-token count."
+    provenance: VERIFIED_FACT
+    domain: vision_encoding
+    concepts: [vision_transformer, patch_embedding, encoder_sequence]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence:
+      - { source_type: paper, tier: 1, title: "An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale", authors: "Alexey Dosovitskiy et al.", year: "2020", url: "https://arxiv.org/abs/2010.11929", version: "v2", section: "Section 3.1 Vision Transformer (ViT)", accessed_at: "2026-09-30" }
+    limitations: ["Later models resize, tile, pool, merge, resample, or use cross-attention, so decoder-visible length can differ."]
+    applicability: "ViT-style vision encoders."
+    curriculum_usage: { lessons: ["21.2"], labs: ["LAB-A"], assessments: ["Mastery-21"] }
+
+  - id: CLM-003
+    claim: "At Transformers commit d6c1e71bd717bf092f8293f0c3c9bd4a5ac5401a, LlavaProcessor computes placeholders from the processed crop dimensions and patch size, LlavaMultiModalProjector applies Linear-GELU-Linear, and LlavaModel replaces image placeholders with projected encoder features before the language model."
+    provenance: VERIFIED_FACT
+    domain: implementation_trace
+    concepts: [llava, image_processor, projector, placeholder_replacement]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT (this Transformers snapshot only)"
+    evidence:
+      - source_type: source_code
+        tier: 1
+        title: "Transformers LLaVA implementation"
+        repository: "https://github.com/huggingface/transformers"
+        commit: "d6c1e71bd717bf092f8293f0c3c9bd4a5ac5401a"
+        verification_date: "2026-09-30"
+        file: "src/transformers/models/llava/processing_llava.py; src/transformers/models/llava/modeling_llava.py; src/transformers/models/llava/image_processing_llava.py"
+        symbol: "LlavaProcessor.replace_image_token; LlavaProcessor._get_num_multimodal_tokens; LlavaMultiModalProjector.forward; LlavaModel.get_image_features; LlavaModel.get_placeholder_mask; LlavaModel.forward; LlavaImageProcessor._preprocess"
+        entry_point: "LlavaProcessor.__call__ and LlavaForConditionalGeneration.forward"
+        execution_path: "resize/crop/normalize -> placeholder expansion -> vision_tower -> selected features -> Linear-GELU-Linear projector -> checked placeholder replacement -> language_model"
+        url: "https://github.com/huggingface/transformers/tree/d6c1e71bd717bf092f8293f0c3c9bd4a5ac5401a/src/transformers/models/llava"
+        accessed_at: "2026-09-30"
+    limitations: ["Static inspection only.", "Checkpoint processor configuration, not class defaults alone, determines actual crop size and feature policy."]
+    applicability: "Transformers LLaVA at the pinned revision."
+    curriculum_usage: { lessons: ["21.2"], labs: ["LAB-B"], assessments: ["Production-Source-Trace"] }
+
+  - id: CLM-004
+    claim: "At the same pinned Transformers revision, LLaVA-NeXT selects a configured grid resolution from the original aspect ratio, creates a base image plus tiles, pads the tile dimension for batching, and computes decoder-visible feature count from unpadded spatial features, newline features, and base features."
+    provenance: VERIFIED_FACT
+    domain: implementation_trace
+    concepts: [llava_next, anyres, tiling, batch_padding]
+    confidence: high
+    currentness_status: "WORKLOAD-DEPENDENT (this Transformers architecture and processor configuration)"
+    evidence:
+      - source_type: source_code
+        tier: 1
+        title: "Transformers LLaVA-NeXT implementation"
+        repository: "https://github.com/huggingface/transformers"
+        commit: "d6c1e71bd717bf092f8293f0c3c9bd4a5ac5401a"
+        verification_date: "2026-09-30"
+        file: "src/transformers/models/llava_next/processing_llava_next.py; src/transformers/models/llava_next/image_processing_llava_next.py; src/transformers/image_processing_utils.py"
+        symbol: "LlavaNextProcessor._get_number_of_features; LlavaNextProcessor._get_unpadded_features; LlavaNextImageProcessor._get_image_patches; LlavaNextImageProcessor._pad_for_batching; select_best_resolution"
+        entry_point: "LlavaNextProcessor.__call__"
+        execution_path: "select_best_resolution -> aspect-preserving resize/pad -> base image plus tiles -> batch pad tiles -> feature-count expansion"
+        url: "https://github.com/huggingface/transformers/tree/d6c1e71bd717bf092f8293f0c3c9bd4a5ac5401a/src/transformers/models/llava_next"
+        accessed_at: "2026-09-30"
+    limitations: ["Static inspection only.", "Grid pinpoints, crop size, patch size, and feature-selection strategy are checkpoint/configuration inputs."]
+    applicability: "Transformers LLaVA-NeXT at the pinned revision."
+    curriculum_usage: { lessons: ["21.2", "21.3"], labs: ["LAB-A", "LAB-B"], assessments: ["Mastery-21"] }
+
+  - id: CLM-005
+    claim: "At the pinned Transformers revision, Qwen2VLImageProcessor smart-resizes dimensions to multiples of patch_size times merge_size within configured pixel bounds; Qwen2VLProcessor divides patch count by merge_size squared to obtain image placeholders, and PatchMerger maps each spatial merge group to one language-model-width vector."
+    provenance: VERIFIED_FACT
+    domain: implementation_trace
+    concepts: [qwen2_vl, dynamic_resolution, patch_merge, token_accounting]
+    confidence: high
+    currentness_status: "WORKLOAD-DEPENDENT (this Transformers architecture and processor configuration)"
+    evidence:
+      - source_type: source_code
+        tier: 1
+        title: "Transformers Qwen2-VL implementation"
+        repository: "https://github.com/huggingface/transformers"
+        commit: "d6c1e71bd717bf092f8293f0c3c9bd4a5ac5401a"
+        verification_date: "2026-09-30"
+        file: "src/transformers/models/qwen2_vl/image_processing_qwen2_vl.py; src/transformers/models/qwen2_vl/processing_qwen2_vl.py; src/transformers/models/qwen2_vl/modeling_qwen2_vl.py"
+        symbol: "smart_resize; Qwen2VLImageProcessor.patchify; Qwen2VLImageProcessor.get_number_of_image_patches; Qwen2VLProcessor.replace_image_token; Qwen2VLProcessor._get_num_multimodal_tokens; PatchEmbed.forward; PatchMerger.forward"
+        entry_point: "Qwen2VLProcessor.__call__"
+        execution_path: "smart_resize -> patchify -> image_grid_thw -> placeholder count divided by merge_size^2 -> PatchEmbed -> vision transformer -> PatchMerger -> language model"
+        url: "https://github.com/huggingface/transformers/tree/d6c1e71bd717bf092f8293f0c3c9bd4a5ac5401a/src/transformers/models/qwen2_vl"
+        accessed_at: "2026-09-30"
+    limitations: ["Static inspection only.", "Pixel bounds and processor arguments can override defaults."]
+    applicability: "Transformers Qwen2-VL at the pinned revision."
+    curriculum_usage: { lessons: ["21.2"], labs: ["LAB-A", "LAB-B"], assessments: ["Mastery-21"] }
+
+  - id: CLM-006
+    claim: "BLIP-2 uses a lightweight Q-Former with learned query embeddings to extract a fixed-size visual representation; its reported experiments use 32 queries of width 768, much smaller than the cited frozen image feature tensor."
+    provenance: VERIFIED_FACT
+    domain: architecture
+    concepts: [blip2, qformer, learned_queries, resampling]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence:
+      - { source_type: paper, tier: 1, title: "BLIP-2: Bootstrapping Language-Image Pre-training with Frozen Image Encoders and Large Language Models", authors: "Junnan Li, Dongxu Li, Silvio Savarese, Steven Hoi", year: "2023", url: "https://arxiv.org/abs/2301.12597", version: "v3", section: "Section 3.1 and architecture description before Section 3.2", accessed_at: "2026-09-30" }
+      - { source_type: source_code, tier: 1, title: "Transformers BLIP-2 implementation", repository: "https://github.com/huggingface/transformers", commit: "d6c1e71bd717bf092f8293f0c3c9bd4a5ac5401a", verification_date: "2026-09-30", file: "src/transformers/models/blip_2/configuration_blip_2.py; src/transformers/models/blip_2/modeling_blip_2.py; src/transformers/models/blip_2/processing_blip_2.py", symbol: "Blip2Config.num_query_tokens; Blip2Model.query_tokens; Blip2ForConditionalGeneration.forward; Blip2Processor.__call__", entry_point: "Blip2Processor.__call__ and Blip2ForConditionalGeneration.forward", execution_path: "image encoder -> expanded learned queries -> Q-Former cross-attention -> language projection -> fixed-count image placeholders", url: "https://github.com/huggingface/transformers/tree/d6c1e71bd717bf092f8293f0c3c9bd4a5ac5401a/src/transformers/models/blip_2", accessed_at: "2026-09-30" }
+    limitations: ["The 32-query value is the paper/config reference, not universal across resampler architectures."]
+    applicability: "BLIP-2-style fixed-query bridges."
+    curriculum_usage: { lessons: ["21.2", "21.6"], labs: ["LAB-C"], assessments: ["Mastery-21"] }
+
+  - id: CLM-007
+    claim: "Decoder-visible multimodal embeddings consume decoder sequence positions and logical self-attention KV according to the decoder architecture, but raw encoder patches and cross-attention memory are different resources; therefore image resolution alone cannot determine decoder KV bytes."
+    provenance: DERIVED
+    domain: memory_accounting
+    concepts: [decoder_tokens, encoder_tokens, self_attention_kv, cross_attention_memory]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT (architecture-scoped accounting rule)"
+    assumptions: ["Decoder-only fusion replaces placeholders with modality embeddings processed by the decoder.", "The Module 03 logical KV formula applies to decoder positions retained by self-attention."]
+    derivation: "Processor and bridge determine decoder-visible length. Only then can decoder KV bytes be computed as visible positions times architecture-specific bytes per position. Cross-attention architectures retain modality memory under a different tensor geometry and cannot use that substitution blindly."
+    limitations: ["Physical allocation adds block rounding, metadata, fragmentation, sharing, sharding, and precision-specific scales."]
+    applicability: "Multimodal memory planning."
+    curriculum_usage: { lessons: ["21.2", "21.5"], labs: ["LAB-A", "LAB-D"], assessments: ["Mastery-21", "Incident-21.1"] }
+
+  - id: CLM-008
+    claim: "At the pinned Transformers revision, WhisperFeatureExtractor defaults to 16 kHz audio, 25 ms FFT windows, 10 ms hop, and a 30 s padded/truncated input; WhisperEncoder expects the corresponding fixed mel length and applies a stride-2 second convolution before encoder positions."
+    provenance: VERIFIED_FACT
+    domain: audio_preprocessing
+    concepts: [whisper, log_mel, padding, audio_frames]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT (this Transformers Whisper snapshot only)"
+    evidence:
+      - { source_type: paper, tier: 1, title: "Robust Speech Recognition via Large-Scale Weak Supervision", authors: "Alec Radford et al.", year: "2022", url: "https://arxiv.org/abs/2212.04356", version: "v1", section: "Section 2.2 Model", accessed_at: "2026-09-30" }
+      - { source_type: source_code, tier: 1, title: "Transformers Whisper feature extractor and encoder", repository: "https://github.com/huggingface/transformers", commit: "d6c1e71bd717bf092f8293f0c3c9bd4a5ac5401a", verification_date: "2026-09-30", file: "src/transformers/models/whisper/feature_extraction_whisper.py; src/transformers/models/whisper/modeling_whisper.py; src/transformers/models/whisper/configuration_whisper.py", symbol: "WhisperFeatureExtractor.__init__; WhisperFeatureExtractor.__call__; WhisperEncoder.forward; WhisperConfig.max_source_positions", entry_point: "WhisperProcessor.__call__ -> WhisperFeatureExtractor.__call__ -> WhisperEncoder.forward", execution_path: "resample contract -> pad/truncate waveform -> log-mel frames -> conv1 -> stride-2 conv2 -> encoder positions", url: "https://github.com/huggingface/transformers/tree/d6c1e71bd717bf092f8293f0c3c9bd4a5ac5401a/src/transformers/models/whisper", accessed_at: "2026-09-30" }
+    limitations: ["Whisper is one offline chunking contract, not a universal streaming-audio frontend."]
+    applicability: "Audio padding and encoder-work diagnosis."
+    curriculum_usage: { lessons: ["21.1", "21.3"], labs: ["LAB-A", "LAB-B"], assessments: ["Mastery-21"] }
+
+  - id: CLM-009
+    claim: "Qwen2.5-Omni reports 16 kHz audio transformed to 128-channel mel features with 25 ms windows and 10 ms hops, audio representations at roughly 40 ms, timestamp-aligned audio/video positions, two-second interleaving chunks, and block-wise audio and vision encoding for streaming prefill."
+    provenance: VERIFIED_FACT
+    domain: stream_timing
+    concepts: [audio_video_alignment, temporal_positions, blockwise_encoding, streaming_prefill]
+    confidence: high
+    currentness_status: "FRONTIER (reported architecture)"
+    evidence:
+      - { source_type: paper, tier: 1, title: "Qwen2.5-Omni Technical Report", authors: "Qwen Team", year: "2025", url: "https://arxiv.org/abs/2503.20215", version: "v1", section: "Sections 2.2 and 2.4", accessed_at: "2026-09-30" }
+    limitations: ["Architecture report, not a universal stream contract or reproduced latency result."]
+    applicability: "Native audio-video-text streaming architecture."
+    curriculum_usage: { lessons: ["21.4"], labs: ["LAB-C"], assessments: ["Mastery-21"] }
+
+  - id: CLM-010
+    claim: "RTP timestamps represent media sampling instants on format-dependent clocks; timestamps from different media normally have independent rates and offsets, so synchronization requires mapping each medium to a shared reference clock through RTCP sender reports."
+    provenance: VERIFIED_FACT
+    domain: stream_timing
+    concepts: [rtp_timestamp, reference_clock, inter_media_sync]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence:
+      - { source_type: specification, tier: 1, title: "RTP: A Transport Protocol for Real-Time Applications", authors: "H. Schulzrinne, S. Casner, R. Frederick, V. Jacobson", year: "2003", url: "https://www.rfc-editor.org/rfc/rfc3550", version: "RFC 3550", section: "Sections 5.1 and 6.4.1", accessed_at: "2026-09-30" }
+    limitations: ["RTP clock mapping enables synchronization; it does not set an application-specific acceptable lip-sync threshold."]
+    applicability: "Packetized audio/video ingestion and playback timelines."
+    curriculum_usage: { lessons: ["21.4"], labs: ["LAB-C"], assessments: ["Mastery-21"] }
+
+  - id: CLM-011
+    claim: "For dense padding of one sequence dimension, useful-position efficiency is the sum of true lengths divided by batch size times maximum length; this counts positions, not measured FLOPs, memory traffic, or wall time."
+    provenance: DERIVED
+    domain: batching
+    concepts: [padding_efficiency, heterogeneous_batch]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT (analytical diagnostic)"
+    assumptions: ["Every item is padded to the largest length in its batch.", "The ratio counts positions equally."]
+    derivation: "A dense B-by-L_max tensor contains B*L_max positions; sum_i L_i positions carry item data, so their ratio is the useful-position fraction."
+    limitations: ["Masking, packed layouts, kernels, tile padding, and shape-dependent efficiency make measured cost differ."]
+    applicability: "Encoder or decoder batching with dense sequence padding."
+    curriculum_usage: { lessons: ["21.3"], labs: ["LAB-B"], assessments: ["Mastery-21", "Incident-21.1"] }
+
+  - id: CLM-012
+    claim: "A multimodal OOM or TTFT regression cannot be diagnosed from image size or memory occupancy alone; encoder work, dense padding, configured capacity, engine allocation, framework fragmentation, and host preprocessing make competing predictions that require separate measurements."
+    provenance: HYPOTHESIS
+    domain: diagnosis
+    concepts: [competing_hypotheses, encoder_work, padding, capacity, fragmentation, host_preprocessing]
+    confidence: high
+    currentness_status: "WORKLOAD-DEPENDENT"
+    hypothesis:
+      prediction: "Each mechanism produces a distinct change under one controlled intervention: encoder work follows processed patches/encoder spans; padding follows padded-minus-valid positions; capacity follows allocation refusals/free engine blocks; allocator fragmentation follows inactive split segments or snapshots; host work follows CPU spans and GPU idle gaps."
+      measurement_target: "Aligned host, processor, encoder, projector, decoder, engine-allocation, framework-allocator, and device-memory timelines under one-variable sweeps."
+      falsifying_observation: "The predicted signal and intervention response do not covary while another hypothesis's predictions do."
+    limitations: ["Mechanisms can interact; discrimination need not produce exactly one cause."]
+    applicability: "Multimodal latency and OOM incidents."
+    curriculum_usage: { lessons: ["21.5"], labs: ["LAB-D"], assessments: ["Incident-21.1", "Mastery-21"] }
+
+  - id: CLM-013
+    claim: "At vLLM commit 25b0add7b8a1c944d5c4e364f2de6aa82497a2ad, Scheduler._try_schedule_encoder_inputs checks overlap with the scheduled decoder-token window, cached encoder output, remote cache, encoder compute budget, and encoder-cache capacity; when an item cannot fit, it shortens or stops scheduled decoder work before that item."
+    provenance: VERIFIED_FACT
+    domain: serving_implementation
+    concepts: [encoder_budget, encoder_cache, multimodal_scheduling]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT (this vLLM V1 snapshot only)"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "vLLM V1 multimodal encoder scheduling", repository: "https://github.com/vllm-project/vllm", commit: "25b0add7b8a1c944d5c4e364f2de6aa82497a2ad", verification_date: "2026-09-30", file: "vllm/v1/core/sched/scheduler.py; vllm/v1/core/encoder_cache_manager.py; vllm/config/scheduler.py", symbol: "Scheduler._try_schedule_encoder_inputs; EncoderCacheManager.can_allocate; EncoderCacheManager.check_and_update_cache; SchedulerConfig.__post_init__", entry_point: "Scheduler.schedule", execution_path: "schedule token window -> locate overlapping mm_features -> encoder-cache lookup -> budget/capacity check -> schedule encoder item or trim num_new_tokens", url: "https://github.com/vllm-project/vllm/blob/25b0add7b8a1c944d5c4e364f2de6aa82497a2ad/vllm/v1/core/sched/scheduler.py", accessed_at: "2026-09-30" }
+    limitations: ["Static inspection only.", "This is one runtime snapshot and not evidence of industry-default policy."]
+    applicability: "vLLM V1 multimodal scheduling at the pinned commit."
+    curriculum_usage: { lessons: ["21.3"], labs: ["LAB-B"], assessments: ["Production-Source-Trace"] }
+
+  - id: CLM-014
+    claim: "At the pinned vLLM revision, MultiModalConfig provides a processor cache with a 4 GiB default budget, LRU or shared-memory type, and configurable hash algorithm; the budget is duplicated across processes as documented, and an item larger than the budget is served uncached rather than rejected."
+    provenance: VERIFIED_FACT
+    domain: serving_implementation
+    concepts: [processor_cache, multimodal_hash, cache_scope]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT (this vLLM V1 snapshot only)"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "vLLM multimodal configuration and hashing", repository: "https://github.com/vllm-project/vllm", commit: "25b0add7b8a1c944d5c4e364f2de6aa82497a2ad", verification_date: "2026-09-30", file: "vllm/config/multimodal.py; vllm/multimodal/hasher.py", symbol: "MultiModalConfig.mm_processor_cache_gb; MultiModalConfig.mm_processor_cache_type; MultiModalConfig.mm_hasher_algorithm; MultiModalHasher.hash_kwargs", entry_point: "Engine configuration -> multimodal input processor", execution_path: "serialize framed media and processor arguments -> hash -> processor-cache lookup/store under configured capacity/type", url: "https://github.com/vllm-project/vllm/blob/25b0add7b8a1c944d5c4e364f2de6aa82497a2ad/vllm/config/multimodal.py", accessed_at: "2026-09-30" }
+    limitations: ["Static inspection only.", "A processor-cache hit is distinct from an encoder-output or decoder-prefix-cache hit."]
+    applicability: "vLLM V1 multimodal processing at the pinned commit."
+    curriculum_usage: { lessons: ["21.3"], labs: ["LAB-B"], assessments: ["Production-Source-Trace"] }
+
+  - id: CLM-015
+    claim: "Safe multimodal cache reuse requires identity over raw or canonical media, preprocessing parameters and code/version, encoder/projector weights, model/adapters and position semantics, tenant policy, and output shape; a content hash alone establishes only equality of the hashed representation."
+    provenance: DERIVED
+    domain: caching
+    concepts: [cache_identity, processor_cache, encoder_cache, prefix_cache]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT (recommended cache contract)"
+    assumptions: ["Cached outputs depend on every deterministic input and implementation component in their execution path.", "Cross-tenant reuse is policy-controlled."]
+    derivation: "If any dependency changes while the cache key does not, a hit can return an output from a different function. Therefore the key or namespace must bind every dependency required for semantic equivalence."
+    limitations: ["Randomized preprocessing needs seed/state or must be excluded from reuse.", "Hash collision resistance does not prove semantic equivalence."]
+    applicability: "Processor, encoder-output, and decoder-prefix caches."
+    curriculum_usage: { lessons: ["21.3"], labs: ["LAB-B"], assessments: ["Mastery-21"] }
+
+  - id: CLM-016
+    claim: "ModServe characterizes multimodal inference as preprocessing, encoding, and language-model generation stages and reports on its evaluated models that batching and parallelism effects differ by stage and architecture, motivating stage-specific policies rather than one batch setting."
+    provenance: VERIFIED_FACT
+    domain: multimodal_serving
+    concepts: [stage_specific_batching, stage_parallelism, modserve]
+    confidence: medium
+    currentness_status: "FRONTIER (paper system and evaluated workloads)"
+    evidence:
+      - { source_type: paper, tier: 1, title: "ModServe: Modality- and Stage-Aware Resource Disaggregation for Scalable Multimodal Model Serving", year: "2025", url: "https://arxiv.org/abs/2502.00937", version: "v3", section: "Sections 2, 3.1, and 3.2", accessed_at: "2026-09-30" }
+    limitations: ["Author-reported measurements on specified A100/model/workload configurations; not independently reproduced here.", "Disaggregated placement detail belongs to Module 20."]
+    applicability: "Stage-aware multimodal serving decisions."
+    curriculum_usage: { lessons: ["21.3", "21.5"], labs: ["LAB-B", "LAB-D"], assessments: ["Mastery-21"] }
+
+  - id: CLM-017
+    claim: "Bucketing by modality, processed shape, decoder-visible length, and deadline will reduce padding and head-of-line interference relative to indiscriminate mixing only when queue delay and lost batching opportunity do not exceed the saved work."
+    provenance: HYPOTHESIS
+    domain: batching
+    concepts: [shape_bucketing, deadline, head_of_line_blocking]
+    confidence: high
+    currentness_status: "WORKLOAD-DEPENDENT"
+    hypothesis:
+      prediction: "Under a heterogeneous backlog, compatible-shape/deadline buckets reduce padded positions and tail first-output latency at a predeclared throughput cost; under sparse homogeneous arrivals they may increase queue delay with no useful-work gain."
+      measurement_target: "Padded/valid positions, per-stage batch sizes, queue residence, encoder/prefill spans, TTFT distribution, throughput, and SLO goodput."
+      falsifying_observation: "Bucketed policy has no material padding reduction or worsens the declared utility frontier across the tested arrival regimes."
+    limitations: ["No universal bucket boundaries; scheduler mechanics remain Module 04."]
+    applicability: "Mixed text/image/audio/video request batching."
+    curriculum_usage: { lessons: ["21.3"], labs: ["LAB-B"], assessments: ["Mastery-21"] }
+
+  - id: CLM-018
+    claim: "Reducing visual or audio representations can lower encoder/decoder work and memory, but it is safe only within a measured quality-latency-memory frontier that includes tasks requiring small, late-used, temporal, or spatial evidence."
+    provenance: HYPOTHESIS
+    domain: quality_systems_tradeoff
+    concepts: [token_compression, quality_boundary, evidence_retention]
+    confidence: high
+    currentness_status: "WORKLOAD-DEPENDENT"
+    hypothesis:
+      prediction: "More aggressive compression lowers processed representation count and some latency/memory terms, but beyond a workload-specific point degrades at least one pre-registered quality slice before all aggregate metrics show it."
+      measurement_target: "Representation count, stage latency, memory, and paired quality by OCR/small-object/temporal/detail slice under a fixed evaluation contract."
+      falsifying_observation: "A compression level dominates the uncompressed baseline within all declared quality margins over every required slice and repeated run."
+    limitations: ["Failure absence on a bounded suite is not proof of universal preservation."]
+    applicability: "Projector/resampler, token pruning, frame sampling, and resolution controls."
+    curriculum_usage: { lessons: ["21.6"], labs: ["LAB-C"], assessments: ["Mastery-21"] }
+
+  - id: CLM-019
+    claim: "The 2026 DSTP paper reports that static visual-token pruning can fail on complex reasoning because relevant visual information changes during decoding, and proposes dynamic token selection; this module treats that result as frontier, abstract-level evidence requiring task-specific reproduction."
+    provenance: VERIFIED_FACT
+    domain: token_compression
+    concepts: [visual_token_pruning, information_shift, dstp]
+    confidence: medium
+    currentness_status: "FRONTIER (abstract-only inspection)"
+    evidence:
+      - { source_type: paper, tier: 1, title: "Why and When Visual Token Pruning Fails? A Study on Relevant Visual Information Shift in MLLMs Decoding", authors: "Jiwan Kim, Kibum Kim, Wonjoong Kim, Byung-Kwan Lee, Chanyoung Park", year: "2026", url: "https://arxiv.org/abs/2604.12358", section: "Abstract only", accessed_at: "2026-09-30" }
+    limitations: ["Abstract-only inspection.", "Author-reported results were not reproduced."]
+    applicability: "Adversarial quality slices for visual-token pruning."
+    curriculum_usage: { lessons: ["21.6"], labs: ["LAB-C"], assessments: ["Mastery-21"] }
+
+  - id: CLM-020
+    claim: "The 2026 TCM-Serve abstract reports modality grouping, dynamic priority, and aging to reduce multimodal head-of-line blocking and prevent starvation; its reported latency gains are evidence for its evaluated setup, not a default scheduler claim."
+    provenance: VERIFIED_FACT
+    domain: multimodal_serving
+    concepts: [modality_aware_scheduling, aging, tcm_serve]
+    confidence: medium
+    currentness_status: "FRONTIER (abstract-only inspection)"
+    evidence:
+      - { source_type: paper, tier: 1, title: "TCM-Serve: Modality-aware Scheduling for Multimodal Large Language Model Inference", authors: "Konstantinos Papaioannou, Thaleia Dimitra Doudali", year: "2026", url: "https://arxiv.org/abs/2603.26498", section: "Abstract only", accessed_at: "2026-09-30" }
+    limitations: ["Abstract-only inspection.", "Reported 54% and 78.5% TTFT reductions are omitted from instructional claims because full experimental context was not inspected."]
+    applicability: "Frontier comparison for heterogeneous multimodal scheduling."
+    curriculum_usage: { lessons: ["21.3"], labs: ["LAB-B"], assessments: ["Mastery-21"] }
+
+  - id: CLM-021
+    claim: "The 2025 VLCache abstract reports selective recomputation plus reuse of encoder and KV state for repeated visual inputs, while acknowledging accumulated error from non-prefix reuse; this is frontier evidence, not permission to reuse approximate state without a quality contract."
+    provenance: VERIFIED_FACT
+    domain: caching
+    concepts: [vlcache, approximate_reuse, selective_recomputation]
+    confidence: medium
+    currentness_status: "FRONTIER (abstract-only inspection)"
+    evidence:
+      - { source_type: paper, tier: 1, title: "VLCache: Computing 2% Vision Tokens and Reusing 98% for Vision-Language Inference", authors: "Shengling Qin et al.", year: "2025", url: "https://arxiv.org/abs/2512.12977", section: "Abstract only", accessed_at: "2026-09-30" }
+    limitations: ["Abstract-only inspection.", "Reported accuracy and speedups were not reproduced or transferred into required outcomes."]
+    applicability: "Frontier approximate visual-state caching."
+    curriculum_usage: { lessons: ["21.3", "21.6"], labs: ["LAB-C"], assessments: ["Mastery-21"] }
+
+  - id: CLM-022
+    claim: "PyTorch documents that allocated memory counts live tensor memory while reserved memory counts memory managed by its caching allocator; cached unused memory can appear used in device tools, and allocator snapshots/statistics—not the reserved-minus-allocated gap alone—are needed to support a fragmentation diagnosis."
+    provenance: VERIFIED_FACT
+    domain: memory_diagnosis
+    concepts: [allocated_memory, reserved_memory, allocator_snapshot, fragmentation]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT (PyTorch 2.14 documentation only)"
+    evidence:
+      - { source_type: official_docs, tier: 2, title: "CUDA semantics — Memory management", authors: "PyTorch maintainers", year: "2026", url: "https://docs.pytorch.org/docs/2.14/notes/cuda.html#memory-management", version: "2.14", section: "Memory management; Optimizing memory usage with PYTORCH_ALLOC_CONF", accessed_at: "2026-09-30" }
+    limitations: ["PyTorch allocator observations do not identify engine-level KV capacity or fragmentation.", "Allocator configuration effects are workload-dependent."]
+    applicability: "Framework allocator diagnosis for PyTorch-based multimodal inference."
+    curriculum_usage: { lessons: ["21.5"], labs: ["LAB-D"], assessments: ["Incident-21.1", "Mastery-21"] }
