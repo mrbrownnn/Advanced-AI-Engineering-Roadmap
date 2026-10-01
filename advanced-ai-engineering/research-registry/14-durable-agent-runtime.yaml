@@ -1,7 +1,9 @@
 module: "14-durable-agent-runtime"
-registry_version: "1.0.0"
+registry_version: "1.1.0"
+previous_version: "1.0.0"
 research_cutoff: "2026-09-26"
-change_reason: "Replace placeholders with verified durable-workflow, replay, activity, idempotency, compensation, coordination, and source-code mechanisms."
+change_reason: "WP-A1a (AUD-14-01, AUD-G04, AUD-G05): add a solved crash table of durable prefix against receiver state, an atomic receiver idempotency transaction, a fencing trace with an epoch advance and its takeover window, a five-child join table, and a labeled synthetic history/replay estimate; relabel module derivations from CURRENT DEFAULT to RECOMMENDED BASELINE and runtime-documented behavior as scoped to the named runtimes; re-read the pinned Temporal Python SDK files and the Temporal, Azure Durable, and Sagas sources on 2026-10-01; add idempotency-key, sequencer, history-limit, and agent-integration sources opened on 2026-10-01; add an explicit TODO_VERIFY. Claims not listed in changed_claims keep their 2026-09-26 cutoff and were not re-verified."
+changed_claims: ["CLM-001", "CLM-002", "CLM-003", "CLM-004", "CLM-005", "CLM-006", "CLM-007", "CLM-008", "CLM-009", "CLM-010", "CLM-011", "CLM-012", "CLM-013", "CLM-014", "CLM-015", "CLM-016", "CLM-017", "CLM-018", "CLM-019", "CLM-020", "CLM-021", "CLM-022", "CLM-023"]
 claims:
   - id: CLM-001
     claim: "A durable runtime reconstructs workflow state from persisted history/checkpoints and resumes pending decisions after process failure; durability applies only to state and transitions actually recorded before failure."
@@ -9,7 +11,7 @@ claims:
     domain: durable_execution
     concepts: [workflow_history, checkpoint, recovery]
     confidence: high
-    currentness_status: "CURRENT DEFAULT"
+    currentness_status: "RECOMMENDED BASELINE (module derivation; adoption not measured)"
     assumptions: ["The durable store survives the failed worker and acknowledges records according to a declared durability contract."]
     derivation: "Volatile process state disappears on failure. Recovery requires a persisted prefix sufficient to reconstruct state and determine which transition/effect evidence is committed versus pending or unknown."
     limitations: ["Replication, consistency, backup, and regional-failure guarantees depend on the runtime and storage deployment."]
@@ -21,22 +23,22 @@ claims:
     domain: deterministic_replay
     concepts: [replay, determinism, command_history]
     confidence: high
-    currentness_status: "CURRENT DEFAULT / RUNTIME FAMILY"
+    currentness_status: "DOCUMENTED BEHAVIOR OF TWO REPLAY RUNTIME FAMILIES; NOT AN INDUSTRY DEFAULT"
     evidence:
-      - { source_type: official_docs, tier: 2, title: "Temporal Workflow Definition", authors: "Temporal Technologies", year: "2026", url: "https://docs.temporal.io/workflow-definition", section: "Deterministic constraints and Workflow replay", accessed_at: "2026-09" }
-      - { source_type: official_docs, tier: 2, title: "Durable orchestrator code constraints", authors: "Microsoft", year: "2026", url: "https://learn.microsoft.com/en-us/azure/azure-functions/durable/durable-functions-code-constraints", section: "Orchestrator code constraints and deterministic APIs", accessed_at: "2026-09" }
+      - { source_type: official_docs, tier: 2, title: "Temporal Workflow Definition", authors: "Temporal Technologies", year: "2026", url: "https://docs.temporal.io/workflow-definition", section: "Deterministic constraints; commands compared with the existing Event History on replay (re-read 2026-10-01)", accessed_at: "2026-10-01" }
+      - { source_type: official_docs, tier: 2, title: "Durable orchestrator code constraints", authors: "Microsoft", year: "2026", version: "page dated 2026-08-24", url: "https://learn.microsoft.com/en-us/azure/azure-functions/durable/durable-functions-code-constraints", section: "Orchestrator code constraints; Use deterministic APIs (dates and times, GUIDs, random numbers, environment variables, network and HTTP); Versioning (re-read 2026-10-01)", accessed_at: "2026-10-01" }
     limitations: ["Specific allowed APIs, patching, and replay checks differ by runtime; not every durable engine uses source-level replay."]
     applicability: "Event-history/replay workflow runtimes."
     curriculum_usage: { lessons: ["14.1", "14.6"], labs: ["LAB-A", "LAB-D"], assessments: ["Incident-14.1"] }
   - id: CLM-003
-    claim: "External I/O belongs in an activity/effect boundary whose input, attempts, result/error, timeout, cancellation, and effect evidence are recorded; replaying orchestration code must not directly repeat that I/O."
+    claim: "Temporal's documentation requires workflow code to be deterministic for replay and directs non-deterministic operations such as API calls, model invocations, and database queries into Activities, which run outside the replay path; replaying orchestration code must not directly repeat that I/O."
     provenance: VERIFIED_FACT
     domain: activity_boundary
     concepts: [activity, external_io, effect_boundary]
     confidence: high
-    currentness_status: "CURRENT DEFAULT / RUNTIME FAMILY"
-    evidence: [{ source_type: official_docs, tier: 2, title: "Temporal Workflow Definition", authors: "Temporal Technologies", year: "2026", url: "https://docs.temporal.io/workflow-definition", section: "Deterministic constraints; Activities outside the replay path", accessed_at: "2026-09" }]
-    limitations: ["Runtime activity APIs do not make an external system transactional or inherently idempotent."]
+    currentness_status: "DOCUMENTED BEHAVIOR OF ONE RUNTIME; NOT AN INDUSTRY DEFAULT"
+    evidence: [{ source_type: official_docs, tier: 2, title: "Temporal Workflow Definition", authors: "Temporal Technologies", year: "2026", url: "https://docs.temporal.io/workflow-definition", section: "Deterministic constraints; non-deterministic operations belong in Activities (re-read 2026-10-01)", accessed_at: "2026-10-01" }]
+    limitations: ["Runtime activity APIs do not make an external system transactional or inherently idempotent.", "One runtime's documentation. Recording canonical intent, effect evidence, and reconciliation at the boundary is this module's recommendation (CLM-004, CLM-005), not a statement in the source."]
     applicability: "Model calls, tools, databases, messages, payments, deployments, and other nondeterministic effects."
     curriculum_usage: { lessons: ["14.2"], labs: ["LAB-A", "LAB-B"], assessments: ["Incident-14.1"] }
   - id: CLM-004
@@ -45,7 +47,7 @@ claims:
     domain: delivery_semantics
     concepts: [unknown_commit, exactly_once, effect_reconciliation]
     confidence: high
-    currentness_status: "CURRENT DEFAULT"
+    currentness_status: "RECOMMENDED BASELINE (module derivation; adoption not measured)"
     assumptions: ["The external effect and workflow history are not committed in one shared atomic transaction."]
     derivation: "If the effect commits and the acknowledgement/history write is lost, retry can duplicate it; if the effect did not commit, suppressing retry loses it. The observer cannot distinguish these worlds without external identity or state evidence."
     limitations: ["A shared transaction can change the boundary; some effects cannot expose reliable postconditions."]
@@ -57,7 +59,7 @@ claims:
     domain: idempotency
     concepts: [idempotency_key, deduplication, effect_receipt]
     confidence: high
-    currentness_status: "CURRENT DEFAULT"
+    currentness_status: "RECOMMENDED BASELINE (module derivation; adoption not measured)"
     assumptions: ["The effect endpoint can atomically associate operation identity with outcome or expose a reconcilable postcondition."]
     derivation: "Safe duplicate delivery requires all attempts for one logical operation to converge on one effect/outcome and reject key reuse for different intent. Atomic storage prevents races between checking and applying."
     limitations: ["Retention expiry, cross-region races, downstream fan-out, and non-idempotent third parties can reopen duplication risk."]
@@ -69,7 +71,7 @@ claims:
     domain: messaging
     concepts: [transactional_outbox, atomic_intent, consumer_deduplication]
     confidence: high
-    currentness_status: "CURRENT DEFAULT / WHEN APPLICABLE"
+    currentness_status: "RECOMMENDED BASELINE WHEN STATE AND OUTBOX SHARE A TRANSACTION (module derivation; adoption not measured)"
     assumptions: ["Domain state and outbox share a transactional datastore; a relay eventually scans or receives committed outbox rows."]
     derivation: "Atomic insertion removes the database-commit/message-publish gap. A relay crash after publish but before marking delivered still causes duplicates, so the pattern provides recoverable at-least-once delivery rather than universal exactly-once processing."
     limitations: ["Ordering, retention, relay lag, poison events, and downstream effects require separate design."]
@@ -82,7 +84,7 @@ claims:
     concepts: [saga, subtransaction, compensation]
     confidence: high
     currentness_status: "REFERENCE / BASELINE"
-    evidence: [{ source_type: paper, tier: 1, title: "SAGAS", authors: "Hector Garcia-Molina, Kenneth Salem", year: "1987", url: "https://www.cs.princeton.edu/techreports/1987/070.pdf", section: "Saga model and compensating transactions", accessed_at: "2026-09" }]
+    evidence: [{ source_type: paper, tier: 1, title: "SAGAS", authors: "Hector Garcia-Molina, Kenneth Salem", year: "1987", url: "https://www.cs.princeton.edu/techreports/1987/070.pdf", section: "Abstract and Section 1 (re-read 2026-10-01 from the scanned report; later sections not re-read)", accessed_at: "2026-10-01" }]
     limitations: ["AI/tool workflows can have irreversible, lossy, delayed, or human-observed effects for which true inverse transactions do not exist."]
     applicability: "Long-running multi-step operations with compensatable boundaries."
     curriculum_usage: { lessons: ["14.3"], labs: ["LAB-B"], assessments: ["Mastery-14"] }
@@ -92,7 +94,7 @@ claims:
     domain: compensation
     concepts: [compensating_action, irreversibility, invariant_repair]
     confidence: high
-    currentness_status: "CURRENT DEFAULT"
+    currentness_status: "RECOMMENDED BASELINE (module derivation; adoption not measured)"
     assumptions: ["The workflow has crossed one or more externally visible effect boundaries."]
     derivation: "External observers and systems retain causal consequences. Therefore an inverse command is not time reversal and must be modeled as another effect with partial-success and escalation states."
     limitations: ["Some local database operations can be atomically rolled back; the claim concerns committed distributed/external effects."]
@@ -104,10 +106,10 @@ claims:
     domain: concurrency_control
     concepts: [lease, fencing_token, stale_worker]
     confidence: high
-    currentness_status: "CURRENT DEFAULT / WHEN CONCURRENT OWNERSHIP EXISTS"
+    currentness_status: "RECOMMENDED BASELINE WHEN CONCURRENT OWNERSHIP EXISTS (module derivation; adoption not measured)"
     assumptions: ["Workers can pause beyond lease expiry and the protected resource can compare a monotonic token or equivalent epoch."]
     derivation: "Lease expiry grants a new owner but does not revoke the old process's ability to execute. Rejecting operations with a token older than the last accepted epoch closes that stale-writer path."
-    limitations: ["Fencing protects resources that enforce it; it does not revoke already-issued irreversible effects."]
+    limitations: ["Fencing protects resources that enforce it; it does not revoke already-issued irreversible effects.", "A resource that compares against the highest epoch it has seen still accepts a stale write that arrives after the new grant but before the new owner's first write; a barrier write or a check against the lease service closes that window.", "The rule accepts an epoch equal to the last accepted one because an epoch identifies the owner, who issues many writes under it; repeated operations are guarded by the idempotency key, not by the epoch. This differs on purpose from a per-record source version, where only a strictly newer value is accepted."]
     applicability: "Worker ownership, singleton workflows, and external resources with concurrent writers."
     curriculum_usage: { lessons: ["14.3"], labs: ["LAB-C"], assessments: ["Incident-14.1"] }
   - id: CLM-010
@@ -116,7 +118,7 @@ claims:
     domain: workflow_composition
     concepts: [fan_out, join, partial_failure]
     confidence: high
-    currentness_status: "CURRENT DEFAULT"
+    currentness_status: "RECOMMENDED BASELINE (module derivation; adoption not measured)"
     assumptions: ["Children can complete, fail, time out, or report more than once and the parent may recover independently."]
     derivation: "A counter alone cannot distinguish duplicates, missing children, changed membership, or quorum/all-of requirements. Durable identity and outcome state make the join replayable."
     limitations: ["Child-workflow versus activity semantics and history costs vary by runtime."]
@@ -128,7 +130,7 @@ claims:
     domain: durable_waits
     concepts: [durable_timer, external_event, human_approval]
     confidence: high
-    currentness_status: "CURRENT DEFAULT"
+    currentness_status: "RECOMMENDED BASELINE (module derivation; adoption not measured)"
     assumptions: ["The runtime persists subscriptions/timers and can authenticate incoming decisions."]
     derivation: "Long waits exceed process lifetimes. A durable correlation record lets any worker resume while rejecting stale, duplicate, unauthorized, or superseded decisions."
     limitations: ["Human identity, nonrepudiation, privacy, and organizational escalation need product/security policy."]
@@ -140,8 +142,8 @@ claims:
     domain: workflow_versioning
     concepts: [replay_compatibility, patching, history_test]
     confidence: high
-    currentness_status: "CURRENT DEFAULT / REPLAY RUNTIMES"
-    evidence: [{ source_type: official_docs, tier: 2, title: "Temporal Workflow Definition", authors: "Temporal Technologies", year: "2026", url: "https://docs.temporal.io/workflow-definition", section: "Code changes, Workflow Versioning, and safe replay", accessed_at: "2026-09" }]
+    currentness_status: "DOCUMENTED BEHAVIOR OF ONE REPLAY RUNTIME; NOT AN INDUSTRY DEFAULT"
+    evidence: [{ source_type: official_docs, tier: 2, title: "Temporal Workflow Definition", authors: "Temporal Technologies", year: "2026", url: "https://docs.temporal.io/workflow-definition", section: "Safe and unsafe code changes; Worker Versioning and patching (re-read 2026-10-01)", accessed_at: "2026-10-01" }]
     limitations: ["Versioning APIs and which changes are replay-safe are runtime/language specific."]
     applicability: "Deploying new workflow code while executions remain active."
     curriculum_usage: { lessons: ["14.6"], labs: ["LAB-D"], assessments: ["Mastery-14"] }
@@ -152,7 +154,7 @@ claims:
     concepts: [history_growth, payload_size, partitioning]
     confidence: high
     currentness_status: "CURRENT / RUNTIME-SPECIFIC"
-    evidence: [{ source_type: official_docs, tier: 2, title: "Child Workflows", authors: "Temporal Technologies", year: "2026", url: "https://docs.temporal.io/child-workflows", section: "Partitioning, Event History limits, and Child Workflow trade-offs", accessed_at: "2026-09" }]
+    evidence: [{ source_type: official_docs, tier: 2, title: "Child Workflows", authors: "Temporal Technologies", year: "2026", url: "https://docs.temporal.io/child-workflows", section: "Partitioning a workload; parent Event History growth per child; Child Workflow versus Activity trade-offs (re-read 2026-10-01)", accessed_at: "2026-10-01" }]
     limitations: ["Specific event/history limits and continue-as-new behavior are runtime-specific and can change."]
     applicability: "High-fan-out, long-lived, and high-payload workflows."
     curriculum_usage: { lessons: ["14.4", "14.5"], labs: ["LAB-C", "LAB-D"], assessments: ["Mastery-14"] }
@@ -162,23 +164,23 @@ claims:
     domain: observability
     concepts: [workflow_attempt, activity_attempt, effect_ledger]
     confidence: high
-    currentness_status: "CURRENT DEFAULT"
+    currentness_status: "RECOMMENDED BASELINE (module derivation; adoption not measured)"
     assumptions: ["Events and attempts share stable workflow, run, transition, activity, and logical-operation identifiers."]
     derivation: "The runtime can retry orchestration and activities independently while an external effect has its own state. Aggregating them erases the boundary needed to identify replay failure, queueing, duplicate effect, or semantic failure."
     limitations: ["Full platform telemetry and SLO design are developed in Module 23."]
     applicability: "Incident diagnosis and release validation."
     curriculum_usage: { lessons: ["14.5"], labs: ["LAB-D"], assessments: ["Incident-14.1"] }
   - id: CLM-015
-    claim: "At Temporal Python SDK commit eb642b14947bd8bcdf8816cffb6a63869803f5c6, workflow start/execute_activity delegate to the current runtime's workflow_start_activity, while Replayer.replay_workflow/replay_workflows consume histories and surface replay failures including nondeterminism."
+    claim: "At Temporal Python SDK commit eb642b14947bd8bcdf8816cffb6a63869803f5c6, workflow start_activity and execute_activity delegate to the current runtime's workflow_start_activity; Replayer.replay_workflow and replay_workflows consume histories and, with raise_on_replay_failure true by default, raise the recorded replay failure; in _workflow_replay_iterator an eviction hook maps a nondeterminism eviction to NondeterminismError and stores it as the result's replay_failure."
     provenance: VERIFIED_FACT
     domain: runtime_implementation
     concepts: [temporal_python, activity_api, replayer]
     confidence: high
     currentness_status: "CURRENT SOURCE SNAPSHOT"
     evidence:
-      - { source_type: source_code, tier: 1, title: "Temporal Python workflow activity APIs", repository: "https://github.com/temporalio/sdk-python", commit: "eb642b14947bd8bcdf8816cffb6a63869803f5c6", verification_date: "2026-09-26", file: "temporalio/workflow/_activities.py", symbol: "start_activity; execute_activity", entry_point: "workflow code calls start_activity or execute_activity", execution_path: "public workflow helper -> _Runtime.current().workflow_start_activity -> activity handle/result", url: "https://github.com/temporalio/sdk-python/blob/eb642b14947bd8bcdf8816cffb6a63869803f5c6/temporalio/workflow/_activities.py", accessed_at: "2026-09" }
-      - { source_type: source_code, tier: 1, title: "Temporal Python workflow replayer", repository: "https://github.com/temporalio/sdk-python", commit: "eb642b14947bd8bcdf8816cffb6a63869803f5c6", verification_date: "2026-09-26", file: "temporalio/worker/_replayer.py", symbol: "Replayer.replay_workflow; Replayer.replay_workflows; Replayer._workflow_replay_iterator", entry_point: "Replayer.replay_workflow(history) or replay_workflows(histories)", execution_path: "history iterator -> replay worker -> eviction/result hook -> WorkflowReplayResult -> raise or aggregate replay_failure", url: "https://github.com/temporalio/sdk-python/blob/eb642b14947bd8bcdf8816cffb6a63869803f5c6/temporalio/worker/_replayer.py", accessed_at: "2026-09" }
-    limitations: ["Static SDK inspection only; Temporal server, bridge-core behavior, and failure recovery were not executed.", "This runtime-specific path does not define all durable workflow engines."]
+      - { source_type: source_code, tier: 1, title: "Temporal Python workflow activity APIs", repository: "https://github.com/temporalio/sdk-python", commit: "eb642b14947bd8bcdf8816cffb6a63869803f5c6", verification_date: "2026-10-01", file: "temporalio/workflow/_activities.py", symbol: "start_activity; execute_activity", entry_point: "workflow code calls start_activity or execute_activity", execution_path: "public workflow helper -> _Runtime.current().workflow_start_activity -> activity handle/result", url: "https://github.com/temporalio/sdk-python/blob/eb642b14947bd8bcdf8816cffb6a63869803f5c6/temporalio/workflow/_activities.py", accessed_at: "2026-10-01" }
+      - { source_type: source_code, tier: 1, title: "Temporal Python workflow replayer", repository: "https://github.com/temporalio/sdk-python", commit: "eb642b14947bd8bcdf8816cffb6a63869803f5c6", verification_date: "2026-10-01", file: "temporalio/worker/_replayer.py", symbol: "Replayer.replay_workflow; Replayer.replay_workflows; Replayer._workflow_replay_iterator", entry_point: "Replayer.replay_workflow(history) or replay_workflows(histories)", execution_path: "history iterator -> replay worker -> eviction/result hook -> WorkflowReplayResult -> raise or aggregate replay_failure", url: "https://github.com/temporalio/sdk-python/blob/eb642b14947bd8bcdf8816cffb6a63869803f5c6/temporalio/worker/_replayer.py", accessed_at: "2026-10-01" }
+    limitations: ["Static SDK inspection only; Temporal server, bridge-core behavior, and failure recovery were not executed.", "This runtime-specific path does not define all durable workflow engines.", "First verified 2026-09-26; both files and the listed symbols were re-read at the same commit on 2026-10-01. The runtime implementation behind workflow_start_activity was not followed."]
     applicability: "Source-reading example for activity boundaries and replay compatibility tests."
     curriculum_usage: { lessons: ["14.1", "14.6"], labs: ["LAB-A", "LAB-D"], assessments: ["Production-Source-Trace"] }
   - id: CLM-016
@@ -187,7 +189,7 @@ claims:
     domain: failure_injection
     concepts: [crash_matrix, linearization_point, recovery_oracle]
     confidence: high
-    currentness_status: "CURRENT / WORKLOAD-DEPENDENT"
+    currentness_status: "WORKLOAD-DEPENDENT / UNTESTED HYPOTHESIS"
     hypothesis:
       prediction: "Boundary-targeted crash injection finds more duplicate, lost, stuck, or replay-incompatible outcomes than process-restart-only tests at comparable test cost."
       measurement_target: "Crash point, durable history prefix, activity attempt/effect IDs, external postconditions, duplicate/lost effects, recovery latency, stuck rate, and oracle divergence."
@@ -195,3 +197,87 @@ claims:
     limitations: ["The crash matrix is incomplete if hidden provider or storage linearization points are unknown."]
     applicability: "Durable workflow and effect-boundary validation."
     curriculum_usage: { lessons: ["14.5"], labs: ["LAB-A", "LAB-B", "LAB-D"], assessments: ["Mastery-14"] }
+  - id: CLM-017
+    claim: "Published idempotency-key contracts make the receiver responsible for the key: an expired IETF draft defines a client-generated key and a request fingerprint and recommends distinct error responses for a missing key, for a key reused with a different payload, and for a retry that arrives while the original request is still being processed; one payment API documents saving the first result for a key, returning it for later requests with that key, erroring when the parameters differ, and pruning keys after a retention period."
+    provenance: VERIFIED_FACT
+    domain: idempotency
+    concepts: [idempotency_key, request_fingerprint, key_retention]
+    confidence: medium
+    currentness_status: "DOCUMENTED BEHAVIOR OF ONE DRAFT AND ONE API; NOT A STANDARD"
+    evidence:
+      - { source_type: specification, tier: 1, title: "The Idempotency-Key HTTP Header Field", authors: "IETF HTTPAPI Working Group", year: "2025", version: "draft-ietf-httpapi-idempotency-key-header-07, 2025-10-15, expired Internet-Draft", url: "https://datatracker.ietf.org/doc/html/draft-ietf-httpapi-idempotency-key-header", section: "2 (key); 2.3 (expiry); 2.4 (fingerprint); 2.5.2 (resource responsibilities); 2.7 (error handling: 400, 422, 409)", accessed_at: "2026-10-01" }
+      - { source_type: official_docs, tier: 2, title: "Idempotent requests", authors: "Stripe", year: "2026", version: "Live page as served 2026-10-01; no revision date shown", url: "https://docs.stripe.com/api/idempotent_requests", section: "Saved first result per key; parameter comparison; key pruning after at least 24 hours; results saved only after endpoint execution begins", accessed_at: "2026-10-01" }
+    limitations: ["The IETF document is an expired Internet-Draft, not an RFC; its status codes are recommendations.", "One vendor API; neither source shows that an arbitrary endpoint stores key, intent, and outcome atomically.", "The draft was read through a page-to-text conversion; section numbers are as reported there."]
+    applicability: "Grounding the receiver-side idempotency contract of Lesson 14.2 in published contracts."
+    curriculum_usage: { lessons: ["14.2"], labs: ["LAB-B"], assessments: ["Mastery-14"] }
+  - id: CLM-018
+    claim: "The Chubby lock service paper describes sequencers: a lock holder can request an opaque string containing the lock name, the mode, and the lock generation number and pass it with its requests; the recipient server is expected to reject a request whose sequencer is no longer valid, checking against the lock service or against the most recent sequencer it has observed."
+    provenance: VERIFIED_FACT
+    domain: concurrency_control
+    concepts: [sequencer, fencing_token, stale_worker]
+    confidence: high
+    currentness_status: "REFERENCE / ONE SYSTEM"
+    evidence: [{ source_type: paper, tier: 1, title: "The Chubby Lock Service for Loosely-Coupled Distributed Systems", authors: "Mike Burrows", year: "2006", version: "OSDI 2006", url: "https://research.google.com/archive/chubby-osdi06.pdf", section: "2.4 Locks and sequencers", accessed_at: "2026-10-01" }]
+    limitations: ["One system's design from 2006; the paper also offers lock-delay as an imperfect alternative for servers that do not check sequencers.", "Only Section 2.4 was read."]
+    applicability: "Source for the fencing rule and its two validation options in Lesson 14.3."
+    curriculum_usage: { lessons: ["14.3"], labs: ["LAB-C"], assessments: ["Mastery-14"] }
+  - id: CLM-019
+    claim: "A receiver transaction that, in one atomic step, checks the ownership epoch, inserts the (scope, key) record under a unique constraint, applies the effect, and stores the outcome returns the stored outcome for the same key and intent, rejects the same key with a different intent, and applies at most once per key within retention; crash-before-dispatch, receiver-crash-before-commit, and commit-without-acknowledgement leave the same durable history prefix, so recovery must use an action that is safe in all three."
+    provenance: DERIVED
+    domain: idempotency
+    concepts: [receiver_transaction, commit_without_ack, key_conflict]
+    confidence: high
+    currentness_status: "RECOMMENDED BASELINE (module derivation; adoption not measured)"
+    assumptions: ["The receiver can commit the key record, the effect, and the outcome in one transaction or one conditional write.", "The sender derives the key deterministically from workflow identity and logical step.", "Key records are retained longer than the retry and redelivery window."]
+    derivation: "In all three windows the history holds the scheduled event and no completion, so history cannot distinguish them. Redispatch with the same key and intent applies the effect when no record exists and returns the stored outcome when one exists. A unique constraint serializes concurrent inserts, so two attempts cannot both observe absence. Comparing the stored intent hash separates a retry from key reuse. After a record is purged the key is indistinguishable from a new one, so the property holds only inside retention. Fixture check: balance 100, debit 30 gives 70 in every covered case; a new key or a purged key gives 40."
+    limitations: ["Synthetic fixture checked with a local single-node transactional store; cross-region replication, downstream fan-out from the receiver, and third parties without such a transaction are not covered.", "Convergence to one effect at this receiver is not exactly-once execution of the activity.", "After a key record is purged the key gives no protection; a receiver that purges keys needs a guard that does not expire with them, such as a version or base-state check for absolute writes or a ledger or postcondition lookup for relative effects."]
+    applicability: "Receiver design and crash-matrix oracles for retryable external effects; referenced by Module 10 for index writes."
+    related_claims: ["CLM-004", "CLM-005", "CLM-017"]
+    curriculum_usage: { lessons: ["14.2", "14.5"], labs: ["LAB-B"], assessments: ["Mastery-14", "Incident-14.1"] }
+  - id: CLM-020
+    claim: "Temporal documents per-execution Event History limits: a warning after 10,240 events or 10 MB and termination beyond 51,200 events or 50 MB, with Continue-As-New recommended to stay under them; its Events page states that ActivityTaskStarted is written together with a terminal activity event."
+    provenance: VERIFIED_FACT
+    domain: workflow_capacity
+    concepts: [history_limit, event_count, continue_as_new]
+    confidence: medium
+    currentness_status: "DOCUMENTED LIMITS OF ONE RUNTIME; SUBJECT TO CHANGE"
+    evidence:
+      - { source_type: official_docs, tier: 2, title: "Temporal Cloud limits", authors: "Temporal Technologies", year: "2026", version: "Live page as served 2026-10-01", url: "https://docs.temporal.io/cloud/limits", section: "Event History limits; payload and transaction size limits", accessed_at: "2026-10-01" }
+      - { source_type: official_docs, tier: 2, title: "Events and Event History", authors: "Temporal Technologies", year: "2026", version: "Live page as served 2026-10-01", url: "https://docs.temporal.io/workflow-execution/event", section: "Event History limits; Activity events", accessed_at: "2026-10-01" }
+    limitations: ["One runtime; limits are configuration and version dependent and can change.", "The pages state MB without defining it; the lesson's comparison reads it as MiB and says so.", "Read through a page-to-text conversion; no limit was exercised."]
+    applicability: "Comparing a history estimate with one runtime's documented thresholds in Lesson 14.4."
+    curriculum_usage: { lessons: ["14.4"], labs: ["LAB-C", "LAB-D"], assessments: ["Mastery-14"] }
+  - id: CLM-021
+    claim: "Exercise assumption for the Lesson 14.4 history estimate: suppose a run has 40 agent steps, 2 activities per step, 1.25 mean attempts per activity, 6 history events per attempt, 5 fixed events, 10 signals, 0.3 KiB of metadata per event, 6 KiB of embedded payload or a 0.2 KiB reference per attempt, 1 KiB per signal, 2,000 run starts per day, 2 days open, 30 days retained after close, 5,000 events per second replayed, 20 MiB per second fetched, and 16 replay slots."
+    provenance: EXERCISE_ASSUMPTION
+    domain: workflow_capacity
+    concepts: [history_estimate, replay_cost, synthetic_fixture]
+    confidence: low
+    currentness_status: "SYNTHETIC EXERCISE INPUT"
+    numeric_metadata: { numeric_type: analytical_bound, workload: "synthetic agent workflow defined in the claim", configuration: "a runtime assumed to record every attempt", metric_definition: "events and KiB per history; retained histories; seconds to fetch and replay", measurement_method: "arithmetic on the stated inputs; nothing was measured" }
+    limitations: ["None of these values was measured on any runtime; the derived 615 events, 794.5 KiB, 64,000 retained histories, and 0.162 s replay time are arithmetic consequences only.", "Replay timing may be reported as evidence only when measured."]
+    applicability: "Worked example and practice in Lesson 14.4."
+    curriculum_usage: { lessons: ["14.4"], labs: ["LAB-C"], assessments: [] }
+  - id: CLM-022
+    claim: "Vendor documentation opened on 2026-10-01 shows durable-execution integrations for agent frameworks: one agent framework's documentation lists integrations with several durable-execution systems, and one workflow-runtime vendor publishes recipes for durable agent loops, tool calling, and human-in-the-loop approval."
+    provenance: VERIFIED_FACT
+    domain: durable_agent_frontier
+    concepts: [agent_framework_integration, durable_execution]
+    confidence: medium
+    currentness_status: "FRONTIER / AVAILABILITY ONLY"
+    evidence:
+      - { source_type: official_docs, tier: 2, title: "Durable Execution overview", authors: "Pydantic", year: "2026", version: "Live page as served 2026-10-01", url: "https://pydantic.dev/docs/ai/integrations/durable_execution/overview/", section: "Supported durable execution systems", accessed_at: "2026-10-01" }
+      - { source_type: official_docs, tier: 2, title: "AI Cookbook", authors: "Temporal Technologies", year: "2026", version: "Live page as served 2026-10-01", url: "https://docs.temporal.io/ai-cookbook", section: "Recipe index", accessed_at: "2026-10-01" }
+    limitations: ["Availability is not adoption; no usage data was read.", "Neither page was checked for how model calls and tool calls are wrapped, or for any external-effect guarantee.", "Index-level reading through a page-to-text conversion."]
+    applicability: "Scoping the frontier line in Section 05."
+    curriculum_usage: { lessons: ["14.6"], labs: [], assessments: [] }
+  - id: CLM-023
+    claim: "TODO_VERIFY: no primary source was opened for replay-safe AI telemetry or richer durable event streams, and no adoption survey was opened for the practices listed as the recommended baseline; neither a frontier status nor industry prevalence is asserted."
+    provenance: TODO_VERIFY
+    domain: currentness
+    concepts: [industry_prevalence, durable_agent_frontier]
+    confidence: low
+    currentness_status: "UNVERIFIED"
+    limitations: ["Placeholder for a primary-source survey; must not support any required outcome."]
+    applicability: "Research backlog for the Section 05 source map."
+    curriculum_usage: { lessons: ["14.5"], labs: [], assessments: [] }
