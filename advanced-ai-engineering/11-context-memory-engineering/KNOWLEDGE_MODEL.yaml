@@ -1,5 +1,5 @@
 module: "11-context-memory-engineering"
-registry_version: "1.0.0"
+registry_version: "1.1.0"
 
 required_concepts:
   - "context_budget"
@@ -17,7 +17,7 @@ required_concepts:
   - "memory_stage_attribution"
 
 prerequisite_concepts:
-  - "tokenization"
+  - "token_id_sequence_input"
   - "attention"
   - "kv_cache_lifecycle"
   - "retrieval_contract"
@@ -26,6 +26,7 @@ prerequisite_concepts:
   - "behavior_uncertainty"
 
 first_occurrence_concepts:
+  - "token_counting"
   - "context_budget"
   - "output_reserve"
   - "effective_context"
@@ -37,7 +38,8 @@ first_occurrence_concepts:
   - "memory_stage_attribution"
 
 concept_dependencies:
-  - { concept: "context_budget", depends_on: ["tokenization"] }
+  - { concept: "token_counting", depends_on: ["token_id_sequence_input"] }
+  - { concept: "context_budget", depends_on: ["token_counting"] }
   - { concept: "effective_context", depends_on: ["attention", "context_budget"] }
   - { concept: "write_policy", depends_on: ["memory_types", "data_lineage"] }
   - { concept: "read_policy", depends_on: ["memory_types", "retrieval_contract"] }
@@ -47,8 +49,8 @@ concept_dependencies:
 
 mechanisms:
   - id: "MECH-01"
-    description: "A context contract reserves model-specific tokens for instructions, tool definitions/results, history, retrieved evidence, structured state, current input, framing, and output."
-    evidence_ids: ["CLM-001", "CLM-002", "CLM-016"]
+    description: "A context contract reserves model-specific tokens for instructions, tool definitions/results, history, retrieved evidence, structured state, current input, framing, and output. Token counting is taught here at first use: counts come from the target tokenizer on the serialized request or from server usage; heuristics carry a measured margin. Overflow is resolved by priority caps over whole atomic groups, never by reducing the output reserve."
+    evidence_ids: ["CLM-001", "CLM-002", "CLM-016", "CLM-017"]
     derived_from: []
   - id: "MECH-02"
     description: "Effective context is measured across length, evidence position, distractors, multiplicity, aggregation, and task complexity rather than inferred from the advertised maximum."
@@ -59,8 +61,8 @@ mechanisms:
     evidence_ids: ["CLM-005", "CLM-006", "CLM-007"]
     derived_from: ["MECH-01"]
   - id: "MECH-04"
-    description: "Memory writes use eligibility, identity, provenance, confidence, consent, valid time, TTL, update, delete, and review policy instead of append-only retention."
-    evidence_ids: ["CLM-008", "CLM-013"]
+    description: "Memory writes use eligibility, identity, provenance, confidence, consent, valid time, TTL, update, delete, and review policy instead of append-only retention. Canonical-state writes are conditional on operation ID and base version; deletes are versioned tombstones collected only after convergence and the redelivery window."
+    evidence_ids: ["CLM-008", "CLM-013", "CLM-018"]
     derived_from: ["MECH-03"]
   - id: "MECH-05"
     description: "Memory reads apply hard authorization/validity filters and workload-tested ranking before assembling selected records into context with lineage."
@@ -77,8 +79,8 @@ mechanisms:
 
 mathematical_models:
   - id: "MATH-01"
-    description: "For a declared tokenizer/protocol: T_system+T_tools+T_history+T_evidence+T_state+T_input+T_framing+T_output_reserve <= T_limit. Exact admission uses target-interface counts; approximate admission includes calibrated error margin."
-    evidence_ids: ["CLM-001", "CLM-002", "CLM-016"]
+    description: "For a declared tokenizer/protocol: T_system+T_tools+T_history+T_evidence+T_state+T_input+T_framing+T_output_reserve <= T_limit. Exact admission uses target-interface counts; approximate admission includes calibrated error margin. Ledger reconciliation: placed input + reserve + margin + unallocated = limit (fixture: 28,980 + 2,000 + 600 + 420 = 32,000)."
+    evidence_ids: ["CLM-001", "CLM-002", "CLM-016", "CLM-017"]
     derived_from: ["MECH-01"]
   - id: "MATH-02"
     description: "Compression ratio = retained serialized tokens / original serialized tokens. Net latency delta includes compression/extraction time plus changed model queue/prefill/decode time; ratio alone predicts neither quality nor speed."
@@ -89,28 +91,28 @@ mathematical_models:
     evidence_ids: ["CLM-008", "CLM-009", "CLM-013"]
     derived_from: ["MECH-04", "MECH-05"]
   - id: "MATH-04"
-    description: "Stage metrics condition on opportunity: write recall/precision, valid-record retrieval, selected-context coverage, utilization given presence, and downstream outcome. Denominators, probe time, version, and abstention policy are explicit."
-    evidence_ids: ["CLM-012", "CLM-014", "CLM-015"]
+    description: "Stage metrics condition on opportunity: stored, valid given stored, selected given valid, placed given selected, used given placed, on one cohort with nested counts. The product of these rates equals used/probes exactly (fixture: 94/200 = 0.47) and differs from end-to-end success when successes bypass the chain (0.50). Rates with other denominators, such as selection precision, cannot be multiplied into the chain."
+    evidence_ids: ["CLM-012", "CLM-014", "CLM-015", "CLM-019", "CLM-020"]
     derived_from: ["MECH-07"]
 
 implementation_mechanisms:
   - id: "IMPL-01"
-    description: "A context ledger records actual serialized token counts or estimator/version/error, allocation by category, truncation/compaction actions, retained IDs/order, and output reserve."
-    evidence_ids: ["CLM-001", "CLM-002"]
+    description: "A context ledger records actual serialized token counts or estimator/version/error, allocation by category with priority and cap, requested versus placed tokens, dropped group IDs, margin, unallocated tokens, retained IDs/order, and output reserve."
+    evidence_ids: ["CLM-001", "CLM-002", "CLM-017"]
     derived_from: ["MECH-01"]
   - id: "IMPL-02"
-    description: "A memory record carries immutable ID, type, owner/scope, source event, valid and transaction time, content/hash, confidence, privacy class, TTL, supersession/tombstone, and derived-from lineage."
-    evidence_ids: ["CLM-005", "CLM-008", "CLM-009", "CLM-010"]
+    description: "A memory record carries immutable ID, type, owner/scope, key, version, source event, valid and transaction time, content/hash, confidence, privacy class, TTL, supersession/tombstone, and derived-from lineage; canonical state has one live version per key and summaries are valid only relative to the events they were derived from."
+    evidence_ids: ["CLM-005", "CLM-008", "CLM-009", "CLM-010", "CLM-018"]
     derived_from: ["MECH-03", "MECH-04", "MECH-05"]
   - id: "IMPL-03"
-    description: "Pinned LangChain trace covers trim_messages, count_tokens_approximately, and process-local InMemoryChatMessageHistory operations, with approximation and durability limits explicit."
+    description: "Pinned LangChain trace (re-read 2026-09-30, static) covers trim_messages with caller-configured boundary controls, count_tokens_approximately with defaults of 4.0 characters per token and 3.0 extra tokens per message, and process-local InMemoryChatMessageHistory operations, with approximation and durability limits explicit."
     evidence_ids: ["CLM-016"]
     derived_from: ["MECH-01", "MECH-06"]
 
 failure_modes:
   - id: "FAIL-01"
-    description: "Budget overflow or silent truncation removes instructions, tool-call pairs, evidence, or output reserve because visible text alone was counted."
-    evidence_ids: ["CLM-001", "CLM-002", "CLM-016"]
+    description: "Budget overflow or silent truncation removes instructions, splits tool call/result pairs, drops evidence, or consumes the output reserve because visible text alone was counted or messages were dropped individually."
+    evidence_ids: ["CLM-001", "CLM-002", "CLM-016", "CLM-017"]
     derived_from: ["MECH-01", "MATH-01"]
   - id: "FAIL-02"
     description: "Advertised-window fallacy passes a simple needle test but fails under position changes, distractors, multiple facts, aggregation, or long-range reasoning."
@@ -137,6 +139,11 @@ failure_modes:
     evidence_ids: ["CLM-012", "CLM-014", "CLM-015"]
     derived_from: ["MECH-07", "MATH-04"]
 
+  - id: "FAIL-08"
+    description: "Lost update or resurrection: an unconditional write lets a second correction overwrite the first, or a delayed write or summarizer job restores a deleted record; collecting a tombstone before convergence reopens the same path."
+    evidence_ids: ["CLM-018"]
+    derived_from: ["MECH-04", "IMPL-02"]
+
 production_connections:
   - id: "PROD-01"
     description: "Ship context policies with hard admission, category budgets, model/protocol pins, output reserve, valid-message checks, fallback, and length-position-complexity canaries."
@@ -149,17 +156,31 @@ production_connections:
 
 research_connections:
   - id: "RESEARCH-01"
-    description: "2025–2026 memory-agent benchmarks extend static long-context recall toward incremental learning, selective forgetting, domain-linked state, and experience reuse, but no universal architecture has emerged."
+    description: "Three opened sources (MemoryAgentBench arXiv v4 2026, Xiong et al. arXiv v2 2025, IFCMemoryBench arXiv v1 2026; abstracts re-read 2026-09-30) extend evaluation beyond static long-context recall toward incremental interaction, selective forgetting, experience reuse, and one professional domain; none establishes a universal architecture."
     evidence_ids: ["CLM-012", "CLM-013", "CLM-014"]
     derived_from: ["MECH-07"]
   - id: "RESEARCH-02"
-    description: "2026 prompt-compression evidence emphasizes end-to-end break-even regions rather than treating token reduction as automatic latency reduction."
+    description: "One 2026 prompt-compression study (abstract re-read 2026-09-30) reports end-to-end gains only in matched operating regions rather than treating token reduction as automatic latency reduction."
     evidence_ids: ["CLM-011"]
     derived_from: ["MECH-06"]
+
+todo_verify:
+  - id: "TODO-01"
+    description: "TODO_VERIFY: whether every trim_messages configuration at the pinned LangChain commit keeps tool call/result pairs together; requires an executed test."
+    evidence_ids: ["CLM-016"]
+    derived_from: ["IMPL-03"]
+  - id: "TODO-02"
+    description: "TODO_VERIFY: structured or graph memory architectures and learned selective forgetting have no primary source in the registry; the README makes no claim about them."
+    evidence_ids: []
+    derived_from: ["RESEARCH-01"]
+  - id: "TODO-03"
+    description: "TODO_VERIFY: full methods and results of MemoryAgentBench, Xiong et al., IFCMemoryBench, the prompt-compression study, RULER, Lost in the Middle, MemGPT, and Generative Agents were not re-audited in this revision; the incomplete-or-fragmented wording for IFCMemoryBench rests on the earlier reading."
+    evidence_ids: ["CLM-003", "CLM-004", "CLM-006", "CLM-007", "CLM-011", "CLM-012", "CLM-013", "CLM-014"]
+    derived_from: []
 
 candidate_capabilities:
   - { capability: "Account for and enforce a model-specific context budget with safe output reserve and valid message structure.", mapped_mechanisms: ["MECH-01", "MATH-01", "IMPL-01", "FAIL-01", "PROD-01"] }
   - { capability: "Measure effective context across length, position, distractors, multiplicity, and task complexity.", mapped_mechanisms: ["MECH-02", "FAIL-02", "PROD-01"] }
-  - { capability: "Design typed, versioned memory with selective writes, reads, updates, deletion, and privacy policy.", mapped_mechanisms: ["MECH-03", "MECH-04", "MECH-05", "MATH-03", "IMPL-02", "FAIL-03", "FAIL-04"] }
+  - { capability: "Design typed, versioned memory with selective writes, reads, updates, deletion, and privacy policy.", mapped_mechanisms: ["MECH-03", "MECH-04", "MECH-05", "MATH-03", "IMPL-02", "FAIL-03", "FAIL-04", "FAIL-08"] }
   - { capability: "Choose and falsify compaction strategies using semantic-loss and end-to-end performance evidence.", mapped_mechanisms: ["MECH-06", "MATH-02", "IMPL-03", "FAIL-05", "FAIL-06"] }
   - { capability: "Attribute memory failures across write, persistence, retrieval, placement, and use.", mapped_mechanisms: ["MECH-07", "MATH-04", "FAIL-07", "PROD-02"] }

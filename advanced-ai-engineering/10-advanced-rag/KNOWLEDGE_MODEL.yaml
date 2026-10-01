@@ -1,5 +1,5 @@
 module: "10-advanced-rag"
-registry_version: "1.0.0"
+registry_version: "1.1.0"
 
 required_concepts:
   - "rag_request_contract"
@@ -7,11 +7,14 @@ required_concepts:
   - "incremental_indexing"
   - "visibility_lag"
   - "snapshot_consistency"
+  - "version_acceptance_rule"
+  - "pinned_read_snapshot"
   - "context_assembly"
   - "evidence_ordering"
   - "contradiction_handling"
   - "citation_correctness"
   - "citation_completeness"
+  - "citation_coverage"
   - "stage_attribution"
   - "rag_vs_long_context"
   - "adaptive_routing"
@@ -29,6 +32,8 @@ first_occurrence_concepts:
   - "rag_request_contract"
   - "visibility_lag"
   - "snapshot_consistency"
+  - "version_acceptance_rule"
+  - "pinned_read_snapshot"
   - "evidence_ordering"
   - "contradiction_handling"
   - "citation_correctness"
@@ -38,7 +43,9 @@ first_occurrence_concepts:
 
 concept_dependencies:
   - { concept: "incremental_indexing", depends_on: ["data_lineage", "document_identity"] }
+  - { concept: "version_acceptance_rule", depends_on: ["incremental_indexing", "document_identity"] }
   - { concept: "snapshot_consistency", depends_on: ["incremental_indexing", "visibility_lag"] }
+  - { concept: "pinned_read_snapshot", depends_on: ["snapshot_consistency", "version_acceptance_rule"] }
   - { concept: "context_assembly", depends_on: ["retrieval_contract", "reranking"] }
   - { concept: "contradiction_handling", depends_on: ["context_assembly", "snapshot_consistency"] }
   - { concept: "citation_correctness", depends_on: ["document_identity", "context_assembly"] }
@@ -51,8 +58,8 @@ mechanisms:
     evidence_ids: ["CLM-001", "CLM-006", "CLM-014"]
     derived_from: []
   - id: "MECH-02"
-    description: "Incremental ingestion carries stable document identity and monotonic version semantics through parse, chunk, embed, write, refresh/commit, replicas, routes, and caches."
-    evidence_ids: ["CLM-005", "CLM-006", "CLM-007", "CLM-008"]
+    description: "Incremental ingestion carries stable document identity and a source-assigned monotonic version through parse, chunk, embed, write, refresh/commit, replicas, routes, and caches. Identity and version are inputs; each representation must apply the atomic acceptance rule of MECH-08 for retries to be idempotent."
+    evidence_ids: ["CLM-005", "CLM-006", "CLM-007", "CLM-008", "CLM-018"]
     derived_from: ["MECH-01"]
   - id: "MECH-03"
     description: "Query orchestration conditionally preserves, rewrites, expands, decomposes, or routes a query while retaining lineage and measuring intent drift."
@@ -67,43 +74,51 @@ mechanisms:
     evidence_ids: ["CLM-011", "CLM-012"]
     derived_from: ["MECH-02", "MECH-04"]
   - id: "MECH-06"
-    description: "Citation handling binds answer claims to immutable evidence identifiers and separately evaluates support correctness and claim coverage."
-    evidence_ids: ["CLM-013", "CLM-014", "CLM-017"]
+    description: "Citation handling binds answer claims to immutable evidence identifiers and separately evaluates citation correctness (per citation), support completeness (per claim, by entailment), and syntactic citation coverage (per claim, by marker)."
+    evidence_ids: ["CLM-013", "CLM-014", "CLM-017", "CLM-020"]
     derived_from: ["MECH-04", "MECH-05"]
   - id: "MECH-07"
     description: "Architecture selection compares retrieval, long-context, and hybrid routes on matched evidence, quality, latency, cost, freshness, and failure slices."
     evidence_ids: ["CLM-003", "CLM-015", "CLM-016"]
     derived_from: ["MECH-01", "MECH-04", "MECH-06"]
+  - id: "MECH-08"
+    description: "Version acceptance rule, applied atomically per document in every representation: strictly newer version ACCEPT; same version, operation, and hash DUPLICATE (no write, stored outcome returned); same version with different operation or hash CONFLICT; older version STALE; deletes become versioned tombstones retained beyond the maximum event delay and replay window; the source event is acknowledged only after the decision is durable. Consistent with the atomic receiver idempotency contract of Module 14 Lesson 14.2."
+    evidence_ids: ["CLM-018", "CLM-019"]
+    derived_from: ["MECH-02"]
+  - id: "MECH-09"
+    description: "Read consistency: a progress watermark reports how far a representation has applied events; a pinned read snapshot is one value per request at which every read, including caches and citation-target fetches, is served. Pinning to an older snapshot needs a retained generation; otherwise the request waits, excludes documents whose versions disagree, or is marked partial. Deletes are enforced by a read-time tombstone overlay regardless of snapshot. A snapshot-bearing cache key is one strategy and does not replace invalidation or version validation."
+    evidence_ids: ["CLM-006", "CLM-021"]
+    derived_from: ["MECH-02", "MECH-08"]
 
 mathematical_models:
   - id: "MATH-01"
-    description: "Visibility lag L_visible=t_query_visible-t_source_event; stage durations add only along the actual dependency critical path, not automatically as a sum of overlapping work."
-    evidence_ids: ["CLM-005", "CLM-008"]
+    description: "Visibility lag L_visible=t_query_visible-t_source_event, reported per route (each replica and the cache path separately); stage durations add only along the actual dependency critical path, not automatically as a sum of overlapping work. The post-write portion t_visible-t_write_ack is a different quantity. The lesson ledger is synthetic."
+    evidence_ids: ["CLM-005", "CLM-008", "CLM-022"]
     derived_from: ["MECH-02"]
   - id: "MATH-02"
-    description: "Citation correctness = supported emitted citations / checked emitted citations; citation completeness = support-required answer claims with adequate citation / support-required answer claims. Claim segmentation, adequacy, and zero-denominator policy are explicit."
-    evidence_ids: ["CLM-013", "CLM-014"]
+    description: "Citation correctness = supported emitted citations / checked emitted citations (unit: citations). Support completeness = support-required claims whose cited evidence entails them / support-required claims (unit: claims). Citation coverage = support-required claims with at least one marker / support-required claims (syntactic). All three come from one claim-citation table: four claims with three single citations of which two entail give 2/3, 2/4, and 3/4. Multi-citation: the claim is supported if the concatenation entails it; a citation is supported if it entails alone or its removal breaks joint support. A zero denominator is reported as undefined with a count, never as 0 or 1; micro and macro aggregation are declared."
+    evidence_ids: ["CLM-013", "CLM-014", "CLM-020"]
     derived_from: ["MECH-06"]
   - id: "MATH-03"
     description: "Context selection is a constrained optimization heuristic: maximize measured downstream utility over selected evidence subject to token, latency, cost, access, freshness, and consistency constraints; no universal utility function is implied."
     evidence_ids: ["CLM-002", "CLM-003", "CLM-010"]
     derived_from: ["MECH-04"]
   - id: "MATH-04"
-    description: "Route utility can be compared as measured quality minus declared latency and cost penalties under hard safety/freshness constraints; weights and feasibility are product-specific, not universal constants."
-    evidence_ids: ["CLM-015", "CLM-016"]
+    description: "Route utility U=Q-lambda_L*L-lambda_C*C is compared only among routes that pass every hard constraint (access, freshness, consistency, latency ceiling, quality floor). Q is a unitless fraction, L is in seconds, C in currency per query, so lambda_L has unit 1/s and lambda_C 1/currency. Weights are product-specific; the decision is reported with the weight value at which it flips. The lesson table is synthetic."
+    evidence_ids: ["CLM-015", "CLM-016", "CLM-022"]
     derived_from: ["MECH-07"]
 
 implementation_mechanisms:
   - id: "IMPL-01"
-    description: "An indexing ledger records source event, stable ID, source version, content hash, parser/chunker/embedder versions, per-representation status, query-visible watermark, delete state, retry, and rollback target."
-    evidence_ids: ["CLM-005", "CLM-006", "CLM-007"]
+    description: "An indexing ledger records source event, stable ID, source version, content hash, parser/chunker/embedder versions, the acceptance decision (ACCEPT, DUPLICATE, STALE, CONFLICT) per representation, query-visible watermark, tombstone and its retention deadline, retry, and rollback target."
+    evidence_ids: ["CLM-005", "CLM-006", "CLM-007", "CLM-018"]
     derived_from: ["MECH-02"]
   - id: "IMPL-02"
     description: "A request trace stores original/transformed queries, route decisions, candidates, selected context and order, snapshot IDs, prompt/model, generated claims, citation bindings, abstention, stage timing, and cost."
     evidence_ids: ["CLM-006", "CLM-009", "CLM-014"]
     derived_from: ["MECH-01", "MECH-03", "MECH-04", "MECH-06"]
   - id: "IMPL-03"
-    description: "Pinned Haystack trace shows explicit pipeline dispatch, prompt rendering, document-store writes, and answer/reference binding; semantic citation validation remains a separate responsibility."
+    description: "Pinned Haystack trace shows explicit pipeline dispatch, prompt rendering, document-store writes, and answer/reference binding; semantic citation validation remains a separate responsibility. DocumentWriter passes an ID-based duplicate policy to the store and compares no version, and AnswerBuilder flags referenced documents per reply from a pattern match."
     evidence_ids: ["CLM-017"]
     derived_from: ["MECH-01", "MECH-02", "MECH-06"]
 
@@ -113,9 +128,9 @@ failure_modes:
     evidence_ids: ["CLM-005", "CLM-008"]
     derived_from: ["MECH-02", "MATH-01"]
   - id: "FAIL-02"
-    description: "Mixed-version answer: retrieval, context, answer, and citation targets come from incompatible corpus revisions or a deletion propagates to only some representations."
-    evidence_ids: ["CLM-006", "CLM-007"]
-    derived_from: ["MECH-02"]
+    description: "Mixed-version answer: retrieval, context, answer, and citation targets come from incompatible corpus revisions or a deletion propagates to only some representations. A valid progress watermark on each representation does not prevent it."
+    evidence_ids: ["CLM-006", "CLM-007", "CLM-021"]
+    derived_from: ["MECH-02", "MECH-09"]
   - id: "FAIL-03"
     description: "Rewrite drift improves nominal retrieval while changing negation, entity, identifier, scope, or temporal intent."
     evidence_ids: ["CLM-009"]
@@ -129,19 +144,28 @@ failure_modes:
     evidence_ids: ["CLM-011", "CLM-012"]
     derived_from: ["MECH-05"]
   - id: "FAIL-06"
-    description: "Citation theater emits valid-looking references that are out of range, point to stale or irrelevant evidence, support only part of a claim, or leave other claims unsupported."
-    evidence_ids: ["CLM-013", "CLM-014", "CLM-017"]
+    description: "Citation theater emits valid-looking references that are out of range, point to stale or irrelevant evidence, support only part of a claim, or leave other claims unsupported. Reporting marker coverage as completeness hides it."
+    evidence_ids: ["CLM-013", "CLM-014", "CLM-017", "CLM-020"]
     derived_from: ["MECH-06", "MATH-02"]
   - id: "FAIL-07"
     description: "Architecture benchmark leakage compares RAG and long context with different source snapshots, evidence opportunity, models, prompts, budgets, or excluded costs."
     evidence_ids: ["CLM-015"]
     derived_from: ["MECH-07", "MATH-04"]
 
+  - id: "FAIL-08"
+    description: "False idempotency: stable IDs and versions exist but the compare and the write are separate steps, the write is last-writer-wins, or a tombstone is collected before a delayed upsert arrives; an older version overwrites a newer one or a deleted document is resurrected."
+    evidence_ids: ["CLM-018"]
+    derived_from: ["MECH-08"]
+  - id: "FAIL-09"
+    description: "Cache refill from a lagging replica: an invalidation without a version check lets a stale replica repopulate the cache, so the cached path stays stale after every replica is fresh; refresh lag is then the wrong diagnosis."
+    evidence_ids: ["CLM-021", "CLM-022"]
+    derived_from: ["MECH-09", "MATH-01"]
+
 production_connections:
   - id: "PROD-01"
     description: "Release an index only after canary queries prove source-to-search visibility, update/delete convergence, version monotonicity, access correctness, and rollback."
-    evidence_ids: ["CLM-005", "CLM-006", "CLM-007", "CLM-008"]
-    derived_from: ["IMPL-01", "FAIL-01", "FAIL-02"]
+    evidence_ids: ["CLM-005", "CLM-006", "CLM-007", "CLM-008", "CLM-018", "CLM-021"]
+    derived_from: ["IMPL-01", "FAIL-01", "FAIL-02", "FAIL-08", "FAIL-09"]
   - id: "PROD-02"
     description: "Evaluate RAG using staged opportunity/use/support metrics and matched end-to-end quality, latency, cost, freshness, rejection, and abstention distributions."
     evidence_ids: ["CLM-013", "CLM-014", "CLM-015"]
@@ -153,12 +177,30 @@ research_connections:
     evidence_ids: ["CLM-016"]
     derived_from: ["MECH-03", "MECH-07"]
   - id: "RESEARCH-02"
-    description: "RAG-versus-long-context evidence through 2025 rejects a universal winner and motivates matched, slice-aware routing studies through the 2026 cutoff."
+    description: "Two published RAG-versus-long-context comparisons (2024 and a late-2024 revisit), checked at abstract level, report setup-dependent outcomes; this argues against assuming a universal winner and motivates matched, slice-aware routing studies. No 2025-2026 primary source on this question was opened for this revision."
     evidence_ids: ["CLM-003", "CLM-015"]
     derived_from: ["MECH-07"]
 
+todo_verify:
+  - id: "TODO-01"
+    description: "TODO_VERIFY: no 2025-2026 primary source on task-specific context orchestration or adaptive routing was opened; the README makes no currentness claim about that work."
+    evidence_ids: []
+    derived_from: ["RESEARCH-01", "RESEARCH-02"]
+  - id: "TODO-02"
+    description: "TODO_VERIFY: the pinned Haystack pipeline.py and prompt_builder.py were not re-read on 2026-09-30, and no pipeline was executed; document-store backends were not inspected for version checks."
+    evidence_ids: ["CLM-017"]
+    derived_from: ["IMPL-03"]
+  - id: "TODO-03"
+    description: "TODO_VERIFY: Elasticsearch behavior was read from documentation only; tombstone/version retention for deleted documents and point-in-time reads were not verified and are not claimed."
+    evidence_ids: ["CLM-019"]
+    derived_from: ["MECH-08", "MECH-09"]
+  - id: "TODO-04"
+    description: "TODO_VERIFY: the full texts of RAG, Fusion-in-Decoder, Lost in the Middle, FreshLLMs, the context-memory conflict paper, Self-RAG, and CRAG were not re-read in this revision; their registry entries keep earlier access dates."
+    evidence_ids: ["CLM-001", "CLM-002", "CLM-003", "CLM-004", "CLM-011", "CLM-016"]
+    derived_from: []
+
 candidate_capabilities:
-  - { capability: "Design and audit an incremental, version-consistent RAG indexing path with measurable query visibility.", mapped_mechanisms: ["MECH-02", "MATH-01", "IMPL-01", "FAIL-01", "FAIL-02", "PROD-01"] }
+  - { capability: "Design and audit an incremental, version-consistent RAG indexing path with measurable query visibility.", mapped_mechanisms: ["MECH-02", "MECH-08", "MECH-09", "MATH-01", "IMPL-01", "FAIL-01", "FAIL-02", "FAIL-08", "FAIL-09", "PROD-01"] }
   - { capability: "Implement query and context orchestration while testing intent drift, duplication, order, contradiction, and budget effects.", mapped_mechanisms: ["MECH-03", "MECH-04", "MECH-05", "MATH-03", "FAIL-03", "FAIL-04", "FAIL-05"] }
   - { capability: "Produce and evaluate claim-level citations without confusing reference syntax with semantic support.", mapped_mechanisms: ["MECH-06", "MATH-02", "IMPL-03", "FAIL-06"] }
   - { capability: "Attribute RAG failures by stage and choose retrieval, long-context, or hybrid routes on a matched production frontier.", mapped_mechanisms: ["MECH-07", "MATH-04", "IMPL-02", "FAIL-07", "PROD-02"] }

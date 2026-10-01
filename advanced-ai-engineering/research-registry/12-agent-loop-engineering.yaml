@@ -1,7 +1,9 @@
 module: "12-agent-loop-engineering"
-registry_version: "1.0.0"
-research_cutoff: "2026-09-26"
-change_reason: "Replace placeholders with verified agent-loop, tool-contract, termination, recovery, evaluation, and source-code mechanisms."
+registry_version: "1.1.0"
+previous_version: "1.0.0"
+research_cutoff: "2026-09-30"
+change_reason: "Audit corrections: replace the consumed-below-limit budget check with a pre-dispatch reservation ledger (atomic admission, reconciliation and refund, cancellation, nested retries, remaining deadline, hard versus estimated limits); add a concrete transfer fixture with success predicate; re-read the pinned LangGraph files; scope the recommended-baseline label."
+changed_claims: ["CLM-005", "CLM-007", "CLM-014", "CLM-015", "CLM-016", "CLM-017"]
 claims:
   - id: CLM-001
     claim: "An agent loop is a bounded state-transition controller: observe state, choose an action or terminal response, validate/authorize, execute, incorporate the resulting observation, and repeat until an explicit terminal condition."
@@ -57,8 +59,9 @@ claims:
     confidence: high
     currentness_status: "CURRENT DEFAULT"
     assumptions: ["A loop can fail to emit a trustworthy terminal action and different resources can exhaust independently."]
-    derivation: "Any single cap leaves other unbounded dimensions; a final model assertion can be false. The controller therefore enforces hard budgets and verifies task-specific terminal predicates where possible."
-    limitations: ["Budgets and semantic verifiers are workload-specific; hard stopping may terminate recoverable tasks."]
+    derivation: "Any single cap leaves other unbounded dimensions; a final model assertion can be false. The controller therefore enforces hard budgets and verifies task-specific terminal predicates where possible. A check that consumed budget is below the limit does not stop the next action from crossing it; enforcement needs the pre-dispatch reservation of CLM-015."
+    limitations: ["Budgets and semantic verifiers are workload-specific; hard stopping may terminate recoverable tasks.", "The label CURRENT DEFAULT means the course recommended baseline; no survey of framework behavior was performed."]
+    related_claims: ["CLM-015", "CLM-016"]
     applicability: "Preventing runaway, stuck, and economically unbounded agents."
     curriculum_usage: { lessons: ["12.3"], labs: ["LAB-A"], assessments: ["Incident-12.1", "Mastery-12"] }
   - id: CLM-006
@@ -80,8 +83,8 @@ claims:
     concepts: [toolmaze, replanning, perturbation]
     confidence: medium
     currentness_status: "FRONTIER / BENCHMARK-SPECIFIC"
-    evidence: [{ source_type: paper, tier: 1, title: "When Tools Fail: Benchmarking Dynamic Replanning and Anomaly Recovery in LLM Agents", authors: "Dongsheng Zhu, Xuchen Ma, Yucheng Shen, Xiang Li, Yukun Zhao, Shuaiqiang Wang, Lingyong Yan, Dawei Yin", year: "2026", url: "https://arxiv.org/abs/2606.05806", section: "Perturbation taxonomy, benchmark, and experiments", accessed_at: "2026-09" }]
-    limitations: ["Preprint uses simulated tools/tasks and specific models; rates do not transfer universally."]
+    evidence: [{ source_type: paper, tier: 1, title: "When Tools Fail: Benchmarking Dynamic Replanning and Anomaly Recovery in LLM Agents", authors: "Dongsheng Zhu, Xuchen Ma, Yucheng Shen, Xiang Li, Yukun Zhao, Shuaiqiang Wang, Lingyong Yan, Dawei Yin", year: "2026", version: "arXiv v1 (2026-06-04)", url: "https://arxiv.org/abs/2606.05806", section: "Abstract", accessed_at: "2026-09-30" }]
+    limitations: ["Preprint uses simulated tools/tasks and specific models; rates do not transfer universally.", "Only the abstract was read on 2026-09-30; the lesson quotes no rate from the paper and its methods were not audited."]
     applicability: "Dynamic-replanning and tool-failure test design."
     curriculum_usage: { lessons: ["12.3"], labs: ["LAB-C"], assessments: ["Mastery-12"] }
   - id: CLM-008
@@ -157,7 +160,7 @@ claims:
     applicability: "Offline, shadow, and loaded agent evaluation."
     curriculum_usage: { lessons: ["12.6"], labs: ["LAB-D"], assessments: ["Mastery-12"] }
   - id: CLM-014
-    claim: "At LangGraph commit 7daa3ab49d678a5da75edb08baa87db4a2be52c3, deprecated create_react_agent constructs a tool-calling graph that repeats while tool calls remain, exposes remaining_steps behavior, and compiles the workflow; Pregel.stream enforces a configurable recursion limit and raises GraphRecursionError when exhausted without reaching a stop condition."
+    claim: "At LangGraph commit 7daa3ab49d678a5da75edb08baa87db4a2be52c3, create_react_agent carries a deprecated decorator pointing to langchain.agents create_agent and constructs a tool-calling graph whose should_continue ends when the last message is not an AIMessage with tool calls and otherwise routes to the tools node; _are_more_steps_needed reads remaining_steps and, when it is below 2 with tool calls present, the model node returns a fixed need-more-steps message; Pregel.stream raises GraphRecursionError (a RecursionError subclass) when the loop status is out_of_steps, naming the recursion_limit config key. Both guards count steps; no token, cost, budget, timeout, or deadline handling appears in chat_agent_executor.py."
     provenance: VERIFIED_FACT
     domain: runtime_implementation
     concepts: [langgraph, react_graph, recursion_limit]
@@ -169,7 +172,7 @@ claims:
         title: "LangGraph prebuilt ReAct graph"
         repository: "https://github.com/langchain-ai/langgraph"
         commit: "7daa3ab49d678a5da75edb08baa87db4a2be52c3"
-        verification_date: "2026-09-26"
+        verification_date: "2026-09-30"
         file: "libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py"
         symbol: "create_react_agent"
         entry_point: "create_react_agent(...).invoke/stream or compiled Pregel stream execution"
@@ -181,7 +184,7 @@ claims:
         title: "LangGraph Pregel execution stream"
         repository: "https://github.com/langchain-ai/langgraph"
         commit: "7daa3ab49d678a5da75edb08baa87db4a2be52c3"
-        verification_date: "2026-09-26"
+        verification_date: "2026-09-30"
         file: "libs/langgraph/langgraph/pregel/main.py"
         symbol: "Pregel.stream"
         entry_point: "compiled graph stream execution"
@@ -193,13 +196,50 @@ claims:
         title: "LangGraph recursion-limit error type"
         repository: "https://github.com/langchain-ai/langgraph"
         commit: "7daa3ab49d678a5da75edb08baa87db4a2be52c3"
-        verification_date: "2026-09-26"
+        verification_date: "2026-09-30"
         file: "libs/langgraph/langgraph/errors.py"
         symbol: "GraphRecursionError"
         entry_point: "raised by Pregel stream execution"
         execution_path: "Pregel.stream recursion-limit check -> GraphRecursionError"
         url: "https://github.com/langchain-ai/langgraph/blob/7daa3ab49d678a5da75edb08baa87db4a2be52c3/libs/langgraph/langgraph/errors.py"
         accessed_at: "2026-09"
-    limitations: ["Static inspection only; code was not executed.", "The factory is explicitly deprecated in favor of langchain.agents.create_agent.", "A recursion limit is a guardrail, not semantic success detection."]
+    limitations: ["Static inspection only; code was not executed. All three files were re-read at this commit on 2026-09-30.", "The factory is explicitly deprecated in favor of langchain.agents.create_agent.", "A recursion limit is a guardrail, not semantic success detection and not a cost bound.", "The absence of budget handling is a text-search observation on one file; hooks or other library layers were not inspected."]
     applicability: "Source-reading example of an implementation-specific tool loop and hard step guard."
     curriculum_usage: { lessons: ["12.1", "12.3"], labs: ["LAB-A"], assessments: ["Production-Source-Trace"] }
+  - id: CLM-015
+    claim: "A hard budget is enforced by a reservation ledger: for each resource the controller keeps the limit B, committed charges C, and reserved holds R, admits an action only if C + R + q <= B for every hard resource where q is the action's worst-case charge under controller-enforced caps, performs that comparison and the addition to R atomically, and on completion moves the actual charge to C and releases q; an action whose reservation exceeds the remaining budget is rejected before dispatch."
+    provenance: DERIVED
+    domain: loop_control
+    concepts: [budget_reservation, admission_control, reconciliation, refund, atomic_ledger]
+    confidence: high
+    currentness_status: "RECOMMENDED BASELINE"
+    assumptions: ["The worst-case charge of an action is bounded before dispatch by a count the controller makes or a parameter it sets.", "The ledger has a single writer or an atomic compare-and-add.", "Actual charges become known after the action, possibly late."]
+    derivation: "Checking consumed < limit admits an action whose own cost crosses the limit (0.24 spent of 0.25, next call 0.07, final 0.31). With reservations the invariant C + R <= B holds by induction: admission preserves it, and reconciliation replaces q by an actual charge no larger than q. Fixture (synthetic prices 3 and 15 USD per million input and output tokens; limits 6 model calls, 8 physical tool attempts, 0.25 USD): a call with 12,000 input and a 2,000 output cap reserves 0.066 and settles at 0.0465 (refund 0.0195); three parallel searches each reserving 3 attempts give 3, 6, then 9 > 8, so the third is rejected; a 60,000-input call reserves 0.210 and 0.0765 + 0.210 = 0.2865 > 0.25, rejected, while the compacted 20,000-input call reserves 0.090 and is admitted; final state 3 calls, 5 attempts, 0.2235 USD. Without atomic admission the three branches each read zero reserved attempts and reserve 9 in total. A cancelled or timed-out action keeps its reservation until a usage record arrives and is charged in full if none does."
+    limitations: ["The invariant is exact only for resources whose worst case is bounded before dispatch; cost is an estimate if the provider bills tokens that no request parameter bounds or if a tool has no per-call price cap.", "Wall-clock time cannot be reserved; a timeout bounds the wait, not the remote work or its side effects.", "An in-memory ledger does not survive a controller crash; durable storage is a Module 14 concern.", "Synthetic prices and counts."]
+    applicability: "Per-episode and per-principal call, attempt, token, and cost ceilings; reused by the Module 18 cost-ceiling control."
+    related_claims: ["CLM-005", "CLM-016"]
+    curriculum_usage: { lessons: ["12.3"], labs: ["LAB-A"], assessments: ["Mastery-12", "Incident-12.1"] }
+  - id: CLM-016
+    claim: "Retries and deadlines must be accounted at the root: with k_c controller-level attempts and k_s inner client retries per attempt the worst case is k_c(1 + k_s) physical attempts, so a logical call reserves (1 + k_s) attempts or inner retries are disabled; and every child call receives a timeout of at most the root deadline minus the current time minus a reserve for verification and the final response."
+    provenance: DERIVED
+    domain: loop_control
+    concepts: [nested_retry, deadline_propagation, remaining_deadline]
+    confidence: high
+    currentness_status: "RECOMMENDED BASELINE"
+    assumptions: ["Retry layers are stacked and each layer retries independently unless configured otherwise.", "The episode has one absolute deadline."]
+    derivation: "Each of k_c controller attempts can trigger up to k_s inner retries, giving k_c(1 + k_s) physical attempts (3 x 3 = 9 in the fixture). Deadline fixture: 10 s root deadline, attempt 1 fails before dispatch at 2.0 s, backoff 0.5 s, attempt 2 times out after dispatch at 5.5 s with unknown effect, a 1 s postcondition query ends at 6.5 s, backoff to 7.0 s, remaining 3.0 s; with a 0.5 s reserve the third attempt gets min(5, 2.5) = 2.5 s rather than the 5 s client default. An attempt needing 4 s is cut at 9.5 s; 0.5 s is less than the 1 s query, so the episode ends escalated with unknown effect."
+    limitations: ["Exercise assumptions, not measurements.", "A timeout does not cancel remote work or undo a commit."]
+    applicability: "Retry policy and deadline propagation in tool-using loops."
+    related_claims: ["CLM-006", "CLM-015"]
+    curriculum_usage: { lessons: ["12.3"], labs: ["LAB-A", "LAB-C"], assessments: ["Mastery-12", "Incident-12.1"] }
+  - id: CLM-017
+    claim: "Exercise fixtures, all synthetic: the Lesson 12.3 deadline and ledger examples, and the Mastery transfer fixture (120 s deadline with a 5 s reserve, 10 model calls, 16 physical tool attempts, 0.40 USD, five tools with stated effect classes, an approval record expiring at 90 s, fault script F1-F6 over three seeds, and a six-part success predicate); the worst-case model call in that fixture reserves 0.0945 USD and four of them reserve 0.378 USD."
+    provenance: EXERCISE_ASSUMPTION
+    domain: exercise_fixture
+    concepts: [synthetic_fixture, transfer_fixture, success_predicate]
+    confidence: high
+    currentness_status: "SYNTHETIC EXERCISE INPUT"
+    assumptions: ["Values were chosen so decisions and arithmetic can be checked by hand and so that two reviewers grade the same submission against the same constraints."]
+    limitations: ["Prices, latencies, and tool behaviors are invented and are not any provider's or product's values."]
+    applicability: "Worked examples, guided practice, and Mastery reference checks in Module 12."
+    curriculum_usage: { lessons: ["12.3"], labs: ["LAB-A"], assessments: ["Mastery-12"] }

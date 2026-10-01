@@ -1,7 +1,9 @@
 module: "10-advanced-rag"
-registry_version: "1.0.0"
-research_cutoff: "2026-09-26"
-change_reason: "Replace placeholders with evidence-backed orchestration, freshness, contradiction, citation, and RAG-versus-long-context mechanisms."
+registry_version: "1.1.0"
+previous_version: "1.0.0"
+research_cutoff: "2026-09-30"
+change_reason: "Audit corrections: state idempotency as an atomic version-acceptance rule instead of a property of IDs and versions; separate progress watermark from pinned read snapshot; define citation correctness, support completeness, and coverage from one table with multi-citation and zero-denominator rules; label synthetic fixtures; scope the recommended-baseline label."
+changed_claims: ["CLM-006", "CLM-007", "CLM-013", "CLM-015", "CLM-017", "CLM-018", "CLM-019", "CLM-020", "CLM-021", "CLM-022"]
 claims:
   - id: CLM-001
     claim: "Retrieval-augmented generation combines parametric generation with retrieved non-parametric evidence; the original RAG work established this architecture on scoped knowledge-intensive tasks, not a universal guarantee of factuality or provenance."
@@ -72,13 +74,14 @@ claims:
     confidence: high
     currentness_status: "CURRENT DEFAULT"
     assumptions: ["Documents may update or delete while requests are in flight, and multiple representations or caches can serve different revisions."]
-    derivation: "If answer claims and citations are drawn from unrecorded revisions, reproduction and conflict resolution are underdetermined. Versioned identity plus a read-snapshot/high-watermark contract makes the dependency graph auditable."
+    derivation: "If answer claims and citations are drawn from unrecorded revisions, reproduction and conflict resolution are underdetermined. Versioned identity plus an enforced pinned read snapshot makes the dependency graph auditable; a progress watermark alone records progress and does not constrain what a request reads (see CLM-021)."
     limitations: ["The required consistency level is product-specific; strong global snapshots may be expensive or unavailable."]
+    related_claims: ["CLM-021"]
     applicability: "Mutable corpora, regulated sources, cache layers, and reproducible incidents."
     curriculum_usage: { lessons: ["10.1", "10.2"], labs: ["LAB-A"], assessments: ["Incident-10.1"] }
 
   - id: CLM-007
-    claim: "Incremental upsert and delete processing should be idempotent and version-aware across text, embeddings, metadata, caches, and citation targets; partial propagation can resurrect stale content or leave dangling evidence."
+    claim: "Incremental upsert and delete processing should be idempotent and version-aware across text, embeddings, metadata, caches, and citation targets; partial propagation can resurrect stale content or leave dangling evidence. Stable identity and monotonic versions are necessary inputs, not a sufficient mechanism: idempotency comes from the atomic acceptance rule in CLM-018."
     provenance: DERIVED
     domain: incremental_indexing
     concepts: [idempotency, tombstone, multi_representation_consistency]
@@ -86,8 +89,9 @@ claims:
     currentness_status: "CURRENT DEFAULT"
     assumptions: ["One logical source item can have multiple stored representations and events can be retried, duplicated, delayed, or reordered."]
     derivation: "Without stable identity and monotonic/version-checked operations, an older retry can overwrite a newer representation; without delete/tombstone fanout, at least one query path can continue serving removed content."
-    limitations: ["Version semantics and transaction boundaries differ by store and ingestion architecture."]
+    limitations: ["Version semantics and transaction boundaries differ by store and ingestion architecture.", "The label CURRENT DEFAULT here means the course recommended baseline; no adoption survey was performed."]
     applicability: "Continuous ingestion, re-embedding, deletion, and rollback."
+    related_claims: ["CLM-018"]
     curriculum_usage: { lessons: ["10.2"], labs: ["LAB-A"], assessments: ["Incident-10.1", "Mastery-10"] }
 
   - id: CLM-008
@@ -156,14 +160,14 @@ claims:
     curriculum_usage: { lessons: ["10.4"], labs: ["LAB-C"], assessments: ["Incident-10.1", "Mastery-10"] }
 
   - id: CLM-013
-    claim: "ALCE evaluates answer correctness and citation quality separately and reports incomplete citation support in evaluated systems; emitting a citation marker is therefore not evidence that the cited passage entails the attached claim."
+    claim: "ALCE evaluates answer correctness and citation quality separately and reports incomplete citation support in evaluated systems; emitting a citation marker is therefore not evidence that the cited passage entails the attached claim. Its citation recall scores a statement 1 only if it has at least one citation and the concatenation of its cited passages entails it under an NLI model; its citation precision flags a citation as irrelevant when it does not support the statement alone and removing it leaves the remaining citations still supporting the statement, and scores precision 0 for citations of a statement whose recall is 0."
     provenance: VERIFIED_FACT
     domain: citations
     concepts: [citation_correctness, citation_completeness, entailment]
     confidence: high
     currentness_status: "REFERENCE / CURRENT CAUTION"
-    evidence: [{ source_type: paper, tier: 1, title: "Enabling Large Language Models to Generate Text with Citations", authors: "Tianyu Gao, Howard Yen, Jiatong Yu, Danqi Chen", year: "2023", url: "https://arxiv.org/abs/2305.14627", section: "ALCE benchmark and citation metrics", accessed_at: "2026-09" }]
-    limitations: ["Automatic citation evaluators can disagree with expert judgments and inherit NLI/model error."]
+    evidence: [{ source_type: paper, tier: 1, title: "Enabling Large Language Models to Generate Text with Citations", authors: "Tianyu Gao, Howard Yen, Jiatong Yu, Danqi Chen", year: "2023", version: "arXiv v2 (2023-10-31)", url: "https://arxiv.org/abs/2305.14627", section: "Section 3.3 Citation Quality (citation recall and citation precision)", figure: "Figure 3", accessed_at: "2026-09-30" }]
+    limitations: ["Automatic citation evaluators can disagree with expert judgments and inherit NLI/model error.", "Section 3.3 and Figure 3 were read in full on 2026-09-30; the experimental results were not re-audited and no ALCE number is quoted in the lesson.", "The lesson CitationCorrectness and SupportCompleteness are course definitions (CLM-020), not the ALCE metrics."]
     applicability: "Claim-level citation support and completeness evaluation."
     curriculum_usage: { lessons: ["10.5"], labs: ["LAB-C"], assessments: ["Mastery-10"] }
 
@@ -181,14 +185,14 @@ claims:
     curriculum_usage: { lessons: ["10.5"], labs: ["LAB-C", "LAB-D"], assessments: ["Incident-10.1", "Mastery-10"] }
 
   - id: CLM-015
-    claim: "Published RAG-versus-long-context comparisons disagree by task and setup: a 2024 study reports stronger average long-context quality when sufficiently resourced with lower RAG cost, while a 2025 revisit reports task- and retrieval-method-dependent reversals."
+    claim: "Published RAG-versus-long-context comparisons disagree by task and setup: a 2024 study reports stronger average long-context quality when sufficiently resourced with lower RAG cost, while a later revisit (arXiv 2501.01880, submitted 2024-12-27) reports that long context generally outperforms RAG on its question-answering benchmarks, that summarization-based retrieval is comparable while chunk-based retrieval lags, and that RAG has advantages on dialogue-based and general questions."
     provenance: VERIFIED_FACT
     domain: architecture_selection
     concepts: [rag_vs_long_context, cost_quality_tradeoff, workload_dependence]
     confidence: high
     currentness_status: "CURRENT / WORKLOAD-DEPENDENT"
-    evidence: [{ source_type: paper, tier: 1, title: "Retrieval Augmented Generation or Long-Context LLMs? A Comprehensive Study and Hybrid Approach", authors: "Zhuowan Li, Cheng Li, Mingyang Zhang, Qiaozhu Mei, Michael Bendersky", year: "2024", url: "https://arxiv.org/abs/2407.16833", section: "RAG/LC comparison and Self-Route", accessed_at: "2026-09" }, { source_type: paper, tier: 1, title: "Long Context vs. RAG for LLMs: An Evaluation and Revisits", authors: "Xinze Li, Yixin Cao, Yubo Ma, Aixin Sun", year: "2025", url: "https://arxiv.org/abs/2501.01880", section: "Evaluation and discussion", accessed_at: "2026-09" }]
-    limitations: ["Results depend on answerable-without-context filtering, corpus, retriever, summarization/chunking, model, task, token price, and quality metric."]
+    evidence: [{ source_type: paper, tier: 1, title: "Retrieval Augmented Generation or Long-Context LLMs? A Comprehensive Study and Hybrid Approach", authors: "Zhuowan Li, Cheng Li, Mingyang Zhang, Qiaozhu Mei, Michael Bendersky", year: "2024", url: "https://arxiv.org/abs/2407.16833", section: "RAG/LC comparison and Self-Route", accessed_at: "2026-09" }, { source_type: paper, tier: 1, title: "Long Context vs. RAG for LLMs: An Evaluation and Revisits", authors: "Xinze Li, Yixin Cao, Yubo Ma, Aixin Sun", year: "2024", version: "arXiv v1 (2024-12-27)", url: "https://arxiv.org/abs/2501.01880", section: "Abstract", accessed_at: "2026-09-30" }]
+    limitations: ["Results depend on answerable-without-context filtering, corpus, retriever, summarization/chunking, model, task, token price, and quality metric.", "Both sources were checked at abstract level on 2026-09-30; methods and result tables were not re-audited, and no number from either paper is quoted in the lesson.", "The earlier registry text dated the second paper 2025 from its arXiv identifier; its v1 submission date is 2024-12-27."]
     applicability: "Choosing or routing among retrieval, full/long context, and hybrid paths."
     curriculum_usage: { lessons: ["10.6"], labs: ["LAB-D"], assessments: ["Mastery-10"] }
 
@@ -224,6 +228,73 @@ claims:
         execution_path: "Pipeline.run -> Pipeline._run_component -> component.run; retrieved documents -> PromptBuilder.run -> generator -> AnswerBuilder.run; ingestion documents -> DocumentWriter.run -> document_store.write_documents"
         url: "https://github.com/deepset-ai/haystack/blob/8a5406eea71a0fc19e94c4b9a5cd96df2158a45a/haystack/core/pipeline/pipeline.py"
         accessed_at: "2026-09"
-    limitations: ["Static inspection only; no Haystack pipeline was executed.", "Reference parsing/binding is not semantic support validation.", "Haystack is one orchestration implementation, not the definition of RAG."]
+    limitations: ["Static inspection only; no Haystack pipeline was executed.", "Reference parsing/binding is not semantic support validation.", "Haystack is one orchestration implementation, not the definition of RAG.", "On 2026-09-30 only answer_builder.py and document_writer.py were re-read at this commit: AnswerBuilder.run sets a per-reply referenced flag from in-range pattern matches with no claim-to-document mapping, and DocumentWriter.run passes an ID-based DuplicatePolicy (NONE, SKIP, OVERWRITE, FAIL) to document_store.write_documents without comparing versions. pipeline.py and prompt_builder.py were not re-read, so verification_date is unchanged.", "Whether individual document-store backends add version checks was not inspected."]
     applicability: "Production source reading for explicit component orchestration, prompt construction, document writes, and citation-reference binding."
     curriculum_usage: { lessons: ["10.1", "10.2", "10.5"], labs: ["LAB-A", "LAB-C"], assessments: ["Production-Source-Trace"] }
+
+  - id: CLM-018
+    claim: "Retries and reordered deliveries of index updates are idempotent only when every representation applies an atomic per-document acceptance rule: accept a strictly newer source version; treat the same version with the same operation and content hash as a duplicate no-op; reject the same version with a different operation or hash as a conflict; reject an older version as stale; and record deletes as versioned tombstones retained longer than the maximum event delay and replay window."
+    provenance: DERIVED
+    domain: incremental_indexing
+    concepts: [idempotency, conditional_write, tombstone, version_acceptance]
+    confidence: high
+    currentness_status: "RECOMMENDED BASELINE / STORE-DEPENDENT ENFORCEMENT"
+    assumptions: ["The source assigns each change to a document a monotonically increasing version.", "Events can be duplicated, delayed, and reordered, and more than one worker can write the same document.", "The store can compare and write in one atomic step per document, or writes for one document are serialized."]
+    derivation: "With an atomic compare-and-write, applying an event twice leaves the state unchanged (duplicate) and applying an older event after a newer one leaves the newer state (stale), so the final state depends only on the set of events, not their arrival order. Traces: (v2,v1,v2) gives ACCEPT, STALE, DUPLICATE and final v2; (v2,v2,v1) gives final v2 where last-writer-wins gives v1; duplicate create gives ACCEPT, DUPLICATE, and CONFLICT for a changed hash; (upsert v3, delete v4, upsert v3) gives final tombstone v4. If the compare and the write are separate steps, two writers can both pass the comparison. If the tombstone is removed before the delayed upsert arrives, the upsert meets no record and is accepted, which resurrects the document."
+    limitations: ["Depends on a trustworthy source version; wall-clock versions from workers break the ordering.", "Does not by itself make the change query-visible or consistent across representations.", "Atomicity and tombstone retention are store- and configuration-specific and must be tested.", "Durable workflow recovery and external-effect idempotency are Module 14 topics; this claim covers index writes only."]
+    applicability: "Incremental RAG ingestion with at-least-once delivery."
+    related_claims: ["CLM-007", "CLM-019"]
+    curriculum_usage: { lessons: ["10.2"], labs: ["LAB-A"], assessments: ["Mastery-10", "Incident-10.1"] }
+
+  - id: CLM-019
+    claim: "Elasticsearch documents conditional index writes: with version_type external, a supplied version less than or equal to the stored version causes a version conflict (HTTP 409); if_seq_no and if_primary_term make an index, update, or delete conditional on the last modification, with a VersionConflictException and 409 on mismatch; op_type create fails if a document with that ID already exists."
+    provenance: VERIFIED_FACT
+    domain: runtime_semantics
+    concepts: [conditional_write, external_versioning, optimistic_concurrency]
+    confidence: high
+    currentness_status: "ELASTICSEARCH DOCUMENTATION AS READ 2026-09-30 / IMPLEMENTATION-SPECIFIC"
+    evidence: [{ source_type: official_docs, tier: 2, title: "Create or update a document in an index (index API)", authors: "Elastic", url: "https://www.elastic.co/docs/api/doc/elasticsearch/operation/operation-index", section: "Versioning, optimistic concurrency control, and op_type", accessed_at: "2026-09-30" }, { source_type: official_docs, tier: 2, title: "Optimistic concurrency control", authors: "Elastic", url: "https://www.elastic.co/docs/reference/elasticsearch/rest-apis/optimistic-concurrency-control", section: "if_seq_no and if_primary_term", accessed_at: "2026-09-30" }]
+    limitations: ["Documentation was read; no cluster was run.", "The documentation version current on 2026-09-30 was read without pinning a product release.", "How long Elasticsearch retains the version of a deleted document was not verified and is not claimed.", "One store's semantics; not a statement about vector databases in general."]
+    applicability: "Concrete example of an atomic conditional write that can implement the acceptance rule."
+    related_claims: ["CLM-008", "CLM-018"]
+    curriculum_usage: { lessons: ["10.2"], labs: ["LAB-A"], assessments: ["Production-Source-Trace"] }
+
+  - id: CLM-020
+    claim: "Citation correctness (supported emitted citations over checked emitted citations), support completeness (support-required claims whose cited evidence entails them over support-required claims), and citation coverage (support-required claims with at least one citation marker over support-required claims) are three different ratios; correctness counts citations, the other two count claims, and all must be computed from one claim-citation table."
+    provenance: DERIVED
+    domain: citations
+    concepts: [citation_correctness, citation_completeness, citation_coverage, zero_denominator]
+    confidence: high
+    currentness_status: "COURSE DEFINITION"
+    assumptions: ["Claim segmentation, the support-required rule, and an entailment judgment per claim and per citation are declared.", "For a claim with several citations, the claim is supported if the concatenation of its cited passages entails it; a citation is supported if it entails the claim alone or if removing it breaks the joint support."]
+    derivation: "Four claims with one citation each on C1, C2, C3 and none on C4, where only the citations of C1 and C2 entail their claims: correctness 2/3, support completeness 2/4, coverage 3/4. Counting C3 as complete would contradict counting its citation as unsupported. Second answer: C5 cites two passages that entail it only jointly (both supported), C6 cites one sufficient and one unrelated passage: correctness 3/4, completeness 2/2. Pooled: correctness 5/7 and completeness 4/6; mean of per-answer ratios: 17/24 and 3/4. With no emitted citations correctness is undefined, and with no support-required claims completeness and coverage are undefined; undefined answers are excluded from a macro average and counted."
+    limitations: ["The multi-citation rule follows the structure of ALCE Section 3.3 but these are not the ALCE metrics.", "Entailment labels carry evaluator error that must be estimated against human adjudication.", "The fixture is synthetic."]
+    applicability: "Claim-level citation audits and their aggregation."
+    related_claims: ["CLM-013"]
+    curriculum_usage: { lessons: ["10.5"], labs: ["LAB-C"], assessments: ["Mastery-10"] }
+
+  - id: CLM-021
+    claim: "A progress watermark and a pinned read snapshot are different contracts: the watermark of a representation is the largest source sequence number up to which every event is decided and visible there, while a pinned snapshot is one value chosen per request at which every read of that request is served. Only the second prevents mixed-version answers, and only if it is enforced."
+    provenance: DERIVED
+    domain: consistency
+    concepts: [high_watermark, read_snapshot, mixed_version_read, cache_key]
+    confidence: high
+    currentness_status: "RECOMMENDED BASELINE / STORE-DEPENDENT ENFORCEMENT"
+    assumptions: ["Representations apply events at different times.", "A request reads from more than one representation or cache."]
+    derivation: "If representation watermarks are 102 and 100 and the request reads each at its current state, it can see version 2 of a document from one and version 1 from the other, although both watermarks are valid. Serving every read at one snapshot removes the mix, but a read-time filter can only drop hits newer than the snapshot; it cannot restore a version the store has overwritten, so pinning to an older snapshot needs a retained generation or point-in-time view. Without one, the consistent options are to wait, to exclude documents whose versions disagree, or to mark the answer partial. A snapshot older than a delete still returns the deleted item unless a tombstone overlay is applied at read time. Including the snapshot in a cache key prevents cross-snapshot reuse but does not replace delete overlays or validation of cached citation targets."
+    limitations: ["Whether a given store offers point-in-time or generation reads was not surveyed.", "The required consistency strength is a product decision."]
+    applicability: "Multi-representation retrieval with caches and replicas."
+    related_claims: ["CLM-006"]
+    curriculum_usage: { lessons: ["10.2"], labs: ["LAB-A"], assessments: ["Mastery-10", "Incident-10.1"] }
+
+  - id: CLM-022
+    claim: "Exercise fixtures, all synthetic: the Lesson 10.2 freshness ledger (visibility at 12.5 s and 19.0 s on two replicas, write acknowledged at 11.0 s, 16 stale probes of 31, cached answer stale to 65 s or to 72.2 s after a refill from the lagging replica); the Lesson 10.3 five-candidate packing table (rank-order concatenation 850 tokens without the needed chunk; constrained selection 800 tokens with it); the Lesson 10.4 five-source conflict table (90 EUR at the first query time); the Lesson 10.6 route table (utilities 0.758 and 0.728 for the feasible routes, tie at a cost weight of 1.25 per USD); and the Mastery workload, event, and constraint tables."
+    provenance: EXERCISE_ASSUMPTION
+    domain: exercise_fixture
+    concepts: [synthetic_fixture, freshness_ledger, conflict_table, route_decision]
+    confidence: high
+    currentness_status: "SYNTHETIC EXERCISE INPUT"
+    assumptions: ["Values were chosen to make the arithmetic and the decision order checkable by hand."]
+    limitations: ["Not measurements of any system, model, store, or price.", "The route table does not show that any route is better in general.", "The utility weights and the conflict-policy rule order are product choices made for the exercise."]
+    applicability: "Worked examples, guided practice, and Mastery reference checks in Module 10."
+    curriculum_usage: { lessons: ["10.2", "10.3", "10.4", "10.6"], labs: ["LAB-A", "LAB-B", "LAB-C", "LAB-D"], assessments: ["Mastery-10"] }

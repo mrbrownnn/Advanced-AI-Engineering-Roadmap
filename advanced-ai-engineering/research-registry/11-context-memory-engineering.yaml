@@ -1,7 +1,9 @@
 module: "11-context-memory-engineering"
-registry_version: "1.0.0"
-research_cutoff: "2026-09-26"
-change_reason: "Replace placeholders with verified context budgeting, long-context, memory lifecycle, compression, evaluation, and source-code mechanisms."
+registry_version: "1.1.0"
+previous_version: "1.0.0"
+research_cutoff: "2026-09-30"
+change_reason: "Audit corrections: add a reconciling category token ledger with atomic groups, typed records, a conditional-write and tombstone trace, and conditional stage counts on one cohort; teach token-counting facts at first use because Module 01 does not teach tokenization; tie frontier items to opened sources; re-read the pinned LangChain helpers."
+changed_claims: ["CLM-002", "CLM-011", "CLM-012", "CLM-013", "CLM-014", "CLM-016", "CLM-017", "CLM-018", "CLM-019", "CLM-020"]
 claims:
   - id: CLM-001
     claim: "A model context window is a finite per-inference input/output token capacity, not durable memory; instructions, message framing, tool schemas/results, retrieved material, working state, and output reserve all compete for that capacity."
@@ -25,7 +27,7 @@ claims:
     currentness_status: "CURRENT DEFAULT"
     assumptions: ["Different request components may be serialized with hidden or explicit delimiters and multimodal accounting."]
     derivation: "The model consumes serialized tokens rather than human-visible words. Any estimator omitting tokenizer or framing inputs can under- or over-count, so exact admission uses the target interface when available and approximation error is measured."
-    limitations: ["Exact server-side framing may be unavailable; safety margin must be calibrated per interface version."]
+    limitations: ["Exact server-side framing may be unavailable; safety margin must be calibrated per interface version.", "Module 01 teaches that the model consumes token IDs from one fixed tokenizer but not how tokenizers split text; the counting facts are taught in Lesson 11.1."]
     applicability: "Admission, truncation, compaction, and output-reserve decisions."
     curriculum_usage: { lessons: ["11.1"], labs: ["LAB-A"], assessments: ["Incident-11.1"] }
 
@@ -136,8 +138,8 @@ claims:
     concepts: [compression_overhead, break_even, end_to_end_latency]
     confidence: high
     currentness_status: "CURRENT / WORKLOAD-DEPENDENT"
-    evidence: [{ source_type: paper, tier: 1, title: "Prompt Compression in the Wild: Measuring Latency, Rate Adherence, and Quality for Faster LLM Inference", authors: "Cornelius Kummer, Lena Jurkschat, Michael Färber, Sahar Vahdati", year: "2026", url: "https://arxiv.org/abs/2604.02985", section: "End-to-end latency and break-even evaluation", accessed_at: "2026-09" }]
-    limitations: ["Results use specific compressors, models, tasks, prompt lengths, GPU classes, and quality tests."]
+    evidence: [{ source_type: paper, tier: 1, title: "Prompt Compression in the Wild: Measuring Latency, Rate Adherence, and Quality for Faster LLM Inference", authors: "Cornelius Kummer, Lena Jurkschat, Michael Färber, Sahar Vahdati", year: "2026", version: "arXiv v1 (2026-04-03)", url: "https://arxiv.org/abs/2604.02985", section: "Abstract", accessed_at: "2026-09-30" }]
+    limitations: ["Results use specific compressors, models, tasks, prompt lengths, GPU classes, and quality tests.", "Only the abstract was re-read on 2026-09-30; the lesson quotes no number from the paper."]
     applicability: "Deciding whether compression pays after including preprocessing and quality loss."
     curriculum_usage: { lessons: ["11.5"], labs: ["LAB-D"], assessments: ["Mastery-11"] }
 
@@ -148,8 +150,8 @@ claims:
     concepts: [memoryagentbench, selective_forgetting, incremental_interaction]
     confidence: high
     currentness_status: "FRONTIER / CURRENT BENCHMARK"
-    evidence: [{ source_type: paper, tier: 1, title: "Evaluating Memory in LLM Agents via Incremental Multi-Turn Interactions", authors: "Yuanzhe Hu, Yu Wang, Julian McAuley", year: "2026", version: "arXiv v4", url: "https://arxiv.org/abs/2507.05257", section: "Competency taxonomy and benchmark evaluation", accessed_at: "2026-09" }]
-    limitations: ["Benchmark transformations and tasks do not define every production memory objective or safety requirement."]
+    evidence: [{ source_type: paper, tier: 1, title: "Evaluating Memory in LLM Agents via Incremental Multi-Turn Interactions", authors: "Yuanzhe Hu, Yu Wang, Julian McAuley", year: "2026", version: "arXiv v4 (2026-06-28)", url: "https://arxiv.org/abs/2507.05257", section: "Abstract", accessed_at: "2026-09-30" }]
+    limitations: ["Benchmark transformations and tasks do not define every production memory objective or safety requirement.", "Only the abstract was re-read on 2026-09-30; methods and results were not re-audited."]
     applicability: "Evaluation beyond static recall from a supplied long context."
     curriculum_usage: { lessons: ["11.6"], labs: ["LAB-C", "LAB-D"], assessments: ["Mastery-11"] }
 
@@ -160,8 +162,8 @@ claims:
     concepts: [experience_following, error_propagation, replay]
     confidence: high
     currentness_status: "FRONTIER / WORKLOAD-DEPENDENT"
-    evidence: [{ source_type: paper, tier: 1, title: "How Memory Management Impacts LLM Agents: An Empirical Study of Experience-Following Behavior", authors: "Zidi Xiong, Yuping Lin, Wenya Xie, Pengfei He, Zirui Liu, Jiliang Tang, Himabindu Lakkaraju, Zhen Xiang", year: "2025", url: "https://arxiv.org/abs/2505.16067", section: "Addition, deletion, error propagation, and misaligned replay", accessed_at: "2026-09" }]
-    limitations: ["Behavior and mitigation transfer depend on task, memory representation, selector, and agent model."]
+    evidence: [{ source_type: paper, tier: 1, title: "How Memory Management Impacts LLM Agents: An Empirical Study of Experience-Following Behavior", authors: "Zidi Xiong, Yuping Lin, Wenya Xie, Pengfei He, Zirui Liu, Jiliang Tang, Himabindu Lakkaraju, Zhen Xiang", year: "2025", version: "arXiv v2 (2025-10-10)", url: "https://arxiv.org/abs/2505.16067", section: "Abstract", accessed_at: "2026-09-30" }]
+    limitations: ["Behavior and mitigation transfer depend on task, memory representation, selector, and agent model.", "Only the abstract was re-read on 2026-09-30; methods and results were not re-audited."]
     applicability: "Adversarial testing of stored-success reuse and memory growth."
     curriculum_usage: { lessons: ["11.4", "11.6"], labs: ["LAB-C"], assessments: ["Incident-11.1"] }
 
@@ -172,8 +174,8 @@ claims:
     concepts: [domain_memory, fragmentation, stage_evaluation]
     confidence: medium
     currentness_status: "FRONTIER / DOMAIN-SPECIFIC"
-    evidence: [{ source_type: paper, tier: 1, title: "IFCMemoryBench: Evaluating Long-Term Memory of LLM-Based Agents in BIM Information Retrieval", authors: "Changyu Du, Alexander Vosseler, Filippo Mazza, André Borrmann", year: "2026", url: "https://arxiv.org/abs/2607.26072", section: "Evaluation framework and analysis", accessed_at: "2026-09" }]
-    limitations: ["Workshop preprint in a BIM/IFC domain; its measurements and conclusions are not universal."]
+    evidence: [{ source_type: paper, tier: 1, title: "IFCMemoryBench: Evaluating Long-Term Memory of LLM-Based Agents in BIM Information Retrieval", authors: "Changyu Du, Alexander Vosseler, Filippo Mazza, André Borrmann", year: "2026", version: "arXiv v1 (2026-07-13)", url: "https://arxiv.org/abs/2607.26072", section: "Evaluation framework and analysis (abstract re-read 2026-09-30)", accessed_at: "2026-09-30" }]
+    limitations: ["Workshop preprint in a BIM/IFC domain; its measurements and conclusions are not universal.", "TODO_VERIFY: the wording that retrieved records are topically relevant but incomplete or fragmented comes from the earlier reading; the abstract re-read on 2026-09-30 confirms the ingestion/retrieval/utilization framework and weak results for the evaluated systems, not that specific characterization."]
     applicability: "Evidence that topical relevance alone is insufficient for domain memory."
     curriculum_usage: { lessons: ["11.6"], labs: ["LAB-C"], assessments: ["Mastery-11"] }
 
@@ -191,7 +193,7 @@ claims:
     curriculum_usage: { lessons: ["11.6"], labs: ["LAB-C", "LAB-D"], assessments: ["Incident-11.1", "Mastery-11"] }
 
   - id: CLM-016
-    claim: "At LangChain commit 80b74090515a594cc8421fb2d82e98f4e256c29f, trim_messages supports first/last strategies, exact or approximate counters, partial-message and boundary controls; count_tokens_approximately explicitly remains approximate; InMemoryChatMessageHistory stores messages in a process-local list."
+    claim: "At LangChain commit 80b74090515a594cc8421fb2d82e98f4e256c29f, trim_messages supports first/last strategies (default last), exact or approximate counters, allow_partial, and start_on/end_on/include_system boundary controls, and its docstring leaves producing a valid history to the caller's configuration; count_tokens_approximately defaults to chars_per_token=4.0 and extra_tokens_per_message=3.0, adds content, role, and tool-call-ID characters per message, rounds up per message, and states that it may not match model-specific counts; InMemoryChatMessageHistory stores messages in a list on the object and clear replaces it with an empty list."
     provenance: VERIFIED_FACT
     domain: runtime_implementation
     concepts: [langchain, message_trimming, approximate_counting, chat_history]
@@ -203,13 +205,67 @@ claims:
         title: "LangChain core message trimming, token approximation, and in-memory history"
         repository: "https://github.com/langchain-ai/langchain"
         commit: "80b74090515a594cc8421fb2d82e98f4e256c29f"
-        verification_date: "2026-09-26"
+        verification_date: "2026-09-30"
         file: "libs/core/langchain_core/messages/utils.py; libs/core/langchain_core/chat_history.py"
         symbol: "trim_messages; count_tokens_approximately; InMemoryChatMessageHistory.add_message; InMemoryChatMessageHistory.clear"
         entry_point: "trim_messages(messages, ...); count_tokens_approximately(messages, ...); chat history add/clear methods"
         execution_path: "application messages -> token counter/approximation -> trim strategy and boundary controls -> retained messages; add_message -> process-local messages.append"
         url: "https://github.com/langchain-ai/langchain/blob/80b74090515a594cc8421fb2d82e98f4e256c29f/libs/core/langchain_core/messages/utils.py"
         accessed_at: "2026-09"
-    limitations: ["Static inspection only; code was not executed.", "The in-memory class is not durable storage.", "These helpers do not define a universal context or memory policy."]
+    limitations: ["Static inspection only; code was not executed. Both files were re-read at this commit on 2026-09-30.", "The in-memory class is not durable storage.", "These helpers do not define a universal context or memory policy.", "TODO_VERIFY: whether every trim_messages configuration keeps tool call/result pairs together was not established by reading; it needs an executed test."]
     applicability: "Production source-reading example for explicit trimming and history semantics."
     curriculum_usage: { lessons: ["11.1", "11.5"], labs: ["LAB-A", "LAB-D"], assessments: ["Production-Source-Trace"] }
+
+  - id: CLM-017
+    claim: "Context admission is a ledger that must reconcile: placed input tokens plus fixed output reserve plus the estimator margin plus unallocated tokens equals the limit; overflow is resolved by category caps applied from the lowest priority upward, dropping whole atomic groups (a tool call with its result, a whole evidence chunk), and never by reducing the output reserve."
+    provenance: DERIVED
+    domain: context_budget
+    concepts: [token_ledger, atomic_group, output_reserve, overflow_policy]
+    confidence: high
+    currentness_status: "RECOMMENDED BASELINE"
+    assumptions: ["The interface enforces one combined token limit for input and output.", "Each category is counted exactly or with an estimator whose worst-case under-count has been measured.", "The message protocol requires a tool result to follow the call that produced it."]
+    derivation: "Fixture: limit 32,000; requested 36,580 (overflow 4,580). Caps reduce evidence 14,000 to 12,000 and history 11,500 to 7,900 by dropping groups of 400 and 3,200. Placed 30,980, slack 1,020; margin 5 percent of 12,000 heuristic-counted evidence tokens = 600; 31,580 <= 32,000, admit with 420 unallocated; 28,980 + 2,000 + 600 + 420 = 32,000. Dropping messages instead of groups under a 10,900 history cap removes a 300-token tool call and keeps its 2,900-token result, which orphans the result."
+    limitations: ["Synthetic numbers.", "Fitting the limit says nothing about effective use of the context.", "Interfaces with separate input and output limits need two ledgers."]
+    applicability: "Admission and truncation for chat, RAG, and agent requests."
+    related_claims: ["CLM-001", "CLM-002"]
+    curriculum_usage: { lessons: ["11.1"], labs: ["LAB-A"], assessments: ["Mastery-11", "Incident-11.1"] }
+
+  - id: CLM-018
+    claim: "Canonical memory converges under concurrent corrections, redelivery, and deletion when each write carries an operation ID and the base version it read, and the store atomically returns the stored outcome for a known operation ID, accepts when the base equals the stored version, and rejects otherwise; a delete is a versioned tombstone that is collected only after every index, replica, and cache has converged and the redelivery window has passed."
+    provenance: DERIVED
+    domain: memory_lifecycle
+    concepts: [conditional_write, tombstone, lost_update, memory_versioning]
+    confidence: high
+    currentness_status: "RECOMMENDED BASELINE"
+    assumptions: ["More than one writer can update a key, and writes can be delayed or redelivered.", "The store supports an atomic compare-and-write per key.", "Read paths can check a selected hit against canonical state."]
+    derivation: "Trace from stored version 4: A writes with base 4 (ACCEPT, version 5); B writes with base 4 (REJECT stale, no lost update); A retry with the same operation ID (DUPLICATE); user delete with base 5 (ACCEPT, tombstone version 6); a summarizer write with base 5 (REJECT stale, so the deleted value is not restored); a late redelivery of A (DUPLICATE, or REJECT stale if the operation ID has expired); a stale index hit is excluded by the validity check. Under unconditional last-writer-wins the second correction overwrites the first and the summarizer write restores the deleted record. If the tombstone is collected early, a write with no base is accepted as a new record."
+    limitations: ["Which value should win a conflict is a product decision.", "A design walk-through, not an executed test.", "Module 10 Lesson 10.2 states the related rule for index events ordered by source version; Module 14 Lesson 14.2 covers external effects."]
+    applicability: "Preferences, decisions, and other canonical state with multiple writers."
+    related_claims: ["CLM-008", "CLM-009"]
+    curriculum_usage: { lessons: ["11.3", "11.4"], labs: ["LAB-C"], assessments: ["Mastery-11", "Incident-11.1"] }
+
+  - id: CLM-019
+    claim: "When each stage count is a subset of the previous one on the same probe cohort, the product of the conditional stage rates equals used/probes exactly; it equals the end-to-end success rate only if no success bypasses the chain, and substituting a rate with a different denominator (such as selection precision) makes the product meaningless."
+    provenance: DERIVED
+    domain: memory_evaluation
+    concepts: [conditional_rate, stage_attribution, end_to_end_rate]
+    confidence: high
+    currentness_status: "EXACT ARITHMETIC FOR A DECLARED COHORT"
+    assumptions: ["One probe cohort with nested stage sets: stored, valid, selected, placed, used.", "Each probe needs exactly one identified record."]
+    derivation: "Cohort 200: stored 180, valid 162, selected 130, placed 117, used 94. Rates 0.900, 0.900, 0.802, 0.900, 0.803 multiply to 94/200 = 0.47 because the product telescopes. If 6 probes that failed in the chain are still answered correctly, end-to-end correctness is 100/200 = 0.50. Replacing selected-given-valid (130/162) with selection precision (130/150) gives 0.508, which corresponds to no observed quantity. An oracle-selection replay with 146 placed and 117 used gives a chain rate of 0.585."
+    limitations: ["Synthetic counts without uncertainty.", "Probes that need several records require a different unit.", "Attribution of bypass successes needs a memory-disabled replay."]
+    applicability: "Memory regression analysis and incident diagnosis."
+    related_claims: ["CLM-015"]
+    curriculum_usage: { lessons: ["11.6"], labs: ["LAB-D"], assessments: ["Mastery-11", "Incident-11.1"] }
+
+  - id: CLM-020
+    claim: "Exercise fixtures, all synthetic: the Lesson 11.1 ledger (limit 32,000), the Lesson 11.3 record table, the Lesson 11.4 mutation trace, the Lesson 11.6 cohort counts, and the Mastery constraint table (limit 24,000; requested 28,850; placed 23,950 after caps; admissible at 23,550 with a 304-token margin)."
+    provenance: EXERCISE_ASSUMPTION
+    domain: exercise_fixture
+    concepts: [synthetic_fixture, token_ledger, mutation_trace, stage_counts]
+    confidence: high
+    currentness_status: "SYNTHETIC EXERCISE INPUT"
+    assumptions: ["Values were chosen so the arithmetic and decisions can be checked by hand."]
+    limitations: ["Not properties of any real model, tokenizer, store, or product."]
+    applicability: "Worked examples, guided practice, and Mastery reference checks in Module 11."
+    curriculum_usage: { lessons: ["11.1", "11.3", "11.4", "11.6"], labs: ["LAB-A", "LAB-C", "LAB-D"], assessments: ["Mastery-11"] }
