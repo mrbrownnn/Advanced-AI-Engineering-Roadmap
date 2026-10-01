@@ -1,7 +1,9 @@
 module: "09-retrieval-engineering"
-registry_version: "1.0.0"
+registry_version: "1.1.0"
+previous_version: "1.0.0"
 research_cutoff: "2026-09-26"
-change_reason: "Replace placeholders with verified lexical, dense, ANN, fusion, reranking, evaluation, and source-trace mechanisms."
+change_reason: "WP-D1 (AUD-09-01, AUD-G04, AUD-G05): add solved fixtures for BM25 with a stated IDF convention, RRF, an HNSW layer-search trace, MaxSim, and MRR/nDCG with zero-IDCG, unjudged, and tie rules; record Lucene implementation specifics re-read at the pinned commit on 2026-09-30; replace the generic 2025-2026 frontier line with sources opened on 2026-09-30 plus an explicit TODO_VERIFY. Unchanged claims keep their 2026-09-26 cutoff and were not re-verified in this revision."
+changed_claims: ["CLM-005", "CLM-007", "CLM-009", "CLM-011", "CLM-013", "CLM-014", "CLM-015", "CLM-016", "CLM-017", "CLM-018", "CLM-019", "CLM-020"]
 claims:
   - id: CLM-001
     claim: "BM25 combines inverse document frequency, saturating term frequency, and document-length normalization; tokenization, field statistics, k1, b, corpus, and query terms are part of its behavior, so it is not a parameter-free lexical baseline."
@@ -49,13 +51,13 @@ claims:
     applicability: "Separating index approximation loss from encoder/relevance loss."
     curriculum_usage: { lessons: ["9.3", "9.6"], labs: ["LAB-B"], assessments: ["Mastery-09"] }
   - id: CLM-005
-    claim: "Reciprocal rank fusion combines result lists by summing reciprocal functions of rank and therefore avoids direct score-scale comparability; its constant, list depth, weights, duplicate identity, and missing-item policy remain tunable."
+    claim: "Reciprocal rank fusion scores a document as the sum over input rankings of 1/(k + rank) and therefore avoids direct score-scale comparability; the original paper uses unweighted full permutations with k=60 fixed in a pilot study, so weights, truncated-list missing-item policy, list depth, and duplicate identity are engineering extensions that must be declared."
     provenance: VERIFIED_FACT
     domain: hybrid_retrieval
     concepts: [rrf, rank_fusion, lexical_dense]
     confidence: high
     currentness_status: "REFERENCE / CURRENT DEFAULT"
-    evidence: [{ source_type: paper, tier: 1, title: "Reciprocal Rank Fusion Outperforms Condorcet and Individual Rank Learning Methods", authors: "Gordon V. Cormack, Charles L. A. Clarke, Stefan Büttcher", year: "2009", url: "https://dl.acm.org/doi/10.1145/1571941.1572114", section: "RRF definition and experiments", accessed_at: "2026-09" }]
+    evidence: [{ source_type: paper, tier: 1, title: "Reciprocal Rank Fusion Outperforms Condorcet and Individual Rank Learning Methods", authors: "Gordon V. Cormack, Charles L. A. Clarke, Stefan Büttcher", year: "2009", url: "https://dl.acm.org/doi/10.1145/1571941.1572114", section: "Section 1, RRFscore formula and k=60 (author-hosted copy at https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf)", accessed_at: "2026-09-30" }]
     limitations: ["Fusion cannot recover relevant items absent from all input lists."]
     applicability: "Hybrid lexical/dense retrieval where raw scores are not calibrated to a common scale."
     curriculum_usage: { lessons: ["9.4"], labs: ["LAB-C"], assessments: ["Mastery-09"] }
@@ -78,8 +80,8 @@ claims:
     concepts: [colbert, late_interaction, multi_vector]
     confidence: high
     currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
-    evidence: [{ source_type: paper, tier: 1, title: "ColBERT: Efficient and Effective Passage Search via Contextualized Late Interaction over BERT", authors: "Omar Khattab, Matei Zaharia", year: "2020", url: "https://arxiv.org/abs/2004.12832", section: "Architecture and experiments", accessed_at: "2026-09" }]
-    limitations: ["Paper efficiency results are tied to its hardware, index, corpus, and baselines."]
+    evidence: [{ source_type: paper, tier: 1, title: "ColBERT: Efficient and Effective Passage Search via Contextualized Late Interaction over BERT", authors: "Omar Khattab, Matei Zaharia", year: "2020", url: "https://arxiv.org/abs/2004.12832", section: "Section 3.1 (late interaction) and Section 3.2 (encoders); experiments not re-read", accessed_at: "2026-09-30" }]
+    limitations: ["Paper efficiency results are tied to its hardware, index, corpus, and baselines.", "Late interaction is not a cross-encoder: query and document are encoded separately and interact only through MaxSim."]
     applicability: "Retrieval needing token-level matching with offline document encoding."
     curriculum_usage: { lessons: ["9.5"], labs: ["LAB-C"], assessments: ["Mastery-09"] }
   - id: CLM-008
@@ -100,8 +102,8 @@ claims:
     concepts: [recall_at_k, mrr, ndcg]
     confidence: high
     currentness_status: "REFERENCE / BASELINE"
-    assumptions: ["Judgments, cutoff, gain, discount, and unjudged-document policy are declared."]
-    derivation: "Recall@k divides retrieved relevant items by known relevant items; reciprocal rank uses the first relevant rank; nDCG normalizes discounted graded gain by the ideal ordering."
+    assumptions: ["Judgments, cutoff, gain, discount, and unjudged-document policy are declared.", "Module conventions: linear gain, log2(i+1) discount, unjudged documents scored as gain 0 and counted, zero-IDCG queries excluded from means and counted, system-score ties broken by ascending document ID."]
+    derivation: "Recall@k divides retrieved relevant items by known relevant items; reciprocal rank uses the first relevant rank; nDCG normalizes discounted graded gain by the ideal ordering over all judged items. With no relevant judgment IDCG is 0 and nDCG is undefined, so the handling rule changes the mean: in the module example 0.494 with the query excluded versus 0.329 with it scored as 0."
     limitations: ["Incomplete judgments and pooled labels bias all three differently."]
     applicability: "Offline retrieval evaluation aligned to search and downstream consumption."
     curriculum_usage: { lessons: ["9.6"], labs: ["LAB-D"], assessments: ["Mastery-09"] }
@@ -130,14 +132,14 @@ claims:
         title: "Apache Lucene BM25 and HNSW search implementation"
         repository: "https://github.com/apache/lucene"
         commit: "e357029271b3de560a6ff13c9cab4d4c8103b53b"
-        verification_date: "2026-09-26"
+        verification_date: "2026-09-30"
         file: "lucene/core/src/java/org/apache/lucene/search/similarities/BM25Similarity.java; lucene/core/src/java/org/apache/lucene/search/KnnFloatVectorQuery.java; lucene/core/src/java/org/apache/lucene/util/hnsw/HnswGraphSearcher.java"
         symbol: "BM25Similarity.idf; BM25Similarity.scorer; KnnFloatVectorQuery.approximateSearch; HnswGraphSearcher.search; HnswGraphSearcher.searchLevel"
         entry_point: "Lucene query/search execution"
         execution_path: "query weight/scorer or vector query -> approximate search -> HNSW graph traversal -> TopDocs"
         url: "https://github.com/apache/lucene/blob/e357029271b3de560a6ff13c9cab4d4c8103b53b/lucene/core/src/java/org/apache/lucene/search/similarities/BM25Similarity.java"
-        accessed_at: "2026-09"
-    limitations: ["Static inspection only; no Lucene workload was executed here.", "Lucene is one implementation, not the general definition of BM25, ANN, or filtered search."]
+        accessed_at: "2026-09-30"
+    limitations: ["Static inspection only; no Lucene workload was executed here.", "Lucene is one implementation, not the general definition of BM25, ANN, or filtered search.", "First read 2026-09-26; all three files and the listed symbols were re-read at the same commit on 2026-09-30."]
     applicability: "Production source-reading and implementation-specific behavior verification."
     curriculum_usage: { lessons: ["9.1", "9.3"], labs: ["LAB-A", "LAB-B"], assessments: ["Production-Source-Trace"] }
   - id: CLM-012
@@ -154,3 +156,120 @@ claims:
     limitations: ["Results are index/runtime/version specific."]
     applicability: "Tenant, ACL, date, language, and metadata-constrained vector search."
     curriculum_usage: { lessons: ["9.3"], labs: ["LAB-B"], assessments: ["Incident-09.1", "Mastery-09"] }
+  - id: CLM-013
+    claim: "At Apache Lucene commit e357029271b3de560a6ff13c9cab4d4c8103b53b, BM25Similarity.idf returns log(1 + (docCount - docFreq + 0.5)/(docFreq + 0.5)), which is always positive, and BM25Scorer.doScore computes weight - weight/(1 + freq * normInverse) with weight = boost * idf and normInverse = 1/(k1 * ((1 - b) + b * dl/avgdl)) taken from a 256-entry length table, so the scorer has no (k1+1) factor and uses a quantized document length."
+    provenance: VERIFIED_FACT
+    domain: runtime_implementation
+    concepts: [lucene, bm25_idf_convention, length_norm]
+    confidence: high
+    currentness_status: "CURRENT LUCENE SNAPSHOT"
+    evidence:
+      - source_type: source_code
+        tier: 1
+        title: "Apache Lucene BM25Similarity"
+        repository: "https://github.com/apache/lucene"
+        commit: "e357029271b3de560a6ff13c9cab4d4c8103b53b"
+        verification_date: "2026-09-30"
+        file: "lucene/core/src/java/org/apache/lucene/search/similarities/BM25Similarity.java"
+        symbol: "BM25Similarity.idf; BM25Similarity.scorer; BM25Similarity.BM25Scorer.doScore"
+        entry_point: "BM25Similarity.scorer(boost, fieldStats, termStats...)"
+        execution_path: "scorer -> idfExplain -> idf; scorer builds the norm cache -> BM25Scorer.score -> doScore"
+        url: "https://github.com/apache/lucene/blob/e357029271b3de560a6ff13c9cab4d4c8103b53b/lucene/core/src/java/org/apache/lucene/search/similarities/BM25Similarity.java"
+        accessed_at: "2026-09-30"
+      - { source_type: paper, tier: 1, title: "The Probabilistic Relevance Framework: BM25 and Beyond", authors: "Stephen Robertson, Hugo Zaragoza", year: "2009", url: "https://www.staff.city.ac.uk/~sbrp622/papers/foundations_bm25_review.pdf", section: "Eq. 3.2-3.3 (RSJ weight and IDF without relevance information), Eq. 3.12-3.13 (soft length normalisation and saturation)", accessed_at: "2026-09-30" }
+    limitations: ["Static inspection only; scores were not produced by running Lucene.", "The module's hand calculation uses the (k1+1) form and unquantized lengths, so it matches Lucene rankings for fixed k1 but not absolute scores.", "The contrast with the paper's log((N-n+0.5)/(n+0.5)) form, which is negative for n > N/2, is a derivation from the two formulas."]
+    applicability: "Reproducing or comparing BM25 scores across engines and papers."
+    curriculum_usage: { lessons: ["9.1"], labs: ["LAB-A"], assessments: ["Production-Source-Trace", "Mastery-09"] }
+    related_claims: ["CLM-001", "CLM-011"]
+  - id: CLM-014
+    claim: "At Apache Lucene commit e357029271b3de560a6ff13c9cab4d4c8103b53b, HnswGraphSearcher.searchLevel adds scored neighbors to the candidate queue regardless of the filter but collects them as results only when acceptOrds is null or accepts the node, and AbstractKnnVectorQuery.getLeafResults runs exact search when the filter cost is at most the per-leaf top-k, otherwise runs approximate search with a visit limit of cost + 1 and falls back to exact search when the approximate search terminates early or returns fewer than the per-leaf top-k results, except on timeout."
+    provenance: VERIFIED_FACT
+    domain: runtime_implementation
+    concepts: [lucene, filtered_ann, exact_fallback, visit_limit]
+    confidence: high
+    currentness_status: "CURRENT LUCENE SNAPSHOT"
+    evidence:
+      - source_type: source_code
+        tier: 1
+        title: "Apache Lucene filtered kNN search path"
+        repository: "https://github.com/apache/lucene"
+        commit: "e357029271b3de560a6ff13c9cab4d4c8103b53b"
+        verification_date: "2026-09-30"
+        file: "lucene/core/src/java/org/apache/lucene/search/AbstractKnnVectorQuery.java; lucene/core/src/java/org/apache/lucene/util/hnsw/HnswGraphSearcher.java"
+        symbol: "AbstractKnnVectorQuery.getLeafResults; AbstractKnnVectorQuery.exactSearch; HnswGraphSearcher.searchLevel"
+        entry_point: "AbstractKnnVectorQuery.getLeafResults(ctx, filterWeight, collectorManager)"
+        execution_path: "getLeafResults -> (cost <= perLeafTopK ? exactSearch : approximateSearch(visitedLimit = cost + 1)) -> reader.searchNearestVectors -> HnswGraphSearcher.search -> searchLevel -> candidates.add / results.collect -> fallback to exactSearch on early termination"
+        url: "https://github.com/apache/lucene/blob/e357029271b3de560a6ff13c9cab4d4c8103b53b/lucene/core/src/java/org/apache/lucene/search/AbstractKnnVectorQuery.java"
+        accessed_at: "2026-09-30"
+    limitations: ["Static inspection only; the codec path between searchNearestVectors and HnswGraphSearcher.search was not traced line by line.", "Search-strategy options and engines built on Lucene can change this behavior; it is not a general definition of filtered ANN.", "No latency or recall measurement was taken."]
+    applicability: "Explaining why selective filters can turn an ANN query into an exact scan in this implementation."
+    curriculum_usage: { lessons: ["9.3"], labs: ["LAB-B"], assessments: ["Production-Source-Trace", "Incident-09.1"] }
+    related_claims: ["CLM-011", "CLM-012"]
+  - id: CLM-015
+    claim: "HNSW Algorithm 2 (SEARCH-LAYER) maintains a visited set, a candidate set, and a dynamic result list W of size at most ef; it repeatedly extracts the nearest candidate, stops when that candidate is farther from the query than the farthest element of W, and otherwise adds each unvisited neighbor to both sets when it is closer than the farthest element of W or W has fewer than ef elements; Algorithm 5 runs upper layers with ef=1 and the base layer with the requested ef."
+    provenance: VERIFIED_FACT
+    domain: ann
+    concepts: [hnsw, search_layer, candidate_frontier, stop_rule]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "Efficient and robust approximate nearest neighbor search using Hierarchical Navigable Small World graphs", authors: "Yu. A. Malkov, D. A. Yashunin", year: "2018", url: "https://arxiv.org/abs/1603.09320", section: "Algorithm 2 (SEARCH-LAYER) and Algorithm 5 (K-NN-SEARCH)", accessed_at: "2026-09-30" }]
+    limitations: ["Implementations differ in data structures, similarity direction, filtering, and termination limits (see CLM-014).", "The module's seven-node trace is a hand-built single-layer graph, not an index produced by the construction algorithm."]
+    applicability: "Tracing why an approximate search missed an exact neighbor."
+    curriculum_usage: { lessons: ["9.3"], labs: ["LAB-B"], assessments: ["Mastery-09"] }
+    related_claims: ["CLM-003", "CLM-014"]
+  - id: CLM-016
+    claim: "ColBERT scores a query-document pair by late interaction: for each query token embedding it takes the maximum similarity over the document's token embeddings and sums these maxima; query and document are encoded separately, output embeddings are L2-normalized so the dot product equals cosine similarity, and queries are padded with [mask] tokens to a fixed length."
+    provenance: VERIFIED_FACT
+    domain: late_interaction
+    concepts: [maxsim, late_interaction, query_augmentation]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence: [{ source_type: paper, tier: 1, title: "ColBERT: Efficient and Effective Passage Search via Contextualized Late Interaction over BERT", authors: "Omar Khattab, Matei Zaharia", year: "2020", url: "https://arxiv.org/abs/2004.12832", section: "Section 3.1 (late interaction as a summation of MaxSim operators) and Section 3.2 (query and document encoders)", accessed_at: "2026-09-30" }]
+    limitations: ["The paper also evaluates squared L2 distance as the similarity.", "The module's 2-D token vectors are synthetic and omit query augmentation."]
+    applicability: "Distinguishing late interaction from single-vector dual encoders and from cross-encoders."
+    curriculum_usage: { lessons: ["9.5"], labs: ["LAB-C"], assessments: ["Mastery-09"] }
+    related_claims: ["CLM-006", "CLM-007"]
+  - id: CLM-017
+    claim: "ColBERTv2 couples residual compression with denoised supervision and reports, in its abstract, improved quality together with a substantially smaller late-interaction index footprint on the authors' benchmarks."
+    provenance: VERIFIED_FACT
+    domain: late_interaction
+    concepts: [multi_vector_compression, colbertv2]
+    confidence: medium
+    currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
+    evidence: [{ source_type: paper, tier: 1, title: "ColBERTv2: Effective and Efficient Retrieval via Lightweight Late Interaction", authors: "Keshav Santhanam, Omar Khattab, Jon Saad-Falcon, Christopher Potts, Matei Zaharia", year: "2022", version: "arXiv v3 (2022-07-10); NAACL 2022", url: "https://arxiv.org/abs/2112.01488", section: "Abstract only", accessed_at: "2026-09-30" }]
+    limitations: ["Abstract-level inspection only; the reported compression ratio is omitted because its corpus, hardware, and baseline context was not read."]
+    applicability: "Storage trade-off discussion for multi-vector retrieval."
+    curriculum_usage: { lessons: ["9.5"], labs: ["LAB-C"], assessments: [] }
+  - id: CLM-018
+    claim: "BRIGHT is a text-retrieval benchmark of 1,384 real-world queries built so that identifying relevant documents requires reasoning beyond keyword or semantic matching, according to its abstract."
+    provenance: VERIFIED_FACT
+    domain: evaluation
+    concepts: [reasoning_intensive_retrieval, benchmark_scope]
+    confidence: medium
+    currentness_status: "FRONTIER / BENCHMARK"
+    evidence: [{ source_type: paper, tier: 1, title: "BRIGHT: A Realistic and Challenging Benchmark for Reasoning-Intensive Retrieval", authors: "Hongjin Su, Howard Yen, Mengzhou Xia, Weijia Shi, Niklas Muennighoff, Han-yu Wang, Haisu Liu, Quan Shi, Zachary S. Siegel, Michael Tang, Ruoxi Sun, Jinsung Yoon, Sercan O. Arik, Danqi Chen, Tao Yu", year: "2025", version: "arXiv v4 (2025-03-26); v1 2024-07-16", url: "https://arxiv.org/abs/2407.12883", section: "Abstract only", accessed_at: "2026-09-30" }]
+    limitations: ["Abstract-level inspection only; no model results are cited.", "One benchmark does not define a production query mix."]
+    applicability: "Evidence that query type changes which retriever family is adequate."
+    curriculum_usage: { lessons: ["9.6"], labs: ["LAB-D"], assessments: [] }
+    related_claims: ["CLM-008"]
+  - id: CLM-019
+    claim: "Search-R1 trains an LLM with reinforcement learning to generate search queries during step-by-step reasoning with real-time retrieval, according to its abstract; it is a retrieval-agent research system, not an established production default."
+    provenance: VERIFIED_FACT
+    domain: retrieval_agents
+    concepts: [retrieval_agent, learned_query_generation]
+    confidence: medium
+    currentness_status: "FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "Search-R1: Training LLMs to Reason and Leverage Search Engines with Reinforcement Learning", authors: "Bowen Jin, Hansi Zeng, Zhenrui Yue, Jinsung Yoon, Sercan Arik, Dong Wang, Hamed Zamani, Jiawei Han", year: "2025", version: "arXiv v5 (2025-08-05); v1 2025-03-12", url: "https://arxiv.org/abs/2503.09516", section: "Abstract only", accessed_at: "2026-09-30" }]
+    limitations: ["Abstract-level inspection only; reported gains are not cited because their benchmark and baseline context was not read.", "Agent orchestration is taught in Modules 10 and 12, not here."]
+    applicability: "Frontier pointer for retrieval invoked inside reasoning loops."
+    curriculum_usage: { lessons: ["9.6"], labs: [], assessments: [] }
+  - id: CLM-020
+    claim: "TODO_VERIFY: learned sparse retrieval and LLM-based reranking or query representations have not been opened from primary sources in this revision; no specific result or currentness status is asserted."
+    provenance: TODO_VERIFY
+    domain: retrieval_frontier
+    concepts: [learned_sparse, llm_reranking]
+    confidence: low
+    currentness_status: "FRONTIER / UNVERIFIED"
+    limitations: ["Placeholder for a primary-source survey; must not support any required outcome."]
+    applicability: "Research backlog for the frontier source map."
+    curriculum_usage: { lessons: ["9.5"], labs: [], assessments: [] }

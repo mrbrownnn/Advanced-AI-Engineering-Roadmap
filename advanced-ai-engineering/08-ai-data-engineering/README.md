@@ -307,18 +307,41 @@ Split by the deployment unit and time before fitting transformations. Then audit
 
 Lee et al. provide scoped evidence that deduplication reduced memorized output and overlap in studied LM corpora (**O**, CLM-007). Dedup is not monotonically beneficial: legitimate templates, quotations, repeated events, and minority patterns can be removed. A clean result means “no match under this detector on these accessible snapshots,” not “never seen” (**D**, CLM-008).
 
-**Worked Example:**
-An exact matcher can miss a translated benchmark item; a loose semantic matcher can remove legitimate same-topic documents. Audit detector precision/recall on labeled pairs and report accessible-corpus scope instead of “zero contamination.”
+**Worked Example (synthetic labeled pair audit):**
+*Input.* Six benchmark–corpus pairs were labeled by hand as derived from the benchmark item (1) or not (0). Each pair has an embedding similarity score.
+
+| pair | relation | label | exact hash match | normalized hash match | embedding similarity |
+|---|---|---|---|---|---|
+| P1 | verbatim copy | 1 | yes | yes | 1.00 |
+| P2 | case/whitespace variant | 1 | no | yes | 0.99 |
+| P3 | paraphrase | 1 | no | no | 0.88 |
+| P4 | translation | 1 | no | no | 0.71 |
+| P5 | same topic, different content | 0 | no | no | 0.84 |
+| P6 | shared boilerplate template | 0 | no | no | 0.62 |
+
+*Steps.* Precision = flagged pairs that are truly derived ÷ flagged pairs. Recall = flagged derived pairs ÷ 4 derived pairs.
+
+| detector | flags | precision | recall |
+|---|---|---|---|
+| exact hash | P1 | 1.00 | 0.25 |
+| normalized hash | P1, P2 | 1.00 | 0.50 |
+| embedding ≥ 0.85 | P1, P2, P3 | 1.00 | 0.75 |
+| embedding ≥ 0.80 | P1, P2, P3, P5 | 0.75 | 0.75 |
+| embedding ≥ 0.70 | P1–P5 | 0.80 | 1.00 |
+
+*Result.* Exact matching reports "one contaminated item" while three derived items remain. No threshold on this score separates the translation (0.71) from the unrelated same-topic document (0.84), so full recall costs a false merge.
+
+*Interpretation and limits.* A "clean" report is a statement about one detector on one accessible snapshot. Six pairs are far too few to estimate a detector's rates, so a real audit needs a labeled sample sized for the decision. Removing P5 as a "duplicate" deletes legitimate training content.
 
 **Knowledge Check:**
 1. Why must grouped/time splits precede fitting transforms?
 2. What does a clean detector result fail to prove?
 
 **Guided Practice:**
-Construct exact, normalized, paraphrase, translation, entity-relative, and unrelated-hard-negative pairs. Compare matchers and inspect false merges/misses.
+(a) In the table above, compute precision and recall for embedding ≥ 0.60. (b) Construct exact, normalized, paraphrase, translation, entity-relative, and unrelated-hard-negative pairs. Compare matchers and inspect false merges/misses.
 
 **Feedback Contract:**
-- *Expected Evidence*: Equivalence definition, thresholds, labeled audit sample, clusters, removals, downstream deltas, and residual-risk statement.
+- *Expected Evidence*: (a) All six pairs are flagged: precision $4/6=0.667$, recall $4/4=1.0$. Lowering the threshold from 0.70 to 0.60 adds only a false merge (P6). (b) Equivalence definition, thresholds, labeled audit sample, clusters, removals, downstream deltas, and residual-risk statement.
 - *Common Failure*: Treating one matcher as complete or deduplication as monotonically beneficial.
 - *Diagnostic Hint*: Which transformation preserves benchmark information while defeating the detector?
 - *Concept to Revisit*: Detector-Relative Contamination.

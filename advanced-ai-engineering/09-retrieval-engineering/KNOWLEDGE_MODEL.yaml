@@ -1,5 +1,5 @@
 module: "09-retrieval-engineering"
-registry_version: "1.0.0"
+registry_version: "1.1.0"
 
 required_concepts:
   - "retrieval_contract"
@@ -60,8 +60,8 @@ mechanisms:
     evidence_ids: ["CLM-005"]
     derived_from: ["MECH-02", "MECH-03"]
   - id: "MECH-05"
-    description: "Rerankers and late-interaction models spend more work on a finite candidate set to improve ordering; candidates missing upstream remain unrecoverable."
-    evidence_ids: ["CLM-006", "CLM-007"]
+    description: "Rerankers and late-interaction models spend more work on a finite candidate set to improve ordering; candidates missing upstream remain unrecoverable. A cross-encoder encodes query and candidate jointly per pair; late interaction encodes them separately into per-token vectors and interacts only through MaxSim, so document vectors can be precomputed."
+    evidence_ids: ["CLM-006", "CLM-007", "CLM-016"]
     derived_from: ["MECH-04"]
   - id: "MECH-06"
     description: "Evaluation separates relevance quality, ANN approximation, and stage/end-to-end performance across query slices, filters, corpus snapshots, and load."
@@ -70,25 +70,33 @@ mechanisms:
 
 mathematical_models:
   - id: "MATH-01"
-    description: "BM25 term contribution uses IDF multiplied by saturated term frequency normalized by document length; k1, b, analyzer, field, and corpus statistics must be declared."
-    evidence_ids: ["CLM-001"]
+    description: "BM25 term contribution uses IDF multiplied by saturated term frequency normalized by document length; k1, b, analyzer, field, corpus statistics, and the IDF convention must be declared. ln((N-n+0.5)/(n+0.5)) is zero at n=N/2 and negative above it, while Lucene's ln(1+(N-n+0.5)/(n+0.5)) is always positive; on the module's four-document fixture the two conventions reverse the ranking."
+    evidence_ids: ["CLM-001", "CLM-013"]
     derived_from: ["MECH-02"]
   - id: "MATH-02"
     description: "ANN recall@k = |A_k intersection E_k|/|E_k| under identical vectors, metric, filter, snapshot, and tie policy; this is not relevance recall."
     evidence_ids: ["CLM-004"]
     derived_from: ["MECH-03"]
   - id: "MATH-03"
-    description: "RRF score(d)=sum_r w_r/(c+rank_r(d)); missing-item and duplicate-identity policies plus c, depth, and weights are explicit."
+    description: "RRF score(d)=sum_r w_r/(c+rank_r(d)); the original uses w_r=1 and c=60 over full permutations. Missing-item and duplicate-identity policies plus c, depth, weights, and the score-tie rule are explicit."
     evidence_ids: ["CLM-005"]
     derived_from: ["MECH-04"]
   - id: "MATH-04"
-    description: "Recall@k, reciprocal rank, and nDCG@k represent set coverage, first hit, and graded discounted gain respectively; judgment incompleteness remains a limitation."
+    description: "Recall@k, reciprocal rank, and nDCG@k represent set coverage, first hit, and graded discounted gain respectively; IDCG uses all judged items. Zero-IDCG queries, unjudged documents, and score ties need declared rules because each changes the reported mean; judgment incompleteness remains a limitation."
     evidence_ids: ["CLM-009"]
     derived_from: ["MECH-06"]
   - id: "MATH-05"
     description: "Serial stage latency adds on the critical path; parallel lexical/vector branches join by their maximum plus fusion/shared overhead, while all branch work affects capacity."
     evidence_ids: ["CLM-010"]
     derived_from: ["MECH-06"]
+  - id: "MATH-06"
+    description: "HNSW layer search state: visited set, candidate frontier C ordered nearest-first, and result list W of size at most ef. Stop when the nearest candidate is farther than the farthest element of W. A neighbor rejected from W is never expanded, which creates local minima; on the module's seven-node graph ANN recall@2 is 0.5 at ef=2 and 1.0 at ef=3."
+    evidence_ids: ["CLM-015"]
+    derived_from: ["MECH-03", "MATH-02"]
+  - id: "MATH-07"
+    description: "Late-interaction score S(q,d)=sum over query tokens of max over document tokens of the dot product of L2-normalized token embeddings. It preserves per-token match evidence that single-vector pooling averages away, at the cost of one stored vector per document token."
+    evidence_ids: ["CLM-016"]
+    derived_from: ["MECH-05"]
 
 implementation_mechanisms:
   - id: "IMPL-01"
@@ -100,8 +108,8 @@ implementation_mechanisms:
     evidence_ids: ["CLM-005", "CLM-006", "CLM-010"]
     derived_from: ["MECH-04", "MECH-05", "MECH-06"]
   - id: "IMPL-03"
-    description: "Pinned Lucene trace covers BM25Similarity.idf/scorer, KnnFloatVectorQuery.approximateSearch, and HnswGraphSearcher search/searchLevel."
-    evidence_ids: ["CLM-011"]
+    description: "Pinned Lucene trace covers BM25Similarity.idf/scorer/doScore (positive IDF, no (k1+1) factor, quantized length), KnnFloatVectorQuery.approximateSearch, HnswGraphSearcher search/searchLevel (filtered-out nodes are traversed but not collected), and AbstractKnnVectorQuery.getLeafResults (exact search for small filters, visit limit, exact fallback). Static inspection only."
+    evidence_ids: ["CLM-011", "CLM-013", "CLM-014"]
     derived_from: ["MECH-02", "MECH-03"]
 
 failure_modes:
@@ -114,8 +122,8 @@ failure_modes:
     evidence_ids: ["CLM-002", "CLM-003", "CLM-004"]
     derived_from: ["MECH-03", "MATH-02"]
   - id: "FAIL-03"
-    description: "Filtered ANN suffers recall/tail transitions, fallback storms, or ACL leakage when filter semantics and search strategy disagree."
-    evidence_ids: ["CLM-012"]
+    description: "Filtered ANN suffers recall/tail transitions, fallback storms, or ACL leakage when filter semantics and search strategy disagree. In the pinned Lucene path a selective filter can convert an approximate query into an exact scan."
+    evidence_ids: ["CLM-012", "CLM-014"]
     derived_from: ["MECH-03"]
   - id: "FAIL-04"
     description: "Hybrid fusion adds latency but no recall because branches return redundant candidates or identity normalization fragments duplicates."
@@ -129,6 +137,14 @@ failure_modes:
     description: "Offline metric improvement fails online because judgments, query mix, unjudged policy, freshness, latency, or user action differ."
     evidence_ids: ["CLM-008", "CLM-009", "CLM-010"]
     derived_from: ["MECH-06"]
+  - id: "FAIL-07"
+    description: "Convention mismatch: scores or metrics are compared across systems that use different IDF forms, analyzers, RRF constants, or zero-IDCG/unjudged/tie rules, so an apparent quality difference is a definitional artifact."
+    evidence_ids: ["CLM-005", "CLM-009", "CLM-013"]
+    derived_from: ["MATH-01", "MATH-03", "MATH-04"]
+  - id: "FAIL-08"
+    description: "Architecture confusion: late interaction is described or budgeted as a cross-encoder (or the reverse), leading to wrong assumptions about precomputation, storage, and per-query cost."
+    evidence_ids: ["CLM-006", "CLM-016"]
+    derived_from: ["MECH-05", "MATH-07"]
 
 production_connections:
   - id: "PROD-01"
@@ -142,12 +158,22 @@ production_connections:
 
 research_connections:
   - id: "RESEARCH-01"
-    description: "BEIR and later heterogeneous benchmarks reject universal retriever rankings; current choices remain workload-dependent."
-    evidence_ids: ["CLM-008"]
+    description: "BEIR and later benchmarks such as BRIGHT (reasoning-intensive queries) reject universal retriever rankings; current choices remain workload-dependent."
+    evidence_ids: ["CLM-008", "CLM-018"]
     derived_from: ["MECH-06"]
+  - id: "RESEARCH-02"
+    description: "Newer directions include compressed multi-vector retrieval and RL-trained retrieval agents (abstract-level evidence only). Learned sparse retrieval and LLM-based reranking are unverified in this revision and support no required outcome."
+    evidence_ids: ["CLM-017", "CLM-019", "CLM-020"]
+    derived_from: ["MECH-05"]
+
+todo_verify:
+  - id: "TODO-01"
+    description: "Open primary sources for learned sparse retrieval and LLM-based reranking/query representations before naming them in the frontier map."
+    evidence_ids: ["CLM-020"]
+    derived_from: ["RESEARCH-02"]
 
 candidate_capabilities:
-  - { capability: "Implement and explain lexical, dense, and exact/approximate candidate paths.", mapped_mechanisms: ["MECH-02", "MECH-03", "MATH-01", "MATH-02", "IMPL-03"] }
-  - { capability: "Build hybrid fusion and reranking with inspectable candidate lineage.", mapped_mechanisms: ["MECH-04", "MECH-05", "MATH-03", "IMPL-02"] }
-  - { capability: "Evaluate retrieval with relevance, approximation, and system boundaries separated.", mapped_mechanisms: ["MECH-06", "MATH-04", "MATH-05", "PROD-01"] }
+  - { capability: "Implement and explain lexical, dense, and exact/approximate candidate paths.", mapped_mechanisms: ["MECH-02", "MECH-03", "MATH-01", "MATH-02", "MATH-06", "IMPL-03"] }
+  - { capability: "Build hybrid fusion and reranking with inspectable candidate lineage.", mapped_mechanisms: ["MECH-04", "MECH-05", "MATH-03", "MATH-07", "IMPL-02", "FAIL-08"] }
+  - { capability: "Evaluate retrieval with relevance, approximation, and system boundaries separated.", mapped_mechanisms: ["MECH-06", "MATH-04", "MATH-05", "PROD-01", "FAIL-07"] }
   - { capability: "Diagnose filtered ANN and offline-to-online regressions.", mapped_mechanisms: ["FAIL-02", "FAIL-03", "FAIL-04", "FAIL-05", "FAIL-06", "PROD-02"] }

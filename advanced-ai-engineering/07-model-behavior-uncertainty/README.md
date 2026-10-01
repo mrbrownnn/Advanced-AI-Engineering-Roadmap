@@ -26,7 +26,7 @@ The module covers failure taxonomy, factuality/truthfulness measurement, calibra
 ## 01 Baseline Assumptions
 
 - **Module 00:** measurands, units, sampling frames, uncertainty intervals, preregistration, leakage, multiple comparisons, provenance, and falsification.
-- **Module 01:** logits, softmax, sampling, autoregressive likelihood, tokenization, and decoding controls.
+- **Module 01, Lesson 1.2:** logits, softmax with temperature, top-k/top-p sampling, the sampling contract, and autoregressive factorization over token IDs with sequence log-likelihood. Module 01 does not teach tokenization itself. The few tokenization facts this module needs (one string can map to different numbers of tokens, and a sequence score is a sum over tokens) are taught at first use in Lesson 7.2.
 - **Module 06:** candidate sampling, verifier fallibility, oracle-versus-selected accuracy, and test-time cost. This module uses these mechanisms only as uncertainty inputs.
 - **Mathematics:** conditional expectation, Bernoulli loss, binning, logarithms, and empirical distributions.
 - **Product contract:** an answer event, cost of wrong answer, cost of abstention/escalation, evidence authority, knowledge date, and target population must be declared.
@@ -211,6 +211,8 @@ $$
 It preserves argmax but changes probability sharpness (**O**, CLM-003). Fit $T$ only on calibration data, freeze it before testing, and repeat after shift. One scalar cannot generally correct task-, class-, language-, or subgroup-conditional errors.
 
 For free-form generation, declare how a scalar is constructed: selected-token log probability, length normalization, answer-option probability, prompted P(True), learned probe, verifier, or another signal. Jiang et al. show calibration problems in studied generative QA models (**O**, CLM-006); Kadavath et al. show promising but task-dependent P(True)/P(IK) behavior (**O**, CLM-007). Neither licenses universal self-confidence semantics.
+
+*Tokenization facts needed here (taught at first use).* A tokenizer maps text to a sequence of token IDs. The same answer can be expressed with different numbers of tokens, and one string can have more than one tokenization. A sequence log-likelihood is the sum of per-token log-probabilities (Module 01, Lesson 1.2), so it is a score for a *token sequence under one tokenizer*, not for an answer's correctness. Synthetic illustration: the answer "Paris" generated as 2 tokens with probabilities $0.9$ and $0.8$ has sequence probability $0.72$ ($-0.329$ nats). The equally correct "The capital is Paris" generated as 4 tokens with probabilities $0.9, 0.8, 0.7, 0.9$ has $0.4536$ ($-0.790$ nats). Length normalization (mean log-probability) gives $-0.164$ and $-0.198$ nats, which is closer but still different. Two consequences follow: raw and length-normalized likelihoods rank equally correct answers differently, and a tokenizer or chat-template revision changes these scores without any change in correctness. Pin the tokenizer revision with the confidence definition.
 
 **Worked Example (synthetic exercise data):**
 *Input.* One model answered 10 held-out questions; $y_i=1$ means the answer was labeled correct, so the answer accuracy is $6/10$ for both forecasters. Two confidence constructions, A and B, forecast the same events:
