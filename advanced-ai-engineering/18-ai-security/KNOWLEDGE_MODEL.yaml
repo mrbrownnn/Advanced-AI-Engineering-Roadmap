@@ -1,7 +1,7 @@
 module: "18-ai-security"
-registry_version: "1.1.0"
+registry_version: "1.2.0"
 
-required_concepts: [threat_model, trust_boundary, source_sink_graph, direct_prompt_injection, indirect_prompt_injection, retrieval_poisoning, jailbreak, prompt_level_defense, detector, adaptive_attack, confused_deputy, excessive_agency, capability, control_data_separation, improper_output_handling, sandbox, egress_control, budget_reservation, authenticated_principal, security_evaluation, audit_trail]
+required_concepts: [threat_model, trust_boundary, source_sink_graph, direct_prompt_injection, indirect_prompt_injection, retrieval_poisoning, jailbreak, prompt_level_defense, detector, adaptive_attack, confused_deputy, excessive_agency, capability, control_data_separation, improper_output_handling, sandbox, egress_control, budget_reservation, authenticated_principal, security_evaluation, audit_trail, tool_metadata_poisoning, tool_selection_attack, memory_poisoning, visual_prompt_injection, manifest_pinning, memory_provenance]
 prerequisite_concepts: [tool_contract, authorization_policy, retrieval_pipeline, structured_output, validation_ladder, durable_effect, falsification_contract, adaptive_search, experimental_unit, release_gate]
 first_occurrence_concepts: [threat_model, source_sink_graph, indirect_prompt_injection, retrieval_poisoning, adaptive_attack, confused_deputy, control_data_separation, egress_control]
 
@@ -14,6 +14,12 @@ concept_dependencies:
   - { concept: control_data_separation, depends_on: [confused_deputy, capability] }
   - { concept: improper_output_handling, depends_on: [structured_output, validation_ladder] }
   - { concept: budget_reservation, depends_on: [tool_contract, authenticated_principal] }
+  - { concept: tool_metadata_poisoning, depends_on: [indirect_prompt_injection, tool_contract] }
+  - { concept: tool_selection_attack, depends_on: [retrieval_poisoning, tool_contract] }
+  - { concept: memory_poisoning, depends_on: [indirect_prompt_injection, retrieval_pipeline] }
+  - { concept: visual_prompt_injection, depends_on: [indirect_prompt_injection] }
+  - { concept: manifest_pinning, depends_on: [tool_metadata_poisoning, capability] }
+  - { concept: memory_provenance, depends_on: [memory_poisoning, authenticated_principal] }
   - { concept: security_evaluation, depends_on: [falsification_contract, adaptive_attack, experimental_unit, release_gate] }
 
 mechanisms:
@@ -24,6 +30,8 @@ mechanisms:
   - { id: "MECH-05", description: "Output handling applies interpreter defenses, sandboxing, and one egress proxy that authorizes destination before lookup, checks resolved addresses, and reapplies policy to redirects.", evidence_ids: ["CLM-012", "CLM-018", "CLM-021", "CLM-022"], derived_from: ["MECH-01"] }
   - { id: "MECH-06", description: "A reservation ledger maintains C+R<=B before dispatch for every hard resource, is keyed by authenticated principal, and applies a cross-episode principal limit in addition to episode limits.", evidence_ids: ["CLM-017", "CLM-020"], derived_from: ["MECH-04", "MECH-05"] }
   - { id: "MECH-07", description: "Security evaluation records benign utility, utility under attack, static ASR, and adaptive ASR under aligned protocols; it uses Pareto dominance only when no declared metric regresses and otherwise selects by a predeclared objective.", evidence_ids: ["CLM-013", "CLM-014", "CLM-019", "CLM-020"], derived_from: ["MECH-03", "MECH-04"] }
+  - { id: "MECH-08", description: "Agent-specific channels deliver attacker text with elevated standing: tool metadata read as configuration at registration, crafted tool documents chosen by retrieval and selection, memory records read as past experience across tasks or users, and rendered screen content read by computer-use agents.", evidence_ids: ["CLM-023", "CLM-024", "CLM-025", "CLM-026", "CLM-027", "CLM-028"], derived_from: ["MECH-02"] }
+  - { id: "MECH-09", description: "Derived channel controls move authority out of the model: content-hash pinning of reviewed tool manifests, tool allowlists per capability, memory partition by authenticated principal with write and observation provenance, and the gateway and egress proxy applied to OS actions; their adaptive robustness is a hypothesis.", evidence_ids: ["CLM-032", "CLM-033"], derived_from: ["MECH-04", "MECH-08"] }
 
 mathematical_models:
   - { id: "MATH-01", description: "Attack-path count is a completeness aid over untrusted-source and reachable-sink pairs after authorization filtering, not a risk score.", evidence_ids: ["CLM-001", "CLM-020"], derived_from: ["MECH-01"] }
@@ -46,6 +54,9 @@ failure_modes:
   - { id: "FAIL-06", description: "Iteration-count cost formula omits tool fan-out, nested retries, context growth, token caps, or unit-price caps and is presented as a bound.", evidence_ids: ["CLM-017"], derived_from: ["MECH-06"] }
   - { id: "FAIL-07", description: "Episode-only or content-selected ledger key lets attacker reset or switch budget; non-atomic parallel admission exceeds the invariant.", evidence_ids: ["CLM-017", "CLM-020"], derived_from: ["MECH-06"] }
   - { id: "FAIL-08", description: "A lower-ASR configuration is called dominant despite lower benign utility, or it is chosen without an explicit objective.", evidence_ids: ["CLM-019", "CLM-020"], derived_from: ["MECH-07"] }
+  - { id: "FAIL-09", description: "Configuration-trust failure: tool descriptions or tool documents from third parties are treated as trusted configuration, so a description can redirect calls or arguments of legitimate high-privilege tools.", evidence_ids: ["CLM-023", "CLM-024", "CLM-025"], derived_from: ["MECH-08"] }
+  - { id: "FAIL-10", description: "Persistent memory poisoning: records written from attacker queries or observed pages are later retrieved as trusted experience, crossing tasks, sites, or users and escaping per-task permissions.", evidence_ids: ["CLM-026", "CLM-027"], derived_from: ["MECH-08"] }
+  - { id: "FAIL-11", description: "Defense credit from static or prompt-level evaluation: system prompts, guardrail filters, and detectors that look effective on fixed cases fail or behave inconsistently under adaptive or channel-specific attacks.", evidence_ids: ["CLM-024", "CLM-028", "CLM-029", "CLM-030", "CLM-031"], derived_from: ["MECH-03"] }
 
 production_connections:
   - { id: "PROD-01", description: "Recommended engineering baseline combines path minimization, per-action authority, destination-enforcing egress, principal-keyed reservation ledger, probabilistic depth, and audit; industry prevalence is not established.", evidence_ids: ["CLM-010", "CLM-012", "CLM-015", "CLM-017", "CLM-018"], derived_from: ["MECH-04", "MECH-05", "MECH-06"] }
@@ -54,10 +65,11 @@ production_connections:
 research_connections:
   - { id: "RESEARCH-01", description: "PoisonedRAG's full experiment separates top-k retrieval from target-answer ASR over fixed datasets/models; its rates are author-reported and workload-specific.", evidence_ids: ["CLM-004"], derived_from: ["MECH-02"] }
   - { id: "RESEARCH-02", description: "Spotlighting's static gains, adaptive evaluation of 12 defenses, and CaMeL's design/utility results are retained with versioned experiment cards rather than headline-only rates.", evidence_ids: ["CLM-006", "CLM-007", "CLM-011"], derived_from: ["MECH-03", "MECH-04"] }
+  - { id: "RESEARCH-03", description: "2025-2026 primary papers establish tool-metadata, tool-selection, memory, and visual injection channels and stronger adaptive evaluation; one small reproduction reports an out-of-band policy holding against one adaptive template.", evidence_ids: ["CLM-023", "CLM-025", "CLM-026", "CLM-027", "CLM-028", "CLM-029", "CLM-030", "CLM-031"], derived_from: ["MECH-08", "MECH-03"] }
 
 todo_verify:
   - { id: "TODO-01", description: "Industry prevalence of recommended Module 18 controls was not surveyed; do not label them current industry defaults.", evidence_ids: [], derived_from: ["PROD-01"] }
-  - { id: "TODO-02", description: "No 2026 primary agent-security paper was opened in this revision; the frontier is scoped to opened sources through 2025.", evidence_ids: [], derived_from: ["RESEARCH-02"] }
+  - { id: "TODO-02", description: "The 2025-2026 search was targeted, not a survey; many listed papers on the same channels (multimodal, audio, MCP defenses, memory defenses) were not opened and are not cited.", evidence_ids: [], derived_from: ["RESEARCH-03"] }
   - { id: "TODO-03", description: "Exact AgentDojo suite version behind CaMeL's 949 attack cases and the meaning of Table 2 plus/minus values remain unresolved.", evidence_ids: ["CLM-011"], derived_from: ["RESEARCH-02"] }
   - { id: "TODO-04", description: "Pinned AgentDojo error-pair treatment in published aggregation was not traced beyond runner assignment; no source path was executed.", evidence_ids: ["CLM-014"], derived_from: ["IMPL-03"] }
 
@@ -66,4 +78,5 @@ candidate_capabilities:
   - { capability: "Execute injection and poisoning in a sandbox with conditional denominators, controls, and provenance.", mapped_mechanisms: ["MECH-02", "MATH-02", "FAIL-02"] }
   - { capability: "Evaluate probabilistic defenses against adaptive attackers without assuming independent layers.", mapped_mechanisms: ["MECH-03", "MATH-03", "FAIL-03"] }
   - { capability: "Design per-action authority, destination-enforcing egress, and principal-keyed budget reservation.", mapped_mechanisms: ["MECH-04", "MECH-05", "MECH-06", "IMPL-01", "IMPL-02", "FAIL-04", "FAIL-05", "FAIL-06", "FAIL-07"] }
+  - { capability: "Map agent-specific attack channels to source, sink, authority, and a derived out-of-model control, and test each control in a sandbox under a stated adaptive budget.", mapped_mechanisms: ["MECH-08", "MECH-09", "FAIL-09", "FAIL-10", "FAIL-11", "RESEARCH-03"] }
   - { capability: "Make a utility-aware security release decision and trace its benchmark implementation.", mapped_mechanisms: ["MECH-07", "MATH-05", "IMPL-03", "FAIL-08"] }
