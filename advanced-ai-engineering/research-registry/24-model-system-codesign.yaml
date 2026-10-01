@@ -1,0 +1,322 @@
+module: "24-model-system-codesign"
+registry_version: "1.0.0"
+previous_version: ""
+research_cutoff: "2026-09-30"
+change_reason: "Replace outline with evidence-backed model-system co-design curriculum under AUD-N24."
+changed_claims: [CLM-001, CLM-002, CLM-003, CLM-004, CLM-005, CLM-006, CLM-007, CLM-008, CLM-009, CLM-010, CLM-011, CLM-012, CLM-013, CLM-014, CLM-015, CLM-016, CLM-017, CLM-018, CLM-019, CLM-020, CLM-021, CLM-022]
+out_of_scope_candidates:
+  - "Detailed distributed inference algorithms belong to Module 20 — Distributed Inference."
+  - "Fleet pricing, utilization accounting, and fully loaded cost practice belong to Module 22 — AI Economics."
+  - "2026 source implementations for frontier MoE topology papers remain TODO_VERIFY before being treated as production defaults."
+
+claims:
+  - id: CLM-001
+    claim: "GQA uses an intermediate number of key-value heads—more than one and fewer than query heads—and its authors report that their uptrained GQA models approach MHA quality with speed comparable to MQA on the evaluated settings."
+    provenance: VERIFIED_FACT
+    domain: attention_architecture
+    concepts: [mha, mqa, gqa, quality_tradeoff]
+    confidence: high
+    currentness_status: "WORKLOAD-DEPENDENT"
+    evidence:
+      - { source_type: paper, tier: 1, title: "GQA: Training Generalized Multi-Query Transformer Models from Multi-Head Checkpoints", authors: "Joshua Ainslie, James Lee-Thorp, Michiel de Jong, Yury Zemlyanskiy, Federico Lebrón, Sumit Sanghai", year: "2023", url: "https://arxiv.org/abs/2305.13245", section: "Abstract; EMNLP 2023", accessed_at: "2026-09-30" }
+    limitations: ["Quality and speed are author-reported for evaluated models and tasks, not universal guarantees."]
+    applicability: "Architecture-to-system screening for MHA/MQA/GQA."
+    curriculum_usage: { lessons: ["24.1", "24.2"], labs: ["LAB-A"], assessments: ["Mastery-24"] }
+
+  - id: CLM-002
+    claim: "Under uniform uncompressed decoder attention, logical retained KV payload per token is 2 × layers × KV heads × head dimension × bytes per element; lowering KV-head count lowers this payload but does not remove query/output projection work or attention over retained positions."
+    provenance: DERIVED
+    domain: attention_accounting
+    concepts: [kv_payload, gqa, resource_vector]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions: ["Uniform decoder self-attention; separate K and V; identical storage dtype; no padding, metadata, sharding, sharing, quantization scales, or hybrid layers."]
+    derivation: "Each layer retains one K and one V vector of H_kv × d_h elements per token. Multiply by L layers and b bytes/element. Q and O widths are functions of query heads and hidden size and therefore do not shrink by the same ratio."
+    limitations: ["Logical payload is not allocator occupancy.", "Formula does not apply to MLA retained state."]
+    applicability: "Analytical attention-state comparison before runtime measurement."
+    related_claims: [CLM-001, CLM-003, CLM-009]
+    curriculum_usage: { lessons: ["24.1", "24.2"], labs: ["LAB-A"], assessments: ["Mastery-24"] }
+
+  - id: CLM-003
+    claim: "DeepSeek-V2 MLA retains a compressed KV latent plus a decoupled RoPE key; its paper reports retained state equal to GQA with 2.25 groups for the published configuration, and its matched ablations report better evaluated quality than MHA while using fewer KV elements."
+    provenance: VERIFIED_FACT
+    domain: latent_attention
+    concepts: [mla, retained_state, quality_tradeoff]
+    confidence: high
+    currentness_status: "WORKLOAD-DEPENDENT"
+    evidence:
+      - { source_type: paper, tier: 1, title: "DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model", authors: "DeepSeek-AI", year: "2024", url: "https://arxiv.org/abs/2405.04434", section: "Sections 2.1.2–2.1.4; Appendix D; Tables 1 and 9", accessed_at: "2026-09-30" }
+    limitations: ["Ablations use the paper's trained models and benchmark suite.", "Runtime layout, padding, and dtype can change stored bytes."]
+    applicability: "MLA accounting and quality gate design."
+    related_claims: [CLM-002, CLM-004, CLM-017]
+    curriculum_usage: { lessons: ["24.1", "24.2"], labs: ["LAB-A"], assessments: ["Mastery-24"] }
+
+  - id: CLM-004
+    claim: "For DeepSeek-V3, the published architecture has 61 layers, 128 attention heads, KV latent dimension 512, decoupled RoPE dimension 64, 256 routed experts, one shared expert, and eight routed experts selected per token, with routing limited to at most four nodes."
+    provenance: VERIFIED_FACT
+    domain: architecture_configuration
+    concepts: [mla, moe, node_limited_routing, topology]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence:
+      - { source_type: paper, tier: 1, title: "DeepSeek-V3 Technical Report", authors: "DeepSeek-AI", year: "2024", url: "https://arxiv.org/abs/2412.19437", section: "Sections 2.1, 2.1.1, 2.1.2, and 4.2 Model Hyper-Parameters", accessed_at: "2026-09-30" }
+      - { source_type: source_code, tier: 1, title: "DeepSeek-V3 released configuration", repository: "https://huggingface.co/deepseek-ai/DeepSeek-V3", commit: "e815299b0bcbac849fa540c768ef21845365c9eb", verification_date: "2026-09-30", file: "config.json", symbol: "num_hidden_layers; num_attention_heads; kv_lora_rank; qk_rope_head_dim; n_routed_experts; n_shared_experts; num_experts_per_tok; n_group; topk_group", entry_point: "AutoConfig.from_pretrained('deepseek-ai/DeepSeek-V3', revision=commit)", execution_path: "configuration fields select MLA and MoE model construction in compatible runtimes", url: "https://huggingface.co/deepseek-ai/DeepSeek-V3/blob/e815299b0bcbac849fa540c768ef21845365c9eb/config.json", accessed_at: "2026-09-30" }
+    limitations: ["Config values describe one checkpoint; they do not prove runtime behavior or deployment prevalence."]
+    applicability: "Concrete MoE+MLA source-anchored case study."
+    curriculum_usage: { lessons: ["24.2", "24.4", "24.6"], labs: ["LAB-B", "LAB-D"], assessments: ["Mastery-24"] }
+
+  - id: CLM-005
+    claim: "DeepSeek-V3's reported online deployment uses different prefill and decode layouts: prefill uses TP4/SP, DP8, and EP32 on 32 GPUs; decode uses TP4/SP, DP80, and EP320 on 320 GPUs, with one expert per GPU and direct point-to-point all-to-all."
+    provenance: VERIFIED_FACT
+    domain: phase_topology
+    concepts: [prefill_decode, expert_parallelism, topology, scheduler]
+    confidence: high
+    currentness_status: "WORKLOAD-DEPENDENT"
+    evidence:
+      - { source_type: paper, tier: 1, title: "DeepSeek-V3 Technical Report", authors: "DeepSeek-AI", year: "2024", url: "https://arxiv.org/abs/2412.19437", section: "Section 3.4 Inference and Deployment", accessed_at: "2026-09-30" }
+    limitations: ["Author-reported deployment on an H800 cluster; not a default recipe.", "Detailed distributed mechanisms belong to Module 20."]
+    applicability: "Evidence that architecture, phase, and topology are selected jointly."
+    related_claims: [CLM-004, CLM-007, CLM-018]
+    curriculum_usage: { lessons: ["24.4", "24.5"], labs: ["LAB-B"], assessments: ["Mastery-24"] }
+
+  - id: CLM-006
+    claim: "A sparse MoE reduces selected expert computation relative to executing every expert, but all selected tokens must still be dispatched to expert placements and combined; total, resident, selected, and executed parameters are different quantities."
+    provenance: DERIVED
+    domain: moe_accounting
+    concepts: [moe, total_parameters, active_parameters, communication]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions: ["Top-k routing; experts reside on one or more devices; selected experts execute on routed token states."]
+    derivation: "With E experts and top-k routing, expert matrix work selected per token scales with k rather than E, while the checkpoint contains all E experts and a distributed placement moves each selected token state to the owner and returns an output."
+    limitations: ["Padding, shared experts, capacity, routing balance, quantization, and kernels alter executed work and bytes."]
+    applicability: "Dense-versus-MoE resource-vector comparison."
+    related_claims: [CLM-004, CLM-007]
+    curriculum_usage: { lessons: ["24.1", "24.4"], labs: ["LAB-B"], assessments: ["Mastery-24"] }
+
+  - id: CLM-007
+    claim: "DeepSeek-V3 node-limited routing bounds each token to at most four nodes; the authors explain that this exploits faster intra-node links to deduplicate slower inter-node traffic while keeping the quality effect inside model training and validation."
+    provenance: VERIFIED_FACT
+    domain: topology_aware_routing
+    concepts: [node_limited_routing, expert_parallelism, interconnect]
+    confidence: high
+    currentness_status: "WORKLOAD-DEPENDENT"
+    evidence:
+      - { source_type: paper, tier: 1, title: "DeepSeek-V3 Technical Report", authors: "DeepSeek-AI", year: "2024", url: "https://arxiv.org/abs/2412.19437", section: "Section 2.1.2 Node-Limited Routing; Section 3.2.2", accessed_at: "2026-09-30" }
+      - { source_type: paper, tier: 1, title: "Insights into DeepSeek-V3: Scaling Challenges and Reflections on Hardware for AI Architectures", authors: "Chenggang Zhao et al.", year: "2025", url: "https://arxiv.org/abs/2505.09343", section: "Section 4.3 Model Co-Design: Node-Limited Routing", accessed_at: "2026-09-30" }
+    limitations: ["Specific to the model, H800 topology, and training/evaluation described.", "It does not prove four nodes is optimal elsewhere."]
+    applicability: "Tie expert routing constraints to topology tiers."
+    related_claims: [CLM-004, CLM-005]
+    curriculum_usage: { lessons: ["24.4"], labs: ["LAB-B"], assessments: ["Mastery-24"] }
+
+  - id: CLM-008
+    claim: "A Roofline screen bounds attainable performance by min(compute ceiling, bandwidth × arithmetic intensity), but the conclusion is valid only for matched work, byte boundary, precision path, and attainable ceilings; measured execution can be limited by other ceilings."
+    provenance: VERIFIED_FACT
+    domain: bottleneck_model
+    concepts: [roofline, arithmetic_intensity, bottleneck]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence:
+      - { source_type: paper, tier: 1, title: "Roofline: An Insightful Visual Performance Model for Multicore Architectures", authors: "Samuel Williams, Andrew Waterman, David Patterson", year: "2009", url: "https://escholarship.org/uc/item/78h8v7mr", section: "Roofline model definition", accessed_at: "2026-09-30" }
+    limitations: ["Analytical ceiling, not measured root cause or latency guarantee."]
+    applicability: "Regime prediction before profiler validation."
+    curriculum_usage: { lessons: ["24.1", "24.3"], labs: ["LAB-C"], assessments: ["Mastery-24"] }
+
+  - id: CLM-009
+    claim: "At pinned vLLM commit 25b0add7b8a1c944d5c4e364f2de6aa82497a2ad, standard decoder attention builds FullAttentionSpec from runtime-local KV heads, head sizes, dtype, and block size; AttentionSpec computes dense K/V state bytes and page bytes from those fields."
+    provenance: VERIFIED_FACT
+    domain: runtime_source
+    concepts: [vllm, kv_cache_spec, gqa, page_size]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "vLLM attention KV-cache specification", repository: "https://github.com/vllm-project/vllm", commit: "25b0add7b8a1c944d5c4e364f2de6aa82497a2ad", verification_date: "2026-09-30", file: "vllm/model_executor/layers/attention/attention.py", symbol: "Attention.get_kv_cache_spec", entry_point: "GPUModelRunner.get_kv_cache_spec", execution_path: "GPUModelRunner.get_kv_cache_spec -> Attention.get_kv_cache_spec -> FullAttentionSpec", url: "https://github.com/vllm-project/vllm/blob/25b0add7b8a1c944d5c4e364f2de6aa82497a2ad/vllm/model_executor/layers/attention/attention.py", accessed_at: "2026-09-30" }
+      - { source_type: source_code, tier: 1, title: "vLLM KV cache interface", repository: "https://github.com/vllm-project/vllm", commit: "25b0add7b8a1c944d5c4e364f2de6aa82497a2ad", verification_date: "2026-09-30", file: "vllm/v1/kv_cache_interface.py", symbol: "AttentionSpec.state_content_size_bytes; AttentionSpec.unpadded_page_size_bytes; FullAttentionSpec.max_memory_usage_bytes", entry_point: "Attention.get_kv_cache_spec", execution_path: "FullAttentionSpec fields -> state_content_size_bytes -> page_size_bytes -> maximum memory requirement", url: "https://github.com/vllm-project/vllm/blob/25b0add7b8a1c944d5c4e364f2de6aa82497a2ad/vllm/v1/kv_cache_interface.py", accessed_at: "2026-09-30" }
+    limitations: ["Static inspection; not executed.", "CURRENT DEFAULT is scoped only to this vLLM snapshot."]
+    applicability: "Required production source trace for attention architecture to physical KV pages."
+    related_claims: [CLM-002, CLM-010]
+    curriculum_usage: { lessons: ["24.2"], labs: ["LAB-D"], assessments: ["Production-Source-Trace"] }
+
+  - id: CLM-010
+    claim: "At the same vLLM commit, MLA sets one KV head with head size equal to KV latent rank plus RoPE head dimension and no separate value state; its MLAAttentionSpec can further use packed state bytes and alignment, so MLA page size is not inferred from a generic GQA head count."
+    provenance: VERIFIED_FACT
+    domain: runtime_source
+    concepts: [vllm, mla, kv_cache_spec, retained_state]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "vLLM MLA attention cache specification", repository: "https://github.com/vllm-project/vllm", commit: "25b0add7b8a1c944d5c4e364f2de6aa82497a2ad", verification_date: "2026-09-30", file: "vllm/model_executor/layers/attention/mla_attention.py", symbol: "MLAAttention.__init__; MLAAttention.get_kv_cache_spec", entry_point: "GPUModelRunner.get_kv_cache_spec", execution_path: "DeepSeekV2MLAAttention constructs MLAAttention with kv_lora_rank and qk_rope_head_dim -> MLAAttention.head_size -> MLAAttention.get_kv_cache_spec -> MLAAttentionSpec", url: "https://github.com/vllm-project/vllm/blob/25b0add7b8a1c944d5c4e364f2de6aa82497a2ad/vllm/model_executor/layers/attention/mla_attention.py", accessed_at: "2026-09-30" }
+      - { source_type: source_code, tier: 1, title: "vLLM MLA KV cache interface", repository: "https://github.com/vllm-project/vllm", commit: "25b0add7b8a1c944d5c4e364f2de6aa82497a2ad", verification_date: "2026-09-30", file: "vllm/v1/kv_cache_interface.py", symbol: "MLAAttentionSpec; _apply_alignment_padding", entry_point: "MLAAttention.get_kv_cache_spec", execution_path: "MLAAttentionSpec head_size_v=0 -> AttentionSpec.state_content_size_bytes -> optional alignment padding -> page_size_bytes", url: "https://github.com/vllm-project/vllm/blob/25b0add7b8a1c944d5c4e364f2de6aa82497a2ad/vllm/v1/kv_cache_interface.py", accessed_at: "2026-09-30" }
+    limitations: ["Static inspection; packed formats and future model variants can change the exact fields.", "One code path is not an industry default."]
+    applicability: "Required production source trace for MLA retained state."
+    related_claims: [CLM-003, CLM-009, CLM-011]
+    curriculum_usage: { lessons: ["24.2"], labs: ["LAB-D"], assessments: ["Production-Source-Trace"] }
+
+  - id: CLM-011
+    claim: "At the same vLLM commit, GPUModelRunner obtains per-layer KV specs, cache grouping computes bytes per physical block and floor(available bytes / bytes per block), and maximum concurrency is computed from whole blocks required by each request at max model length."
+    provenance: VERIFIED_FACT
+    domain: runtime_source
+    concepts: [vllm, capacity, scheduler, block_rounding]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "vLLM GPU model runner cache-spec entry", repository: "https://github.com/vllm-project/vllm", commit: "25b0add7b8a1c944d5c4e364f2de6aa82497a2ad", verification_date: "2026-09-30", file: "vllm/v1/worker/gpu_model_runner.py", symbol: "GPUModelRunner.get_kv_cache_spec", entry_point: "GPU worker KV-cache initialization", execution_path: "static forward context layers -> AttentionLayerBase.get_kv_cache_spec -> backend customize_spec -> per-layer dictionary", url: "https://github.com/vllm-project/vllm/blob/25b0add7b8a1c944d5c4e364f2de6aa82497a2ad/vllm/v1/worker/gpu_model_runner.py", accessed_at: "2026-09-30" }
+      - { source_type: source_code, tier: 1, title: "vLLM KV cache grouping and concurrency", repository: "https://github.com/vllm-project/vllm", commit: "25b0add7b8a1c944d5c4e364f2de6aa82497a2ad", verification_date: "2026-09-30", file: "vllm/v1/core/kv_cache_utils.py", symbol: "_get_kv_cache_bytes_per_block; get_kv_cache_config_from_groups; get_max_concurrency_for_kv_cache_config", entry_point: "get_kv_cache_configs", execution_path: "per-worker specs -> cache groups -> bytes_per_block -> num_blocks -> max blocks/request -> maximum concurrency", url: "https://github.com/vllm-project/vllm/blob/25b0add7b8a1c944d5c4e364f2de6aa82497a2ad/vllm/v1/core/kv_cache_utils.py", accessed_at: "2026-09-30" }
+    limitations: ["Static inspection; capacity at max_model_len is not workload goodput.", "Scheduler decisions and measured non-KV allocations remain separate."]
+    applicability: "Trace representation into capacity metadata; then connect to scheduling measurements."
+    related_claims: [CLM-009, CLM-010, CLM-014]
+    curriculum_usage: { lessons: ["24.2", "24.3"], labs: ["LAB-D"], assessments: ["Production-Source-Trace", "Mastery-24"] }
+
+  - id: CLM-012
+    claim: "For a fixed implementation and resource demand vector, an architectural change moves a bottleneck only if a different normalized constraint becomes maximal after remeasurement; reducing one demand component can leave the same limiter, expose another limiter, or change no SLO-constrained goodput."
+    provenance: DERIVED
+    domain: bottleneck_transition
+    concepts: [normalized_pressure, bottleneck_shift, goodput]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    assumptions: ["Candidate configurations use the same metric boundaries and workload contract.", "Capacity and demand terms are measured or explicitly modeled with uncertainty."]
+    derivation: "Define p_r=D_r/C_r for memory, compute, communication, scheduler, and host resources. The screen's active constraint is argmax p_r. Recompute all p_r after the architecture change; a shift occurs only when the ordering changes. Goodput still depends on latency and quality gates, so pressure reduction alone is insufficient."
+    limitations: ["Resources can interact and multiple pressures can be near one.", "Normalized pressure is a screen, not a causal proof."]
+    applicability: "Cross-layer bottleneck-stay/move analysis."
+    related_claims: [CLM-008, CLM-014]
+    curriculum_usage: { lessons: ["24.1", "24.3", "24.6"], labs: ["LAB-C"], assessments: ["Mastery-24", "Incident-24.1"] }
+
+  - id: CLM-013
+    claim: "A valid architecture comparison uses one versioned experiment contract for workload, model-quality evaluation, SLOs, cost boundary, failure treatment, and uncertainty; changing the traffic distribution or quality suite between candidates destroys attribution."
+    provenance: DERIVED
+    domain: matched_comparison
+    concepts: [matched_workload, quality_gate, experiment_contract]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Architecture candidates target the same product behavior.", "Any unavoidable model-specific preprocessing difference is recorded rather than hidden."]
+    derivation: "Architecture can change generated behavior and system service. If candidates see different request populations or evaluation instruments, observed deltas combine treatment effects with population/instrument drift. One contract makes quality a hard gate and permits conditional comparison of performance and cost only among passing candidates."
+    limitations: ["Some architecture changes require retraining and cannot be paired at token-level outputs; pair prompts and evaluation units instead."]
+    applicability: "Every lab and release decision in this module."
+    related_claims: [CLM-001, CLM-003, CLM-015, CLM-016]
+    curriculum_usage: { lessons: ["24.5", "24.6"], labs: ["LAB-A", "LAB-B", "LAB-C", "LAB-D"], assessments: ["Mastery-24"] }
+
+  - id: CLM-014
+    claim: "SLO-constrained goodput is the admitted workload rate whose successful outputs meet the declared quality and latency predicates; an analytical memory ratio or peak-throughput ratio cannot by itself determine deployment capacity."
+    provenance: DERIVED
+    domain: system_outcome
+    concepts: [goodput, capacity, quality_gate, latency_gate]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Offered, admitted, successful, rejected, cancelled, and timed-out populations are separately counted."]
+    derivation: "Memory determines a feasibility ceiling for resident state, not queueing, execution time, failures, or output quality. A request contributes to useful capacity only when all declared predicates hold."
+    limitations: ["Utility beyond the declared predicates remains outside the metric."]
+    applicability: "Scheduler and capacity outcome for architecture comparisons."
+    related_claims: [CLM-011, CLM-012, CLM-013]
+    curriculum_usage: { lessons: ["24.3", "24.5", "24.6"], labs: ["LAB-A", "LAB-C"], assessments: ["Mastery-24"] }
+
+  - id: CLM-015
+    claim: "A financial impact estimate is conditional on measured SLO-goodput, replica count, utilization, workload volume, prices and amortization boundary; architecture memory ratios enter as inputs but do not determine cost directly."
+    provenance: DERIVED
+    domain: conditional_economics
+    concepts: [cost_per_success, sensitivity, uncertainty]
+    confidence: high
+    currentness_status: "WORKLOAD-DEPENDENT"
+    assumptions: ["Quality and latency gates pass.", "Capacity planning uses measured per-replica goodput on the matched workload.", "Price and utilization inputs are dated."]
+    derivation: "Required replicas are ceil(target successful rate / conservative per-replica SLO-goodput). Cost follows replica-hours × dated price plus declared fixed/variable terms. KV bytes can affect goodput and replica count, but scheduler, compute, communication, and quality determine whether that effect survives."
+    limitations: ["Excludes terms not named in the cost boundary.", "Module 22 owns full AI economics treatment."]
+    applicability: "Conditional architecture business case, never an exact dollar claim from KV ratio."
+    related_claims: [CLM-014, CLM-016]
+    curriculum_usage: { lessons: ["24.5", "24.6"], labs: ["LAB-C"], assessments: ["Mastery-24"] }
+
+  - id: CLM-016
+    claim: "One-at-a-time sensitivity screens local decision thresholds, while scenario analysis preserves correlated workload, quality, hardware, and price changes; recommendations should report the input values at which the selected architecture changes."
+    provenance: DERIVED
+    domain: sensitivity_analysis
+    concepts: [sensitivity, switching_threshold, scenario]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    assumptions: ["Decision function and feasible input ranges are explicit.", "Correlations used in scenarios are justified by traces or stated as hypotheses."]
+    derivation: "Varying each uncertain input while holding others fixed reveals local elasticity but can create impossible combinations. Varying linked inputs together tests coherent futures. Solving score_A(x)=score_B(x) exposes reversal thresholds."
+    limitations: ["Neither method assigns probabilities without an uncertainty model."]
+    applicability: "Robustness of cost, capacity, and topology decisions."
+    related_claims: [CLM-013, CLM-015]
+    curriculum_usage: { lessons: ["24.5", "24.6"], labs: ["LAB-C"], assessments: ["Mastery-24"] }
+
+  - id: CLM-017
+    claim: "A 2026 revision of a 2025 study reports that reordered MLA raises decode attention arithmetic intensity toward accelerator ridge points, while MoE scale-out makes interconnect bandwidth and expert skew dominant at large batch; much of the multi-node evidence is simulation calibrated against node-level execution and reported network timings."
+    provenance: VERIFIED_FACT
+    domain: frontier_bottleneck
+    concepts: [mla, moe, bottleneck_shift, interconnect, simulation]
+    confidence: medium
+    currentness_status: "FRONTIER"
+    evidence:
+      - { source_type: paper, tier: 1, title: "Rethinking LLM Inference Bottlenecks: Insights from Latent Attention and Mixture-of-Experts", authors: "Sungmin Yun et al.", year: "2025/2026 revision", url: "https://arxiv.org/abs/2507.15465", version: "revision inspected 2026-09-30", section: "Sections IV–VII; Observations 1–8", accessed_at: "2026-09-30" }
+    limitations: ["Real-system experiments are DGX H100 node-level; wider scale uses a simulator and specified topology assumptions.", "Reported regimes must be reproduced on the target runtime and hardware."]
+    applicability: "Frontier counterexample to static labels such as 'attention always bandwidth-bound'."
+    related_claims: [CLM-003, CLM-008, CLM-012]
+    curriculum_usage: { lessons: ["24.3", "24.4"], labs: ["LAB-B", "LAB-C"], assessments: ["Mastery-24"] }
+
+  - id: CLM-018
+    claim: "DeepSeek's 2025 ISCA paper reports co-design across MLA, MoE, FP8, overlapping schedules, node-limited routing, and a multi-plane network, and explicitly frames model, hardware, and interconnect constraints as coupled rather than independent optimizations."
+    provenance: VERIFIED_FACT
+    domain: codesign_case
+    concepts: [codesign, mla, moe, interconnect, overlap]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    evidence:
+      - { source_type: paper, tier: 1, title: "Insights into DeepSeek-V3: Scaling Challenges and Reflections on Hardware for AI Architectures", authors: "Chenggang Zhao et al.", year: "2025", url: "https://arxiv.org/abs/2505.09343", section: "Abstract; Section 2.1.2 and Table 1; Section 2.3.2; Sections 4.2-4.3; Section 5", accessed_at: "2026-09-30" }
+    limitations: ["Case study is specific to DeepSeek-V3/R1 and H800 infrastructure.", "Some performance limits are analytical best cases, not measured deployment outcomes."]
+    applicability: "Current primary case study for end-to-end co-design reasoning."
+    related_claims: [CLM-004, CLM-005, CLM-007]
+    curriculum_usage: { lessons: ["24.4", "24.6"], labs: ["LAB-B"], assessments: ["Mastery-24"] }
+
+  - id: CLM-019
+    claim: "MLPerf Inference requires named quality targets and scenario-specific latency constraints; its datacenter Server/Interactive scenario uses Poisson arrivals, a benchmark-specific 99th-percentile latency constraint, and maximum supported arrival rate as the performance metric."
+    provenance: VERIFIED_FACT
+    domain: benchmark_contract
+    concepts: [quality_gate, latency_gate, open_loop_load]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "MLPerf Inference Rules", repository: "https://github.com/mlcommons/inference_policies", commit: "ff7edba545fded369e7e7e3d5a2f0bab4a95eece", verification_date: "2026-09-30", file: "inference_rules.adoc", symbol: "Datacenter benchmark table; Scenarios table; Server/Interactive rules", entry_point: "MLPerf Inference submission rules", execution_path: "accuracy run establishes quality target -> performance run applies scenario load and latency validity -> valid maximum throughput reported", url: "https://github.com/mlcommons/inference_policies/blob/ff7edba545fded369e7e7e3d5a2f0bab4a95eece/inference_rules.adoc", accessed_at: "2026-09-30" }
+    limitations: ["Benchmark contract is not a universal production SLO.", "This source trace supplements, but does not replace, the required vLLM path."]
+    applicability: "Example of one contract joining quality and loaded-system validity."
+    curriculum_usage: { lessons: ["24.5"], labs: ["LAB-A", "LAB-C"], assessments: ["Mastery-24"] }
+
+  - id: CLM-020
+    claim: "For a matched comparison, architecture A dominates B only if A passes the shared quality and reliability gates and is no worse on every declared constrained objective with a practically meaningful improvement on at least one; otherwise the result is a workload-scoped trade-off, not a universal winner."
+    provenance: HYPOTHESIS
+    domain: decision_rule
+    concepts: [pareto_dominance, quality_gate, falsification]
+    confidence: medium
+    currentness_status: "WORKLOAD-DEPENDENT"
+    hypothesis:
+      prediction: "On a preregistered workload and shared gate, the selected candidate remains feasible and Pareto-undominated across the declared uncertainty scenarios."
+      measurement_target: "Paired quality differences with intervals; P95/P99 TTFT and TPOT; successful goodput; resource use; conditional cost; switching thresholds."
+      falsifying_observation: "Any shared quality/reliability gate fails, another candidate dominates within declared practical margins, or a plausible preregistered scenario reverses the decision without an operational guardrail."
+    limitations: ["Dominance depends on declared objectives, margins, and workload scope."]
+    applicability: "Mastery architecture decision and release defense."
+    related_claims: [CLM-013, CLM-014, CLM-015, CLM-016]
+    curriculum_usage: { lessons: ["24.6"], labs: ["LAB-C"], assessments: ["Mastery-24"] }
+
+  - id: CLM-021
+    claim: "At pinned vLLM commit 25b0add7b8a1c944d5c4e364f2de6aa82497a2ad, Qwen2Attention partitions KV heads across tensor-parallel ranks when total KV heads are at least the TP size, and otherwise requires TP size to be a multiple of KV heads and replicates them, keeping max(1, total_kv_heads // tp_size) local KV heads per rank."
+    provenance: VERIFIED_FACT
+    domain: runtime_source
+    concepts: [vllm, gqa, tensor_parallelism, kv_replication]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "vLLM Qwen2 attention", repository: "https://github.com/vllm-project/vllm", commit: "25b0add7b8a1c944d5c4e364f2de6aa82497a2ad", verification_date: "2026-09-30", file: "vllm/model_executor/models/qwen2.py", symbol: "Qwen2Attention.__init__", entry_point: "Qwen2ForCausalLM model construction", execution_path: "config.num_key_value_heads -> Qwen2Attention.__init__ (partition or replicate by tp_size) -> Attention(num_kv_heads=local) -> Attention.get_kv_cache_spec -> FullAttentionSpec", url: "https://github.com/vllm-project/vllm/blob/25b0add7b8a1c944d5c4e364f2de6aa82497a2ad/vllm/model_executor/models/qwen2.py", accessed_at: "2026-09-30" }
+    limitations: ["Static inspection of one model family file; other model files and runtimes must be traced separately."]
+    applicability: "Shows that a fixed GQA architecture changes per-rank and cluster KV bytes with TP degree."
+    related_claims: [CLM-009, CLM-011]
+    curriculum_usage: { lessons: ["24.2"], labs: ["LAB-D"], assessments: ["Production-Source-Trace"] }
+
+  - id: CLM-022
+    claim: "The pinned Qwen2.5-72B-Instruct configuration declares a Qwen2 decoder with 80 layers, hidden size 8192, 64 attention heads, 8 key-value heads, intermediate size 29568, vocabulary 152064, untied embeddings, and bfloat16 weights; the Hub metadata for the same revision reports 72,706,203,648 parameters."
+    provenance: VERIFIED_FACT
+    domain: architecture_configuration
+    concepts: [gqa, architecture_manifest, parameter_accounting]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "Qwen2.5-72B-Instruct released configuration", repository: "https://huggingface.co/Qwen/Qwen2.5-72B-Instruct", commit: "495f39366efef23836d0cfae4fbe635880d2be31", verification_date: "2026-09-30", file: "config.json", symbol: "num_hidden_layers; hidden_size; num_attention_heads; num_key_value_heads; intermediate_size; vocab_size; tie_word_embeddings; torch_dtype", entry_point: "AutoConfig.from_pretrained('Qwen/Qwen2.5-72B-Instruct', revision=commit)", execution_path: "config.json fields -> Qwen2Attention/Qwen2MLP construction in Transformers or vLLM", url: "https://huggingface.co/Qwen/Qwen2.5-72B-Instruct/blob/495f39366efef23836d0cfae4fbe635880d2be31/config.json", accessed_at: "2026-09-30" }
+    limitations: ["The parameter total is Hub safetensors metadata, reproduced analytically in Lesson 24.1; it is not a measured resident footprint.", "The config also carries sliding_window with use_sliding_window false; this module assumes full attention for all layers."]
+    applicability: "Real dense GQA manifest for worked examples."
+    related_claims: [CLM-002, CLM-021]
+    curriculum_usage: { lessons: ["24.1", "24.2"], labs: ["LAB-A", "LAB-D"], assessments: ["Mastery-24"] }

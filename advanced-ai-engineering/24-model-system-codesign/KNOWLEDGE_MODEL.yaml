@@ -1,0 +1,72 @@
+module: "24-model-system-codesign"
+registry_version: "1.0.0"
+status: ready
+
+required_concepts: [codesign_contract, architecture_manifest, resource_vector, normalized_pressure, bottleneck_transition, matched_workload, shared_quality_system_gate, goodput, attention_state, moe_topology, expert_routing, sensitivity_analysis, switching_threshold, conditional_cost, pareto_decision]
+prerequisite_concepts: [mha_mqa_gqa, mla_retained_state, moe_parameter_accounting, roofline, kv_payload, continuous_batching, capacity_planning, quantization_contract, speculative_decoding]
+first_occurrence_concepts: [codesign_contract, architecture_manifest, resource_vector, normalized_pressure, bottleneck_transition, matched_workload, shared_quality_system_gate, moe_topology, sensitivity_analysis, switching_threshold, conditional_cost, pareto_decision]
+
+concept_dependencies:
+  - { concept: codesign_contract, depends_on: [architecture_manifest, matched_workload, shared_quality_system_gate] }
+  - { concept: architecture_manifest, depends_on: [mha_mqa_gqa, mla_retained_state, moe_parameter_accounting, quantization_contract] }
+  - { concept: resource_vector, depends_on: [architecture_manifest, roofline, kv_payload] }
+  - { concept: normalized_pressure, depends_on: [resource_vector] }
+  - { concept: bottleneck_transition, depends_on: [normalized_pressure, continuous_batching, capacity_planning] }
+  - { concept: attention_state, depends_on: [mha_mqa_gqa, mla_retained_state, kv_payload] }
+  - { concept: moe_topology, depends_on: [moe_parameter_accounting, expert_routing] }
+  - { concept: goodput, depends_on: [matched_workload, shared_quality_system_gate] }
+  - { concept: conditional_cost, depends_on: [goodput, sensitivity_analysis] }
+  - { concept: switching_threshold, depends_on: [sensitivity_analysis, conditional_cost] }
+  - { concept: pareto_decision, depends_on: [shared_quality_system_gate, switching_threshold] }
+
+mechanisms:
+  - { id: "MECH-01", description: "Co-design compiles one architecture manifest into logical memory, compute, communication, and placement demands; a runtime mapping turns these into physical allocation and execution; a scheduler exposes a workload-conditioned service curve; shared quality and system gates determine useful outcomes.", evidence_ids: ["CLM-002", "CLM-006", "CLM-012", "CLM-013", "CLM-014"], derived_from: [] }
+  - { id: "MECH-02", description: "Attention representation changes retained state differently from attention arithmetic: GQA lowers KV-head state while MLA retains a joint latent plus RoPE state and can reorder decode computation; every representation must follow its own runtime cache path.", evidence_ids: ["CLM-001", "CLM-002", "CLM-003", "CLM-009", "CLM-010", "CLM-017"], derived_from: ["MECH-01"] }
+  - { id: "MECH-03", description: "A bottleneck transition is an ordering change among normalized memory, compute, communication, scheduler, and host pressures after architecture, mapping, or workload changes; no static phase label proves the active limiter.", evidence_ids: ["CLM-008", "CLM-012", "CLM-017"], derived_from: ["MECH-01"] }
+  - { id: "MECH-04", description: "Sparse MoE trades dense expert computation for a larger resident checkpoint, routed execution, all-to-all communication, and expert imbalance; node-limited routing and phase-specific TP/DP/EP placement couple model routing to topology.", evidence_ids: ["CLM-004", "CLM-005", "CLM-006", "CLM-007", "CLM-018"], derived_from: ["MECH-01", "MECH-03"] }
+  - { id: "MECH-05", description: "A matched experiment freezes workload, quality suite, latency and reliability predicates, runtime and hardware boundary, failure treatment, and estimators; only candidates passing the shared gate enter goodput and conditional cost comparison.", evidence_ids: ["CLM-013", "CLM-014", "CLM-019"], derived_from: ["MECH-01"] }
+  - { id: "MECH-06", description: "Architecture decisions use conditional replica and cost models plus one-at-a-time and coherent-scenario sensitivity; a recommendation remains provisional until competing candidates, reversal thresholds, and rollback conditions are tested.", evidence_ids: ["CLM-015", "CLM-016", "CLM-020"], derived_from: ["MECH-05"] }
+
+mathematical_models:
+  - { id: "MATH-01", description: "Resource vector R=(M_weights,M_state,W_prefill,W_decode,Q_HBM,Q_comm,D_scheduler); units and boundaries remain explicit and each value is marked logical, analytical bound, measured, or hypothesis.", evidence_ids: ["CLM-002", "CLM-006", "CLM-008"], derived_from: ["MECH-01"] }
+  - { id: "MATH-02", description: "Uniform attention logical KV bytes/token = 2 L H_kv d_h b; MLA logical bytes/token = L(d_c+d_h^R)b under the paper's retained-state contract. Neither equals physical allocator occupancy.", evidence_ids: ["CLM-002", "CLM-003"], derived_from: ["MECH-02"] }
+  - { id: "MATH-03", description: "Normalized pressure p_r=D_r/C_r and active screening set argmax_r p_r; recomputing all p_r before/after a change states conditions for limiter persistence or movement.", evidence_ids: ["CLM-008", "CLM-012"], derived_from: ["MECH-03"] }
+  - { id: "MATH-04", description: "MoE communication lower-bound screen Q_dispatch+combine≈B k d (b_dispatch+b_combine), expanded by replication, imbalance and topology crossings; T_comm≥Q/BW_eff plus latency terms.", evidence_ids: ["CLM-006", "CLM-007", "CLM-017"], derived_from: ["MECH-04"] }
+  - { id: "MATH-05", description: "Required replicas n=ceil(lambda_success/g_conservative); variable infrastructure cost per successful request = n·price_per_replica_hour/(3600·lambda_success), conditional on shared gates and dated inputs.", evidence_ids: ["CLM-014", "CLM-015"], derived_from: ["MECH-05", "MECH-06"] }
+  - { id: "MATH-06", description: "Sensitivity records one-at-a-time elasticities, coherent scenarios, and switching roots score_A(x)=score_B(x); these are threshold analyses, not probability statements.", evidence_ids: ["CLM-016"], derived_from: ["MECH-06"] }
+
+implementation_mechanisms:
+  - { id: "IMPL-01", description: "Pinned vLLM trace: GPUModelRunner.get_kv_cache_spec calls each attention layer's get_kv_cache_spec; standard Attention produces FullAttentionSpec, MLA produces MLAAttentionSpec; grouping computes page bytes, number of blocks, and max-length concurrency.", evidence_ids: ["CLM-009", "CLM-010", "CLM-011", "CLM-021"], derived_from: ["MECH-02"] }
+  - { id: "IMPL-02", description: "Pinned configs provide exact architecture fields: Qwen2.5-72B uses GQA dimensions; DeepSeek-V3 provides MLA and MoE routing dimensions. Config inspection anchors formulas but does not prove performance.", evidence_ids: ["CLM-004", "CLM-009", "CLM-010", "CLM-022"], derived_from: ["MECH-02", "MECH-04"] }
+  - { id: "IMPL-03", description: "A co-design harness emits one row per candidate, workload slice, seed, load point, and topology with manifest hashes, quality outcomes, latency distributions, goodput, resource counters, failures, cost inputs, and uncertainty.", evidence_ids: ["CLM-013", "CLM-014", "CLM-019", "CLM-020"], derived_from: ["MECH-05", "MECH-06"] }
+
+failure_modes:
+  - { id: "FAIL-01", description: "Ratio fallacy: converting a KV, parameter, FLOP, or bandwidth ratio directly into latency, concurrency, cost, or financial impact.", evidence_ids: ["CLM-002", "CLM-012", "CLM-015"], derived_from: ["MECH-01", "MECH-03", "MECH-06"] }
+  - { id: "FAIL-02", description: "Representation mismatch: sizing MLA with a GQA formula or treating logical retained elements as physical pages, causing false capacity conclusions.", evidence_ids: ["CLM-003", "CLM-009", "CLM-010", "CLM-011"], derived_from: ["MECH-02", "IMPL-01"] }
+  - { id: "FAIL-03", description: "Static bottleneck label: declaring all decode bandwidth-bound or all prefill compute-bound after an architecture, batching, kernel, or topology change.", evidence_ids: ["CLM-008", "CLM-012", "CLM-017"], derived_from: ["MECH-03"] }
+  - { id: "FAIL-04", description: "Sparse-compute fallacy: treating active parameters as resident bytes or ignoring expert dispatch, combine, imbalance, and topology crossings.", evidence_ids: ["CLM-004", "CLM-006", "CLM-007"], derived_from: ["MECH-04"] }
+  - { id: "FAIL-05", description: "Unmatched comparison: changing prompt/output distributions, load process, quality suite, runtime flags, or failure denominator between candidate architectures.", evidence_ids: ["CLM-013", "CLM-019"], derived_from: ["MECH-05"] }
+  - { id: "FAIL-06", description: "Quality-blind optimization: selecting lower latency or cost after a candidate fails a non-inferiority, reliability, or output-length gate.", evidence_ids: ["CLM-001", "CLM-003", "CLM-013", "CLM-020"], derived_from: ["MECH-05", "MECH-06"] }
+  - { id: "FAIL-07", description: "Point-estimate economics: reporting exact savings without load-test uncertainty, headroom, price date, utilization, amortization boundary, or switching thresholds.", evidence_ids: ["CLM-015", "CLM-016"], derived_from: ["MECH-06"] }
+
+production_connections:
+  - { id: "PROD-01", description: "DeepSeek-V3 illustrates phase-specific placement, expert redundancy, overlap, and node-limited routing under one model and H800 topology; it is a case study, not a universal blueprint.", evidence_ids: ["CLM-004", "CLM-005", "CLM-007", "CLM-018"], derived_from: ["MECH-04"] }
+  - { id: "PROD-02", description: "MLPerf rules illustrate a shared quality plus loaded-latency validity contract; product SLOs must define their own populations, predicates, and thresholds.", evidence_ids: ["CLM-019"], derived_from: ["MECH-05"] }
+  - { id: "PROD-03", description: "vLLM's pinned cache-spec path makes architecture fields operational through physical page sizing and concurrency metadata, while effective goodput remains scheduler- and workload-dependent.", evidence_ids: ["CLM-009", "CLM-010", "CLM-011", "CLM-014"], derived_from: ["IMPL-01", "MECH-05"] }
+
+research_connections:
+  - { id: "RESEARCH-01", description: "GQA and MLA studies connect trained quality to retained-state choices; their evaluated quality results cannot be transferred to an untrained architecture substitution.", evidence_ids: ["CLM-001", "CLM-003"], derived_from: ["MECH-02", "MECH-05"] }
+  - { id: "RESEARCH-02", description: "2025–2026 MLA+MoE characterization argues bottlenecks can move toward interconnect and expert skew, but its scale-out claims mix execution and calibrated simulation and require reproduction.", evidence_ids: ["CLM-017", "CLM-018"], derived_from: ["MECH-03", "MECH-04"] }
+
+todo_verify:
+  - { id: "TODO-01", description: "TODO_VERIFY: reproduce physical page sizes, capacity, kernel paths, and performance for selected GQA and MLA checkpoints on the target vLLM build and hardware; source was statically inspected only.", evidence_ids: [], derived_from: ["IMPL-01"] }
+  - { id: "TODO-02", description: "TODO_VERIFY: obtain production trace distributions and dated prices before making any financial-impact statement; no deployment-specific savings are claimed in this module.", evidence_ids: [], derived_from: ["MECH-06"] }
+  - { id: "TODO-03", description: "TODO_VERIFY: inspect and execute a 2026 MoE serving implementation before adopting frontier runtime-parallelism or topology results as current production defaults.", evidence_ids: [], derived_from: ["RESEARCH-02"] }
+
+candidate_capabilities:
+  - { capability: "Compile an architecture manifest into memory, compute, communication, scheduler, quality, and conditional-cost hypotheses.", mapped_mechanisms: ["MECH-01", "MATH-01", "FAIL-01"] }
+  - { capability: "Trace GQA and MLA architecture fields through a pinned production KV-cache path and reconcile logical with physical capacity.", mapped_mechanisms: ["MECH-02", "MATH-02", "IMPL-01", "FAIL-02"] }
+  - { capability: "Predict, measure, and falsify whether an architecture change preserves or moves the active bottleneck.", mapped_mechanisms: ["MECH-03", "MATH-03", "FAIL-03"] }
+  - { capability: "Compare dense and MoE models under topology-aware expert placement, routing, imbalance, and communication constraints.", mapped_mechanisms: ["MECH-04", "MATH-04", "FAIL-04", "PROD-01"] }
+  - { capability: "Run a matched workload with one quality/system gate and report SLO-goodput rather than raw ratios.", mapped_mechanisms: ["MECH-05", "IMPL-03", "FAIL-05", "FAIL-06"] }
+  - { capability: "Defend a conditional architecture and cost decision with uncertainty, sensitivities, reversal thresholds, and rollback rules.", mapped_mechanisms: ["MECH-06", "MATH-05", "MATH-06", "FAIL-07"] }
