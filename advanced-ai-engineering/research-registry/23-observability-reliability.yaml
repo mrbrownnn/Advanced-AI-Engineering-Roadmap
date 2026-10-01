@@ -1,0 +1,560 @@
+module: "23-observability-reliability"
+registry_version: "1.0.0"
+previous_version: ""
+research_cutoff: "2026-09-30"
+change_reason: "First evidence-backed registry for Module 23 (audit.md AUD-N23). Replaces the generated outline, whose title said Module 18 and which proposed embedding distances and LLM-judge scores as semantic monitoring without a reliability contract. Covers signal boundaries, the pinned OpenTelemetry GenAI conventions and their Development stability, propagation, sampling and censoring, offered-outcome SLIs, error budgets and burn-rate alerting recomputed from the SRE Workbook, judge and detector correction, delayed labels, telemetry cost, cardinality and privacy, and incident discrimination with rollback-first mitigation."
+changed_claims: []
+out_of_scope_candidates:
+  - "Serving metric definitions (TTFT/ITL/TPOT, goodput, admission) are taught in Module 04; this module only maps them onto telemetry boundaries."
+  - "Evaluation program design, slices, and release statistics belong to Module 15."
+  - "Rollout mechanics, canary sizing, and rollback state belong to Module 17."
+  - "Security detection content (prompt-injection detectors, red-team suites) belongs to Module 18."
+  - "Full cost modeling belongs to Module 22; only telemetry volume and storage are computed here."
+  - "Vendor observability products and their pricing were not evaluated."
+
+claims:
+  - id: CLM-001
+    claim: "At semantic-conventions commit 70550277d98a01ca3fe83bcfc3a2dac18a0d98b7, the GenAI pages (docs/gen-ai/*.md) state that the GenAI semantic conventions have moved to the separate open-telemetry/semantic-conventions-genai repository and are no longer maintained there, and the gen_ai.* attributes in docs/registry/attributes/gen-ai.md are marked Deprecated with the note 'Moved to the OpenTelemetry GenAI semantic conventions repository'."
+    provenance: VERIFIED_FACT
+    domain: telemetry_conventions
+    concepts: [semantic_conventions, convention_stability, source_pinning]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT (scoped to these two repository snapshots)"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "OpenTelemetry semantic conventions (core) — GenAI registry page", repository: "https://github.com/open-telemetry/semantic-conventions", commit: "70550277d98a01ca3fe83bcfc3a2dac18a0d98b7", verification_date: "2026-10-01", file: "docs/registry/attributes/gen-ai.md; docs/gen-ai/README.md; model/gen-ai/deprecated/registry-deprecated.yaml", symbol: "registry.gen_ai.deprecated; GenAI Attributes (Moved)", url: "https://github.com/open-telemetry/semantic-conventions/blob/70550277d98a01ca3fe83bcfc3a2dac18a0d98b7/docs/registry/attributes/gen-ai.md", accessed_at: "2026-10-01" }
+    limitations: ["A link to docs/gen-ai in the core repository resolves to a 'moved' stub at this revision; older tutorials that cite it describe a superseded copy.", "No release tag of the GenAI repository was verified; the pin is a commit."]
+    applicability: "Choosing which repository and revision to cite for gen_ai.* names."
+    curriculum_usage: { lessons: ["23.1"], labs: ["LAB-A"], assessments: ["Production-Source-Trace"] }
+  - id: CLM-002
+    claim: "At semantic-conventions-genai commit b31e9e8ea26ac1c086d3313d474e31d7c3f391ae, every GenAI span type, metric, and event inspected (gen_ai.inference.client span, gen_ai.client.* and gen_ai.server.* metrics, gen_ai.client.inference.usage.* counters, gen_ai.evaluation.result and gen_ai.client.operation.exception events) carries stability: development, and docs/gen-ai/gen-ai-spans.md and gen-ai-metrics.md declare document status Development."
+    provenance: VERIFIED_FACT
+    domain: telemetry_conventions
+    concepts: [convention_stability, semantic_conventions]
+    confidence: high
+    currentness_status: "FRONTIER (Development-status specification)"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "OpenTelemetry GenAI semantic conventions — model definitions", repository: "https://github.com/open-telemetry/semantic-conventions-genai", commit: "b31e9e8ea26ac1c086d3313d474e31d7c3f391ae", verification_date: "2026-10-01", file: "model/gen-ai/spans.yaml; model/gen-ai/metrics.yaml; model/gen-ai/events.yaml; model/gen-ai/token-metrics.yaml; docs/gen-ai/gen-ai-spans.md", symbol: "gen_ai.inference.client; gen_ai.client.operation.duration; gen_ai.evaluation.result (stability fields)", url: "https://github.com/open-telemetry/semantic-conventions-genai/tree/b31e9e8ea26ac1c086d3313d474e31d7c3f391ae/model/gen-ai", accessed_at: "2026-10-01" }
+    limitations: ["Static reading of YAML and generated Markdown; no instrumentation library was executed.", "Stability may change after this commit; re-pin before reuse."]
+    applicability: "Every gen_ai.* name used in this module is a Development-status name, not a stable contract."
+    related_claims: [CLM-001, CLM-003]
+    curriculum_usage: { lessons: ["23.1"], labs: ["LAB-A"], assessments: ["Production-Source-Trace"] }
+  - id: CLM-003
+    claim: "The OpenTelemetry specification's maturity-levels document (Status: Stable) states that a Development component may not yet be available, that its configuration options might break often, that it SHOULD NOT be used in production, and that it MAY be removed without prior notice."
+    provenance: VERIFIED_FACT
+    domain: telemetry_conventions
+    concepts: [convention_stability]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence:
+      - { source_type: specification, tier: 1, title: "OpenTelemetry Specification — Maturity levels", repository: "https://github.com/open-telemetry/opentelemetry-specification", commit: "32c0651edf148cfd67054274c5025ebb27773c38", file: "specification/maturity-levels.md", section: "Development", url: "https://github.com/open-telemetry/opentelemetry-specification/blob/32c0651edf148cfd67054274c5025ebb27773c38/specification/maturity-levels.md", accessed_at: "2026-10-01" }
+    limitations: ["The document speaks of SIG deliverables and components; how strictly it binds individual semantic-convention attributes is an interpretation (see CLM-011)."]
+    applicability: "Justifies a schema-version field and a mapping layer when emitting Development-status attributes."
+    curriculum_usage: { lessons: ["23.1"], labs: ["LAB-A"], assessments: ["Mastery-23"] }
+  - id: CLM-004
+    claim: "At the pinned GenAI commit, GenAI spans represent logical operations as observed by the caller: they SHOULD start when the operation is initiated and end when the response is fully received or the operation is terminated by an error or cancellation, and when a transient issue is retried automatically the span SHOULD cover the logical operation including all retries."
+    provenance: VERIFIED_FACT
+    domain: signal_boundaries
+    concepts: [span, operation_boundary, retry_accounting]
+    confidence: high
+    currentness_status: "FRONTIER (Development-status specification)"
+    evidence:
+      - { source_type: specification, tier: 1, title: "Semantic conventions for generative client AI spans", repository: "https://github.com/open-telemetry/semantic-conventions-genai", commit: "b31e9e8ea26ac1c086d3313d474e31d7c3f391ae", file: "docs/gen-ai/gen-ai-spans.md", section: "Spans", url: "https://github.com/open-telemetry/semantic-conventions-genai/blob/b31e9e8ea26ac1c086d3313d474e31d7c3f391ae/docs/gen-ai/gen-ai-spans.md", accessed_at: "2026-10-01" }
+    limitations: ["Per-attempt timing is therefore not visible on the logical span; attempt accounting needs child spans or events (Module 13, Lesson 13.6)."]
+    applicability: "Defining what one GenAI client span measures."
+    curriculum_usage: { lessons: ["23.1", "23.2"], labs: ["LAB-A"], assessments: ["Mastery-23"] }
+  - id: CLM-005
+    claim: "At the pinned GenAI commit, model/gen-ai/metrics.yaml defines histograms in seconds: gen_ai.client.operation.duration (with error.type), gen_ai.client.operation.time_to_first_chunk and gen_ai.client.operation.time_per_output_chunk (SHOULD be reported only for streaming calls; time per chunk is measured from the end of the previous chunk), gen_ai.server.request.duration, and gen_ai.server.time_to_first_token and gen_ai.server.time_per_output_token, the last two briefed as for successful responses; the metrics doc recommends explicit bucket boundaries, e.g. [0.01, 0.02, 0.04, ..., 40.96, 81.92] for client operation duration."
+    provenance: VERIFIED_FACT
+    domain: signal_boundaries
+    concepts: [metric, histogram_buckets, ttft, tpot]
+    confidence: high
+    currentness_status: "FRONTIER (Development-status specification)"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "GenAI metric definitions", repository: "https://github.com/open-telemetry/semantic-conventions-genai", commit: "b31e9e8ea26ac1c086d3313d474e31d7c3f391ae", verification_date: "2026-10-01", file: "model/gen-ai/metrics.yaml; docs/gen-ai/gen-ai-metrics.md", symbol: "gen_ai.client.operation.duration; gen_ai.client.operation.time_to_first_chunk; gen_ai.client.operation.time_per_output_chunk; gen_ai.server.request.duration; gen_ai.server.time_to_first_token; gen_ai.server.time_per_output_token", url: "https://github.com/open-telemetry/semantic-conventions-genai/blob/b31e9e8ea26ac1c086d3313d474e31d7c3f391ae/model/gen-ai/metrics.yaml", accessed_at: "2026-10-01" }
+    limitations: ["'For successful responses' means the server TTFT and TPOT histograms exclude failed requests by definition; they are not offered-population metrics.", "Whether 'issues the generation request' means the first attempt or the attempt that succeeded is not stated for time_to_first_chunk; instrumentation must declare it."]
+    applicability: "Mapping Module 04 latency definitions onto standardized instrument names."
+    related_claims: [CLM-011]
+    curriculum_usage: { lessons: ["23.1"], labs: ["LAB-A"], assessments: ["Production-Source-Trace"] }
+  - id: CLM-006
+    claim: "At the pinned GenAI commit, gen_ai.response.finish_reasons is a string array aligned with returned choices, and if a finish reason was expected but not received because generation failed, was cancelled, or a stream ended before the final event, instrumentation SHOULD report 'error' for that position instead of omitting it."
+    provenance: VERIFIED_FACT
+    domain: censoring
+    concepts: [censoring, cancellation, finish_reason]
+    confidence: high
+    currentness_status: "FRONTIER (Development-status specification)"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "GenAI attribute registry", repository: "https://github.com/open-telemetry/semantic-conventions-genai", commit: "b31e9e8ea26ac1c086d3313d474e31d7c3f391ae", verification_date: "2026-10-01", file: "model/gen-ai/registry.yaml", symbol: "gen_ai.response.finish_reasons", url: "https://github.com/open-telemetry/semantic-conventions-genai/blob/b31e9e8ea26ac1c086d3313d474e31d7c3f391ae/model/gen-ai/registry.yaml", accessed_at: "2026-10-01" }
+    limitations: ["Only applies when a span is ended and exported; requests whose process dies before span end produce no span at all (CLM-019)."]
+    applicability: "Distinguishing cancelled or truncated streams from normal stops."
+    curriculum_usage: { lessons: ["23.2"], labs: ["LAB-B"], assessments: ["Mastery-23"] }
+  - id: CLM-007
+    claim: "At the pinned GenAI commit, the inference span section states that gen_ai.operation.name, gen_ai.provider.name, gen_ai.request.model, server.address, and server.port can be important for sampling decisions and SHOULD be provided at span creation time if provided at all."
+    provenance: VERIFIED_FACT
+    domain: sampling
+    concepts: [head_sampling, span_creation_attributes]
+    confidence: high
+    currentness_status: "FRONTIER (Development-status specification)"
+    evidence:
+      - { source_type: specification, tier: 1, title: "Semantic conventions for generative client AI spans — Inference", repository: "https://github.com/open-telemetry/semantic-conventions-genai", commit: "b31e9e8ea26ac1c086d3313d474e31d7c3f391ae", file: "docs/gen-ai/gen-ai-spans.md", section: "Inference (sampling-relevant attributes)", url: "https://github.com/open-telemetry/semantic-conventions-genai/blob/b31e9e8ea26ac1c086d3313d474e31d7c3f391ae/docs/gen-ai/gen-ai-spans.md", accessed_at: "2026-10-01" }
+    limitations: ["Outcome attributes (error.type, finish reasons, usage) are only known at span end, so a head sampler cannot use them."]
+    applicability: "Designing head-sampling rules."
+    curriculum_usage: { lessons: ["23.2"], labs: ["LAB-B"], assessments: ["Mastery-23"] }
+  - id: CLM-008
+    claim: "At the pinned GenAI commit, gen-ai-spans.md states that instructions, inputs, and outputs are considered sensitive and often large, that instrumentations SHOULD NOT capture them by default but SHOULD offer opt-in, lists three patterns (default no capture; record on span attributes; store externally and record references, recommended for production when volume or sensitivity is a concern), and states that a configured content-upload hook SHOULD be invoked regardless of the span sampling decision."
+    provenance: VERIFIED_FACT
+    domain: telemetry_privacy
+    concepts: [content_capture, data_minimization, sampling]
+    confidence: high
+    currentness_status: "FRONTIER (Development-status specification)"
+    evidence:
+      - { source_type: specification, tier: 1, title: "Semantic conventions for generative client AI spans — Capturing instructions, inputs, and outputs", repository: "https://github.com/open-telemetry/semantic-conventions-genai", commit: "b31e9e8ea26ac1c086d3313d474e31d7c3f391ae", file: "docs/gen-ai/gen-ai-spans.md", section: "Capturing instructions, inputs, and outputs; Uploading content to external storage", url: "https://github.com/open-telemetry/semantic-conventions-genai/blob/b31e9e8ea26ac1c086d3313d474e31d7c3f391ae/docs/gen-ai/gen-ai-spans.md", accessed_at: "2026-10-01" }
+    limitations: ["The document leaves 'a common approach to record references to externally stored content' as TODO and the streaming-chunks section as TODO at this commit."]
+    applicability: "Content-capture policy and its storage cost."
+    curriculum_usage: { lessons: ["23.6"], labs: ["LAB-A"], assessments: ["Mastery-23"] }
+  - id: CLM-009
+    claim: "At the pinned GenAI commit, the gen_ai.evaluation.result event (stability development) records gen_ai.evaluation.name (required), score value and score label (conditionally required), an explanation (recommended), and gen_ai.response.id for correlation, and SHOULD be parented to the evaluated operation's span when possible; the score label SHOULD have low cardinality."
+    provenance: VERIFIED_FACT
+    domain: quality_telemetry
+    concepts: [evaluation_event, event, judge]
+    confidence: high
+    currentness_status: "FRONTIER (Development-status specification)"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "GenAI event and attribute definitions", repository: "https://github.com/open-telemetry/semantic-conventions-genai", commit: "b31e9e8ea26ac1c086d3313d474e31d7c3f391ae", verification_date: "2026-10-01", file: "model/gen-ai/events.yaml; model/gen-ai/registry.yaml", symbol: "gen_ai.evaluation.result; gen_ai.evaluation.name; gen_ai.evaluation.score.value; gen_ai.evaluation.score.label; gen_ai.evaluation.explanation", url: "https://github.com/open-telemetry/semantic-conventions-genai/blob/b31e9e8ea26ac1c086d3313d474e31d7c3f391ae/model/gen-ai/events.yaml", accessed_at: "2026-10-01" }
+    limitations: ["The convention carries an evaluator's output; it has no field for the evaluator's validated error rates, calibration set, or version of the rubric."]
+    applicability: "Transporting judge outputs without treating them as labels."
+    related_claims: [CLM-025]
+    curriculum_usage: { lessons: ["23.5"], labs: ["LAB-D"], assessments: ["Mastery-23"] }
+  - id: CLM-010
+    claim: "At the pinned GenAI commit, gen_ai.usage.input_tokens SHOULD include cached tokens and, when a provider reports both billed and consumed counts, SHOULD report the billed count; token usage is defined both as per-operation histograms (gen_ai.client.inference.operation.*) and as counters (gen_ai.client.inference.usage.*), and the non-normative design note explains that modality breakdowns go only on counters because recording several observations per operation corrupts histogram percentiles."
+    provenance: VERIFIED_FACT
+    domain: telemetry_cost
+    concepts: [token_usage, histogram, counter]
+    confidence: high
+    currentness_status: "FRONTIER (Development-status specification)"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "GenAI token metrics and usage attributes", repository: "https://github.com/open-telemetry/semantic-conventions-genai", commit: "b31e9e8ea26ac1c086d3313d474e31d7c3f391ae", verification_date: "2026-10-01", file: "model/gen-ai/registry.yaml; model/gen-ai/token-metrics.yaml; docs/gen-ai/non-normative/token-metrics-design.md", symbol: "gen_ai.usage.input_tokens; gen_ai.client.inference.usage.input_tokens; gen_ai.client.inference.operation.input_tokens", url: "https://github.com/open-telemetry/semantic-conventions-genai/blob/b31e9e8ea26ac1c086d3313d474e31d7c3f391ae/model/gen-ai/token-metrics.yaml", accessed_at: "2026-10-01" }
+    limitations: ["Billed tokens are not a cost model; prices and discounts belong to Module 22."]
+    applicability: "Token accounting attached to traces and metrics."
+    curriculum_usage: { lessons: ["23.1", "23.6"], labs: ["LAB-A"], assessments: ["Mastery-23"] }
+  - id: CLM-011
+    claim: "A number in an observability system is interpretable only with its boundary: a span is one timed operation with causal parent links, an event is a timestamped occurrence attached to (or correlated with) an operation, and a metric is a pre-aggregated series that has lost per-request identity; client-observed time-to-first-chunk, server time-to-first-token, and per-attempt durations measure different intervals of one request, and Development-status attribute names should be emitted with a recorded convention revision and mapped in the pipeline rather than hard-coded into SLO queries."
+    provenance: DERIVED
+    domain: signal_boundaries
+    concepts: [span, event, metric, operation_boundary, convention_stability]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT (recommended engineering practice)"
+    assumptions: ["Clocks of client and server are not synchronized beyond their measured skew.", "The definitions of CLM-004 and CLM-005 hold at the pinned revision."]
+    derivation: "Worked example of Lesson 23.1: logical client span 3.650 s; first attempt fails after 0.600 s, retry issued at 0.650 s; first chunk at 1.250 s after the logical start; 121 chunks so (3.650-1.250)/120 = 0.020 s per chunk; server receives the retry at 0.670 s and emits its first token at 1.230 s, so server TTFT = 0.560 s and server TPOT over 241 tokens = (2.960-0.560)/240 = 0.010 s. Client time to first chunk is 1.250 s from the logical start but 0.600 s from the retry attempt; the 1.250-0.560 gap mixes retry, queueing outside the server, network, and client parsing. A histogram bucket (0.64, 1.28] retains none of this decomposition."
+    limitations: ["Synthetic timings; the decomposition requires per-attempt child spans or events."]
+    applicability: "Every latency or count used in SLIs, alerts, and incident timelines."
+    related_claims: [CLM-004, CLM-005]
+    curriculum_usage: { lessons: ["23.1"], labs: ["LAB-A"], assessments: ["Mastery-23"] }
+  - id: CLM-012
+    claim: "At the pinned W3C Trace Context source, the traceparent header for version 00 is version-trace-id-parent-id-trace-flags with a 16-byte trace-id and an 8-byte parent-id in lowercase hex (all-zero values forbidden); bit 0 of trace-flags is the sampled flag and the second least significant bit is the random-trace-id flag (Level 2); a component that defers its recording decision should propagate the sampled flag unchanged."
+    provenance: VERIFIED_FACT
+    domain: context_propagation
+    concepts: [traceparent, sampled_flag, context_propagation]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE (Level 1 Recommendation; Level 2 random flag is newer)"
+    evidence:
+      - { source_type: specification, tier: 1, title: "W3C Trace Context — HTTP request header format (editor's source)", repository: "https://github.com/w3c/trace-context", commit: "acab820be9db7b3433668baa5cdd43f57f4c4be0", file: "spec/20-http_request_header_format.md", section: "traceparent Header; trace-flags; Sampled flag; Random Trace ID flag", url: "https://github.com/w3c/trace-context/blob/acab820be9db7b3433668baa5cdd43f57f4c4be0/spec/20-http_request_header_format.md", accessed_at: "2026-10-01" }
+    limitations: ["The w3.org TR page returned HTTP 403 to automated retrieval; the editor's source in the W3C GitHub repository was read instead. Its main branch may be ahead of the published Recommendation."]
+    applicability: "Propagation across gateway, orchestrator, retrieval, provider, and tool boundaries."
+    curriculum_usage: { lessons: ["23.2"], labs: ["LAB-A", "LAB-B"], assessments: ["Mastery-23"] }
+  - id: CLM-013
+    claim: "At the pinned specification commit, the tracing SDK document (Status: Stable except where specified) sets the default sampler to ParentBased(root=AlwaysOn), defines IsRecording and the Sampled flag so that exporters receive only sampled spans and the SDK MUST NOT allow Sampled=true with IsRecording=false, deprecates TraceIdRatioBased in favor of the Development-status ProbabilitySampler (which decides R >= T on 56 bits of trace randomness), and says implementors SHALL NOT remove TraceIdRatioBased before January 1, 2027."
+    provenance: VERIFIED_FACT
+    domain: sampling
+    concepts: [head_sampling, parent_based_sampling, sampled_flag]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT (ParentBased); FRONTIER (ProbabilitySampler, Development)"
+    evidence:
+      - { source_type: specification, tier: 1, title: "OpenTelemetry Specification — Tracing SDK", repository: "https://github.com/open-telemetry/opentelemetry-specification", commit: "32c0651edf148cfd67054274c5025ebb27773c38", file: "specification/trace/sdk.md", section: "Sampling; Recording Sampled reaction table; Built-in samplers; TraceIdRatioBased; ProbabilitySampler; ParentBased", url: "https://github.com/open-telemetry/opentelemetry-specification/blob/32c0651edf148cfd67054274c5025ebb27773c38/specification/trace/sdk.md", accessed_at: "2026-10-01" }
+    limitations: ["Specification, not a particular SDK release; language SDKs may lag."]
+    applicability: "Choosing and explaining head sampling."
+    curriculum_usage: { lessons: ["23.2"], labs: ["LAB-B"], assessments: ["Mastery-23"] }
+  - id: CLM-014
+    claim: "The OpenTelemetry probability-sampling specification (Status: Development) defines a consistent sampling decision so that a positive decision at probability p1 implies a positive decision at any p2 >= p1 for spans of the same trace, and defines the adjusted count as the reciprocal of the sampling probability, used to estimate how many items there would be without sampling (span-to-metrics); it also notes that 'head' and 'tail' sampling have multiple meanings."
+    provenance: VERIFIED_FACT
+    domain: sampling
+    concepts: [adjusted_count, consistent_sampling, tail_sampling]
+    confidence: high
+    currentness_status: "FRONTIER (Development-status specification)"
+    evidence:
+      - { source_type: specification, tier: 1, title: "TraceState: Probability Sampling", repository: "https://github.com/open-telemetry/opentelemetry-specification", commit: "32c0651edf148cfd67054274c5025ebb27773c38", file: "specification/trace/tracestate-probability-sampling.md", section: "Consistent Sampling Decision; Sampling related terms (adjusted count, span-to-metrics)", url: "https://github.com/open-telemetry/opentelemetry-specification/blob/32c0651edf148cfd67054274c5025ebb27773c38/specification/trace/tracestate-probability-sampling.md", accessed_at: "2026-10-01" }
+    limitations: ["Adjusted counts are unbiased only if each item's inclusion probability is known and recorded; outcome-dependent tail policies need their per-policy probabilities."]
+    applicability: "Estimating rates from sampled traces."
+    curriculum_usage: { lessons: ["23.2"], labs: ["LAB-B"], assessments: ["Mastery-23"] }
+  - id: CLM-015
+    claim: "At the pinned specification commit, the batching span processor defaults are maxQueueSize 2048 (after which spans are dropped), scheduledDelayMillis 5000, exportTimeoutMillis 30000, and maxExportBatchSize 512, and span processors are invoked only for recording spans."
+    provenance: VERIFIED_FACT
+    domain: telemetry_pipeline
+    concepts: [telemetry_loss, exporter_queue]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT (specification defaults; SDK releases may differ)"
+    evidence:
+      - { source_type: specification, tier: 1, title: "OpenTelemetry Specification — Tracing SDK, Batching processor", repository: "https://github.com/open-telemetry/opentelemetry-specification", commit: "32c0651edf148cfd67054274c5025ebb27773c38", file: "specification/trace/sdk.md", section: "Span processor; Batching processor (configurable parameters)", url: "https://github.com/open-telemetry/opentelemetry-specification/blob/32c0651edf148cfd67054274c5025ebb27773c38/specification/trace/sdk.md", accessed_at: "2026-10-01" }
+    limitations: ["Effective values come from the deployed SDK configuration, which was not inspected."]
+    applicability: "Telemetry loss as a competing hypothesis for traffic or error drops."
+    curriculum_usage: { lessons: ["23.2", "23.6"], labs: ["LAB-C"], assessments: ["Incident-23.1"] }
+  - id: CLM-016
+    claim: "At opentelemetry-collector-contrib commit e43dcb9956a84805be15749055050fb5ea69afd7, the tail sampling processor (stability beta for traces) requires all spans of a trace to reach the same collector instance, defaults to decision_wait 30 s and num_traces 50000 in createDefaultConfig, drops traces evicted from its buffer before a decision (reported by sampling_trace_dropped_too_early), and documents that late spans may receive a different decision unless a decision cache is configured."
+    provenance: VERIFIED_FACT
+    domain: sampling
+    concepts: [tail_sampling, telemetry_loss, late_spans]
+    confidence: high
+    currentness_status: "WORKLOAD-DEPENDENT (one collector component, beta)"
+    evidence:
+      - { source_type: source_code, tier: 1, title: "Tail sampling processor defaults", repository: "https://github.com/open-telemetry/opentelemetry-collector-contrib", commit: "e43dcb9956a84805be15749055050fb5ea69afd7", verification_date: "2026-10-01", file: "processor/tailsamplingprocessor/factory.go; processor/tailsamplingprocessor/config.go; processor/tailsamplingprocessor/README.md", symbol: "createDefaultConfig; Config.DecisionWait; Config.NumTraces", entry_point: "Collector pipeline with the tail_sampling processor configured", execution_path: "createDefaultConfig returns DecisionWait 30*time.Second and NumTraces 50000; README documents eviction and late-span scenarios", url: "https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/e43dcb9956a84805be15749055050fb5ea69afd7/processor/tailsamplingprocessor/factory.go", accessed_at: "2026-10-01" }
+    limitations: ["Static inspection of defaults and documentation; the eviction path was not executed.", "One collector component; other tail samplers behave differently."]
+    applicability: "Outcome-aware sampling and its failure modes."
+    curriculum_usage: { lessons: ["23.2"], labs: ["LAB-B"], assessments: ["Incident-23.1"] }
+  - id: CLM-017
+    claim: "Sigelman et al. report that Dapper found sampling necessary for low overhead, that its first production version used a uniform probability averaging one sampled trace per 1,024 candidates, that lower-traffic workloads may miss important events at such rates, and that they were deploying adaptive sampling parameterized by a desired rate of sampled traces per unit time."
+    provenance: VERIFIED_FACT
+    domain: sampling
+    concepts: [head_sampling, adaptive_sampling]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence:
+      - { source_type: paper, tier: 1, title: "Dapper, a Large-Scale Distributed Systems Tracing Infrastructure", authors: "Benjamin H. Sigelman, Luiz Andre Barroso, Mike Burrows, Pat Stephenson, Manoj Plakal, Donald Beaver, Saul Jaspan, Chandan Shanbhag", year: "2010", url: "https://research.google/pubs/dapper-a-large-scale-distributed-systems-tracing-infrastructure/", version: "Google Technical Report dapper-2010-1", section: "Sections 2.4 and 4.4", accessed_at: "2026-10-01" }
+    limitations: ["Google's 2010 workloads; the 1/1024 rate is not a recommendation for low-volume LLM services."]
+    applicability: "Why uniform head sampling misses rare LLM failure classes."
+    curriculum_usage: { lessons: ["23.2"], labs: ["LAB-B"], assessments: ["Mastery-23"] }
+  - id: CLM-018
+    claim: "Uniform head sampling at probability p observes a failure class with k occurrences at least once with probability 1-(1-p)^k, and tail sampling that keeps all error traces but a fraction of successes makes naive exported error shares overstate the true rate unless each trace is weighted by its adjusted count."
+    provenance: DERIVED
+    domain: sampling
+    concepts: [head_sampling, tail_sampling, adjusted_count]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE (probability)"
+    assumptions: ["Independent sampling decisions per trace at a fixed probability.", "Synthetic workload of 1,000,000 requests with 40 traces of one rare failure class."]
+    derivation: "At p = 0.01 and k = 40, expected sampled failures = 0.4 and P(at least one) = 1-0.99^40 = 0.331. Keeping all 40 failing traces plus 1% of 999,960 successes exports about 10,039.6 traces, so the naive failure share is 40/10,039.6 = 0.398% against a true 0.004% (about 99.6 times too high). Weighting failures by 1 and successes by 100 gives 40/(40+999,960) = 0.004%."
+    limitations: ["Real tail policies may evict traces (CLM-016), which breaks the known-probability assumption."]
+    applicability: "Lesson 23.2 worked example and LAB B."
+    related_claims: [CLM-014, CLM-016, CLM-017]
+    curriculum_usage: { lessons: ["23.2"], labs: ["LAB-B"], assessments: ["Mastery-23"] }
+  - id: CLM-019
+    claim: "Span-derived success rates are computed over spans that ended and were exported, so requests whose process crashed, whose span was dropped by a full export queue, or that were still running at window close are censored out of the denominator; an offered-outcome SLI therefore needs an ingress ledger of offered requests independent of trace export."
+    provenance: DERIVED
+    domain: censoring
+    concepts: [censoring, offered_denominator, telemetry_loss]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT (recommended engineering practice)"
+    assumptions: ["Spans are exported only after End (CLM-015 processor semantics).", "Synthetic window: 1,000,000 offered, 2,000 explicit errors, 500 requests lost with crashed workers."]
+    derivation: "Ended spans = 999,500; success among ended spans = 997,500/999,500 = 99.800%; success over offered = 997,500/1,000,000 = 99.750%. The lost 500 are exactly the failures that the span-based ratio cannot see."
+    limitations: ["The ingress ledger itself can lose records; its loss rate must be measured separately."]
+    applicability: "SLI denominators, Lessons 23.2-23.3."
+    related_claims: [CLM-006, CLM-015]
+    curriculum_usage: { lessons: ["23.2", "23.3"], labs: ["LAB-B"], assessments: ["Mastery-23"] }
+  - id: CLM-020
+    claim: "The SRE Workbook chapter 'Implementing SLOs' (Thurgood and Ferguson) recommends treating an SLI as the ratio of good events to total events, defines the error budget as 100% minus the SLO, and gives the example that a 99.9% success SLO over 3 million requests in four weeks allows 3,000 errors, so a 1,500-error outage costs 50% of the budget."
+    provenance: VERIFIED_FACT
+    domain: slo
+    concepts: [sli, slo, error_budget]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    evidence:
+      - { source_type: official_docs, tier: 2, title: "The Site Reliability Workbook, Chapter 2: Implementing SLOs", authors: "Steven Thurgood, David Ferguson", year: "2018", url: "https://sre.google/workbook/implementing-slos/", section: "What to Measure: Using SLIs", accessed_at: "2026-10-01" }
+    limitations: ["The chapter's examples are request-driven services; 'good' for an LLM response must also be defined (Lesson 23.3)."]
+    applicability: "SLI and error-budget definitions."
+    curriculum_usage: { lessons: ["23.3", "23.4"], labs: ["LAB-C"], assessments: ["Mastery-23"] }
+  - id: CLM-021
+    claim: "For the same window, completion-conditioned success, admitted success, and offered-outcome success can differ by several points; the offered-outcome SLI counts every offered request in the denominator and treats rejections, errors, timeouts, and quality or latency failures as bad, and any exclusion (for example user cancellations) is a declared policy whose effect must be reported, with unfinished requests bounded rather than dropped."
+    provenance: DERIVED
+    domain: slo
+    concepts: [offered_outcome_sli, offered_denominator, censoring, cancellation]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT (recommended engineering practice)"
+    assumptions: ["Synthetic day: 120,000 offered; 6,000 rejected at admission; 114,000 admitted = 108,300 completed OK + 1,140 errors + 2,280 timeouts + 1,710 user cancellations + 570 unfinished at window close; 104,000 completed OK within latency and schema predicates."]
+    derivation: "Completion-conditioned success = 108,300/109,440 = 98.96%. Admitted completion = 108,300/114,000 = 95.00%. Offered completion = 108,300/120,000 = 90.25%. Offered-outcome good = 104,000/120,000 = 86.67%. Excluding cancellations by policy: 104,000/118,290 = 87.92%. Unfinished bounded: [104,000, 104,570]/120,000 = [86.67%, 87.14%]. With a 90% SLO, 12,000 bad events are allowed and 16,000 occurred, a burn rate of (16,000/120,000)/0.10 = 1.33."
+    limitations: ["Synthetic numbers; a cancellation can be a symptom of slowness, so excluding it can hide harm."]
+    applicability: "Lesson 23.3 worked example and Mastery deliverable 2."
+    related_claims: [CLM-019, CLM-020]
+    curriculum_usage: { lessons: ["23.3"], labs: ["LAB-C"], assessments: ["Mastery-23"] }
+  - id: CLM-022
+    claim: "The SRE Workbook chapter 'Alerting on SLOs' (Thurgood et al.) defines burn rate as how fast, relative to the SLO, the service consumes the error budget (burn rate 1 exhausts it exactly at the end of the window), gives time to fire = (1-SLO)/error ratio x window x burn rate and budget consumed = burn rate x window / period, derives a burn rate of 36 for 5% of a 30-day budget in one hour, recommends 2% in 1 h and 5% in 6 h for pages and 10% in 3 days for tickets (burn rates 14.4, 6, 1), recommends a short window of 1/12 the long window (Table 5-8: 5 min, 30 min, 6 h), and lists low recall of single-burn-rate alerts (a 35x burn never fires yet exhausts the budget in 20.5 hours)."
+    provenance: VERIFIED_FACT
+    domain: alerting
+    concepts: [burn_rate, multiwindow_alert, error_budget, alert_precision_recall]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    evidence:
+      - { source_type: official_docs, tier: 2, title: "The Site Reliability Workbook, Chapter 5: Alerting on SLOs", authors: "Steven Thurgood, with Jess Frame, Anthony Lenton, Carmela Quinito, Anton Tolchanov, Nejc Trdin", year: "2018", url: "https://sre.google/workbook/alerting-on-slos/", section: "Alerting Considerations; 4: Alert on Burn Rate; 5: Multiple Burn Rate Alerts; 6: Multiwindow, Multi-Burn-Rate Alerts; Tables 5-4, 5-6, 5-8", accessed_at: "2026-10-01" }
+    limitations: ["Parameters are stated as starting points for a 99.9% SLO over 30 days; the chapter itself says they depend on the service."]
+    applicability: "Burn-rate alert design, Lesson 23.4."
+    curriculum_usage: { lessons: ["23.4"], labs: ["LAB-C"], assessments: ["Mastery-23"] }
+  - id: CLM-023
+    claim: "Recomputing the workbook's alert arithmetic for a 30-day (720 h) window: 2%/1 h, 5%/6 h, and 10%/72 h give burn rates 14.4, 6, and 1; error-ratio thresholds scale with 1-SLO (0.0144/0.006/0.001 at 99.9%, 0.144/0.06/0.01 at 99%); the maximum possible burn rate is 1/(1-SLO), so at a 90% SLO the 14.4x page can never fire; and the workbook's low-traffic example (10 requests/h, 99.9% SLO, one failure = 10% hourly error ratio, 13.9% of the budget) is a 100x burn rate, not the 1,000x printed in the chapter."
+    provenance: DERIVED
+    domain: alerting
+    concepts: [burn_rate, error_budget, low_traffic_alerting]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE (arithmetic)"
+    assumptions: ["30-day window of 720 hours.", "Constant error ratio after onset; windows already filled with pre-incident traffic; evaluation interval ignored."]
+    derivation: "burn = budget fraction x 720 h / window: 0.02x720/1 = 14.4, 0.05x720/6 = 6, 0.10x720/72 = 1, 0.05x720/1 = 36. Max burn = 1/(1-SLO): 1,000 at 99.9%, 100 at 99%, 10 at 90%. At 99%, an error ratio e gives burn e/0.01: e = 1.0 -> burn 100, exhaustion in 7.2 h, 1 h page fires after 0.01/1.0 x 60 min x 14.4 = 8.64 min; e = 0.30 -> burn 30, exhaustion 24 h, page after 28.8 min; e = 0.10 -> burn 10, never fires the 14.4 page, fires the 6 h page after 3.6 h; e = 0.025 -> burn 2.5, only the 72 h ticket after 28.8 h. Low traffic: 10/h x 720 = 7,200 requests, budget 7.2 failures, one failure = 1/7.2 = 13.9% of budget; 0.10/0.001 = 100. Workbook checks that hold: 720/35 = 20.57 h; 720 x 60/1,000 = 43.2 min; 100% outage at 90% consumes 1/72 = 1.39% per hour; 30 days x 10^-5 = 25.92 s at 99.999%."
+    limitations: ["Detection-time formula ignores rule evaluation interval, scrape delay, and notification latency."]
+    applicability: "Lesson 23.4 worked example; LAB C prediction."
+    related_claims: [CLM-022, CLM-024]
+    curriculum_usage: { lessons: ["23.4"], labs: ["LAB-C"], assessments: ["Mastery-23"] }
+  - id: CLM-024
+    claim: "The SRE Workbook chapter 'Alerting on SLOs' lists options for low-traffic services (generate artificial traffic, combine services, change the product or client, lower the SLO or lengthen the window), warns that artificial traffic can hide real-user failures it does not exercise, and notes that very high availability targets can exhaust the budget faster than alerting can respond (26 seconds for a 100% outage at 99.999% monthly)."
+    provenance: VERIFIED_FACT
+    domain: alerting
+    concepts: [low_traffic_alerting, synthetic_traffic]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    evidence:
+      - { source_type: official_docs, tier: 2, title: "The Site Reliability Workbook, Chapter 5: Alerting on SLOs", authors: "Steven Thurgood et al.", year: "2018", url: "https://sre.google/workbook/alerting-on-slos/", section: "Low-Traffic Services and Error Budget Alerting; Extreme Availability Goals", accessed_at: "2026-10-01" }
+    limitations: ["Generic guidance; LLM synthetic probes add the cost of model calls and can be unrepresentative of real prompts."]
+    applicability: "Low-volume tenants and premium tiers."
+    curriculum_usage: { lessons: ["23.4"], labs: ["LAB-C"], assessments: ["Mastery-23"] }
+  - id: CLM-025
+    claim: "Lee et al. show that an LLM judge with sensitivity q1 and specificity q0 (q0 + q1 < 2) biases the raw pass rate, upward at low true accuracy and downward at high accuracy, give the Rogan-Gladen corrected estimator theta = (p + q0 - 1)/(q0 + q1 - 1) with q0 and q1 estimated on a human-labeled calibration set and intervals that include calibration uncertainty, show that the correction stays unbiased under a shift in the true-label distribution only if the judge's conditional behavior P(judge label | true label) is invariant between calibration and test data, and state that they treat human evaluation as ground truth."
+    provenance: VERIFIED_FACT
+    domain: quality_measurement
+    concepts: [judge_validity, misclassification_correction, invariance_assumption]
+    confidence: high
+    currentness_status: "FRONTIER (2025 preprint, v4 2026)"
+    evidence:
+      - { source_type: paper, tier: 1, title: "How to Correctly Report LLM-as-a-Judge Evaluations", authors: "Chungpa Lee, Thomas Zeng, Jongwon Jeong, Jy-yong Sohn, Kangwook Lee", year: "2025", version: "arXiv:2511.21140v4 (31 May 2026)", url: "https://arxiv.org/abs/2511.21140", section: "Sections 1, 4.1-4.2, 8; Appendix A (Limitations)", accessed_at: "2026-10-01" }
+    limitations: ["Binary labels in the main text; humans treated as ground truth; invariance can fail when length, style, or prompt type affect the judge differently across data (the authors' own limitation)."]
+    applicability: "Turning judge outputs into a population quality estimate."
+    related_claims: [CLM-026, CLM-027]
+    curriculum_usage: { lessons: ["23.5"], labs: ["LAB-D"], assessments: ["Mastery-23"] }
+  - id: CLM-026
+    claim: "A judge-based quality SLI is a population estimate, not a per-request label: with calibration q1 = 0.92 and q0 = 0.80, raw pass rates 0.88 and 0.82 correspond to corrected 0.944 and 0.861, so the raw 6-point drop understates an 8.3-point corrected drop; and a new failure type that the judge accepts with probability 0.70 can make the stale-calibrated estimate read 0.919 while the true pass rate is 0.860."
+    provenance: DERIVED
+    domain: quality_measurement
+    concepts: [judge_validity, misclassification_correction, invariance_assumption]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE (arithmetic on synthetic calibration)"
+    assumptions: ["Synthetic calibration: 300 human-correct items, judge accepts 276 (q1 = 0.92); 100 human-incorrect items, judge rejects 80 (q0 = 0.80).", "Second week: true pass rate 0.86; bad mass 0.0556 of the old type (judge rejects with 0.80) and 0.0844 of a new type (judge rejects with 0.30)."]
+    derivation: "theta = (p + 0.80 - 1)/(0.72): p = 0.88 -> 0.68/0.72 = 0.9444; p = 0.82 -> 0.62/0.72 = 0.8611. Under the new failure type, p = 0.86x0.92 + 0.0556x0.20 + 0.0844x0.70 = 0.8614 and the stale correction gives (0.8614-0.20)/0.72 = 0.9186. Calibration uncertainty alone: SE(q0) = sqrt(0.8x0.2/100) = 0.04; q0 = 0.72 or 0.88 moves the corrected 0.88 to 0.9375 or 0.9500."
+    limitations: ["Synthetic numbers; real calibrations need slice-level checks and intervals (Module 15, Lesson 15.3)."]
+    applicability: "Lesson 23.5 worked example; LAB D."
+    related_claims: [CLM-025]
+    curriculum_usage: { lessons: ["23.5"], labs: ["LAB-D"], assessments: ["Mastery-23"] }
+  - id: CLM-027
+    claim: "Angelopoulos et al. present prediction-powered inference, which produces valid confidence intervals for means, quantiles, and regression coefficients when a small labeled dataset is supplemented by machine-learning predictions on unlabeled data, without assumptions on the predictor, with intervals that shrink as predictions improve."
+    provenance: VERIFIED_FACT
+    domain: quality_measurement
+    concepts: [prediction_powered_inference, judge_validity]
+    confidence: medium
+    currentness_status: "WORKLOAD-DEPENDENT"
+    evidence:
+      - { source_type: paper, tier: 1, title: "Prediction-Powered Inference", authors: "Anastasios N. Angelopoulos, Stephen Bates, Clara Fannjiang, Michael I. Jordan, Tijana Zrnic", year: "2023", version: "arXiv:2301.09633v4", url: "https://arxiv.org/abs/2301.09633", section: "Abstract (abstract-level inspection)", accessed_at: "2026-10-01" }
+    limitations: ["Abstract-level inspection only; the labeled set must be drawn from the target population."]
+    applicability: "Alternative to Rogan-Gladen correction when a fresh random human-labeled sample is available."
+    curriculum_usage: { lessons: ["23.5"], labs: ["LAB-D"], assessments: ["Mastery-23"] }
+  - id: CLM-028
+    claim: "Thakur et al. evaluate thirteen judge models on a setup with high inter-human agreement and report that only the best and largest reach reasonable alignment with humans, that they remain well below inter-human agreement with scores differing by up to 5 points, that judges are sensitive to prompt complexity and length and tend toward leniency, and that high percent agreement can coexist with very different scores."
+    provenance: VERIFIED_FACT
+    domain: quality_measurement
+    concepts: [judge_validity]
+    confidence: medium
+    currentness_status: "REFERENCE / BASELINE"
+    evidence:
+      - { source_type: paper, tier: 1, title: "Judging the Judges: Evaluating Alignment and Vulnerabilities in LLMs-as-Judges", authors: "Aman Singh Thakur, Kartik Choudhary, Venkat Srinik Ramayapally, Sankaran Vaidyanathan, Dieuwke Hupkes", year: "2024", version: "arXiv:2406.12624v6 (18 Aug 2025)", url: "https://arxiv.org/abs/2406.12624", section: "Abstract (abstract-level inspection)", accessed_at: "2026-10-01" }
+    limitations: ["Abstract-level inspection; tasks, judges, and scales are those evaluated."]
+    applicability: "Why a judge pass rate is an instrument reading with error."
+    curriculum_usage: { lessons: ["23.5"], labs: ["LAB-D"], assessments: ["Mastery-23"] }
+  - id: CLM-029
+    claim: "Shankar et al. report criteria drift in LLM-assisted evaluation: users need criteria to grade outputs, but grading outputs helps them define criteria, and some criteria depend on the specific outputs observed."
+    provenance: VERIFIED_FACT
+    domain: quality_measurement
+    concepts: [judge_validity, criteria_drift]
+    confidence: medium
+    currentness_status: "REFERENCE / BASELINE"
+    evidence:
+      - { source_type: paper, tier: 1, title: "Who Validates the Validators? Aligning LLM-Assisted Evaluation of LLM Outputs with Human Preferences", authors: "Shreya Shankar, J.D. Zamfirescu-Pereira, Bjoern Hartmann, Aditya G. Parameswaran, Ian Arawjo", year: "2024", version: "arXiv:2404.12272v1", url: "https://arxiv.org/abs/2404.12272", section: "Abstract (abstract-level inspection)", accessed_at: "2026-10-01" }
+    limitations: ["Qualitative user study; abstract-level inspection."]
+    applicability: "Why judge rubric versions belong in telemetry and change control."
+    curriculum_usage: { lessons: ["23.5"], labs: ["LAB-D"], assessments: ["Incident-23.1"] }
+  - id: CLM-030
+    claim: "Chapelle (KDD 2014) describes conversions that can occur up to a month after the click, the matching-window dilemma (a short window mislabels late positives as negatives; a long window delays training), treats not-yet-converted examples as unlabeled rather than negative, and models the conversion delay with an approach linked to survival analysis with censored times."
+    provenance: VERIFIED_FACT
+    domain: delayed_labels
+    concepts: [delayed_labels, censoring, matching_window]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE"
+    evidence:
+      - { source_type: paper, tier: 1, title: "Modeling Delayed Feedback in Display Advertising", authors: "Olivier Chapelle", year: "2014", version: "KDD 2014, DOI 10.1145/2623330.2623634", url: "https://doi.org/10.1145/2623330.2623634", section: "Abstract; Sections 2-4 (matching window, delay model, survival analysis link)", accessed_at: "2026-10-01" }
+    limitations: ["Display-advertising conversions; the delay distribution of LLM complaints or human reviews must be measured."]
+    applicability: "Quality labels that arrive days after the response."
+    curriculum_usage: { lessons: ["23.5"], labs: ["LAB-D"], assessments: ["Mastery-23"] }
+  - id: CLM-031
+    claim: "Recent outcome counts must be corrected for label delay before comparison with mature windows, and a detector's alert precision depends on the base rate: with a stationary delay distribution where 50% of complaints arrive within 24 h, 150 complaints on 10,000 day-old responses imply about 3.0%, not 1.5%; and a detector with 90% sensitivity and 10% false-positive rate on a 2% incident prior has positive predictive value 0.155."
+    provenance: DERIVED
+    domain: delayed_labels
+    concepts: [delayed_labels, detector_precision]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE (arithmetic)"
+    assumptions: ["Delay distribution measured on mature windows and stationary.", "Detector operating characteristics measured on adjudicated incidents; independence of days."]
+    derivation: "150/10,000 = 1.5%; 150/0.5/10,000 = 3.0%. PPV = 0.02x0.9/(0.02x0.9 + 0.98x0.1) = 0.018/0.116 = 0.155; alerts per 100 days = 100 x 0.116 = 11.6."
+    limitations: ["If the complaint channel itself changes, the delay distribution is not stationary."]
+    applicability: "Lesson 23.5 delayed labels and detector alerts."
+    related_claims: [CLM-030, CLM-039]
+    curriculum_usage: { lessons: ["23.5"], labs: ["LAB-D"], assessments: ["Mastery-23"] }
+  - id: CLM-032
+    claim: "At the pinned specification commit, the Metrics SDK cardinality-limits section (Status: Stable) defines a per-metric hard limit on metric points per collection cycle, applied after attribute filtering, with a default of 2000 if no view or reader sets one, and an overflow series carrying otel.metric.overflow=true that aggregates measurements beyond the limit without double counting or dropping them."
+    provenance: VERIFIED_FACT
+    domain: telemetry_cost
+    concepts: [cardinality, cardinality_limit, metric]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT (specification)"
+    evidence:
+      - { source_type: specification, tier: 1, title: "OpenTelemetry Specification — Metrics SDK, Cardinality limits", repository: "https://github.com/open-telemetry/opentelemetry-specification", commit: "32c0651edf148cfd67054274c5025ebb27773c38", file: "specification/metrics/sdk.md", section: "Cardinality limits; Overflow attribute; Synchronous instrument cardinality limits", url: "https://github.com/open-telemetry/opentelemetry-specification/blob/32c0651edf148cfd67054274c5025ebb27773c38/specification/metrics/sdk.md", accessed_at: "2026-10-01" }
+    limitations: ["Backends apply their own series limits; SDK releases may differ from the specification."]
+    applicability: "Metric label design and overflow detection."
+    curriculum_usage: { lessons: ["23.6"], labs: ["LAB-A"], assessments: ["Mastery-23"] }
+  - id: CLM-033
+    claim: "The Prometheus naming documentation cautions that every unique combination of label key-value pairs is a new time series and advises against labels with high cardinality such as user IDs, email addresses, or other unbounded sets."
+    provenance: VERIFIED_FACT
+    domain: telemetry_cost
+    concepts: [cardinality]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    evidence:
+      - { source_type: official_docs, tier: 2, title: "Prometheus — Metric and label naming", url: "https://prometheus.io/docs/practices/naming/", section: "Labels", accessed_at: "2026-10-01" }
+    limitations: ["Prometheus-specific storage model; other backends charge differently."]
+    applicability: "Keeping tenant, request, and prompt identifiers off metric labels."
+    curriculum_usage: { lessons: ["23.6"], labs: ["LAB-A"], assessments: ["Mastery-23"] }
+  - id: CLM-034
+    claim: "OpenTelemetry's 'Handling sensitive data' guidance states that OpenTelemetry cannot determine what is sensitive in a given context, makes the implementer responsible for compliance, protection, consent, and reviewing what instrumentation libraries emit, recommends data minimization, and lists Collector processors (attributes, filter, redaction, transform) including hashing and deleting attributes."
+    provenance: VERIFIED_FACT
+    domain: telemetry_privacy
+    concepts: [data_minimization, redaction]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    evidence:
+      - { source_type: official_docs, tier: 2, title: "OpenTelemetry — Handling sensitive data", url: "https://opentelemetry.io/docs/security/handling-sensitive-data/", section: "Your responsibility; Data minimization; Protecting sensitive data", accessed_at: "2026-10-01" }
+    limitations: ["Hashing a low-entropy identifier is pseudonymization, not anonymization; legal classification is out of scope."]
+    applicability: "Telemetry privacy controls."
+    curriculum_usage: { lessons: ["23.6"], labs: ["LAB-A"], assessments: ["Mastery-23"] }
+  - id: CLM-035
+    claim: "Metric series count is the product of label cardinalities and telemetry storage is dominated by captured content: labels of 3 models x 2 providers x 5 operations x 5 error types x 6 regions x 4 tiers give 3,600 series per metric (above the default 2,000 limit) and 1.8 million with 500 tenant IDs; at 1,000,000 requests/day, 12 spans of 1.2 KB give 14.4 GB/day while 26 KB of content per request gives 26 GB/day, and a content hook that runs regardless of sampling keeps content at 780 GB per 30 days even when traces are sampled at 1%."
+    provenance: DERIVED
+    domain: telemetry_cost
+    concepts: [cardinality, content_capture, telemetry_volume]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE (arithmetic on synthetic inputs)"
+    assumptions: ["Synthetic label sets and sizes; 6,500 tokens of content per request at an assumed 4 bytes per token = 26 KB; decimal GB."]
+    derivation: "3x2x5x5x6x4 = 3,600; x500 = 1,800,000. 10^6 x 12 x 1.2 KB = 14.4 GB/day; 10^6 x 26 KB = 26 GB/day; 30 days unsampled = 1,212 GB; both at 1% = 12.12 GB; spans at 1% with content hook at 100% = 4.32 + 780 = 784.32 GB."
+    limitations: ["Compression, columnar storage, and backend pricing change the bytes; Module 22 owns pricing."]
+    applicability: "Lesson 23.6 worked example; Mastery deliverable 6."
+    related_claims: [CLM-008, CLM-032]
+    curriculum_usage: { lessons: ["23.6"], labs: ["LAB-A"], assessments: ["Mastery-23"] }
+  - id: CLM-036
+    claim: "The SRE Book chapter 'Effective Troubleshooting' (Chris Jones) advises that in a major outage the first response should be to make the system work as well as it can under the circumstances, e.g. diverting traffic, dropping traffic, or disabling subsystems, that stopping the bleeding is the first priority over root-causing, and that rapid triage does not preclude preserving evidence such as logs."
+    provenance: VERIFIED_FACT
+    domain: incident_response
+    concepts: [mitigation_first, evidence_preservation]
+    confidence: high
+    currentness_status: "CURRENT DEFAULT"
+    evidence:
+      - { source_type: official_docs, tier: 2, title: "Site Reliability Engineering, Chapter 12: Effective Troubleshooting", authors: "Chris Jones", year: "2016", url: "https://sre.google/sre-book/effective-troubleshooting/", section: "Triage", accessed_at: "2026-10-01" }
+    limitations: ["General SRE practice; does not address delayed quality signals."]
+    applicability: "Rollback-first mitigation in Lesson 23.6 and the incident."
+    curriculum_usage: { lessons: ["23.6"], labs: ["LAB-C"], assessments: ["Incident-23.1"] }
+  - id: CLM-037
+    claim: "When a recent change is a plausible cause and rollback is safe, mitigating before diagnosis bounds budget loss: at a 99% SLO and burn rate 30, a 1 h page fires after 28.8 min with 2.0% of the 30-day budget spent; a 6-minute rollback adds 0.42% (2.42% total), while 45 minutes of diagnosis before the same rollback brings the total to 5.54%."
+    provenance: DERIVED
+    domain: incident_response
+    concepts: [mitigation_first, burn_rate, rollback]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE (arithmetic)"
+    assumptions: ["Constant burn rate 30 until mitigation; rollback fully restores the SLI; rollback state compatibility already verified (Module 17, Lesson 17.6)."]
+    derivation: "Budget fraction spent = burn x minutes / 43,200: 30 x 28.8/43,200 = 0.02; 30 x 6/43,200 = 0.0042; 30 x (28.8+6)/43,200 = 0.0242; 30 x (28.8+45+6)/43,200 = 0.0554."
+    limitations: ["Rollback can be unsafe or ineffective (state, data migrations, external provider faults); then mitigation means traffic shifting or degradation, not rollback."]
+    applicability: "Incident protocol step ordering."
+    related_claims: [CLM-023, CLM-036]
+    curriculum_usage: { lessons: ["23.6"], labs: ["LAB-C"], assessments: ["Incident-23.1"] }
+  - id: CLM-038
+    claim: "Zhu and Pu (TelemetrySuffBench, 2026) report that with metadata, OpenTelemetry-compatible, or OpenInference-compatible views of controlled agent traces, failure detection F1 stayed between 99.5% and 100% while origin-step localization accuracy was at most 0.5%, and that removing decision content reduced origin-step accuracy to zero for every evaluated model."
+    provenance: VERIFIED_FACT
+    domain: incident_response
+    concepts: [detection_localization_gap, failure_localization]
+    confidence: medium
+    currentness_status: "FRONTIER (2026 preprint, synthetic traces)"
+    evidence:
+      - { source_type: paper, tier: 1, title: "TelemetrySuffBench: Is Agent Telemetry Sufficient for Failure-Origin Diagnosis?", authors: "Yuxuan Zhu, Peng Pu", year: "2026", version: "arXiv:2608.07899v1", url: "https://arxiv.org/abs/2608.07899", section: "Abstract (abstract-level inspection)", accessed_at: "2026-10-01" }
+    limitations: ["Abstract-level inspection; controlled synthetic traces and model-based diagnosers; not independently reproduced."]
+    applicability: "Why an alert that detects is not evidence of where a fault originated."
+    curriculum_usage: { lessons: ["23.6"], labs: ["LAB-C"], assessments: ["Incident-23.1"] }
+  - id: CLM-039
+    claim: "Rabanser et al. study dataset-shift detection and report that, across the shifts they explore, two-sample testing on representations from pre-trained classifiers performed best, and that domain-discriminating approaches help characterize shifts and judge whether they are harmful."
+    provenance: VERIFIED_FACT
+    domain: quality_measurement
+    concepts: [drift_detection, detector_precision]
+    confidence: medium
+    currentness_status: "REFERENCE / BASELINE"
+    evidence:
+      - { source_type: paper, tier: 1, title: "Failing Loudly: An Empirical Study of Methods for Detecting Dataset Shift", authors: "Stephan Rabanser, Stephan Guennemann, Zachary C. Lipton", year: "2019", version: "NeurIPS 2019; arXiv:1810.11953v4", url: "https://arxiv.org/abs/1810.11953", section: "Abstract (abstract-level inspection)", accessed_at: "2026-10-01" }
+    limitations: ["Image and tabular datasets with synthetic perturbations; detection of shift is not detection of harm."]
+    applicability: "Embedding-distance and drift monitors as alarms, not labels."
+    curriculum_usage: { lessons: ["23.5"], labs: ["LAB-D"], assessments: ["Mastery-23"] }
+  - id: CLM-040
+    claim: "On a synthetic fault library injected into an instrumented LLM service, multiwindow burn-rate alerts on an offered-outcome availability/latency SLI will page for provider errors, timeouts, admission rejections, and streaming stalls within the Lesson 23.4 detection-time predictions, but will not page for a silent quality regression or a telemetry-pipeline loss unless a corrected quality SLI and a telemetry-completeness SLI are added."
+    provenance: HYPOTHESIS
+    domain: alerting
+    concepts: [burn_rate, offered_outcome_sli, synthetic_faults]
+    confidence: medium
+    currentness_status: "WORKLOAD-DEPENDENT"
+    hypothesis:
+      prediction: "Detection time for each availability fault is within 20% of (1-SLO)/e x window x burn rate plus evaluation interval; the quality-regression and exporter-loss faults produce no availability page; adding the corrected quality SLI and an ingress-versus-span completeness ratio produces alerts for them."
+      measurement_target: "Per-fault alert time, alert precision and recall over the fault schedule, reset time, budget consumed at detection, and false pages on fault-free days."
+      falsifying_observation: "An availability fault is missed or detected more than 20% later than predicted with no explanation from evaluation interval or traffic; or the availability SLI pages on the quality-regression fault (which would mean the fault leaked into errors and the fault design is wrong); or the added SLIs do not alert on their target faults."
+    limitations: ["Synthetic faults and traffic; real incidents combine causes."]
+    applicability: "LAB C pre-registered hypothesis."
+    curriculum_usage: { lessons: ["23.4", "23.6"], labs: ["LAB-C"], assessments: ["Mastery-23"] }
+  - id: CLM-041
+    claim: "A judge-based quality estimate corrected with Rogan-Gladen on a fresh human calibration set will track a human-audited pass rate within its interval while the judge's conditional error rates are invariant, and will diverge when a new failure type that the judge accepts is injected."
+    provenance: HYPOTHESIS
+    domain: quality_measurement
+    concepts: [judge_validity, misclassification_correction, invariance_assumption]
+    confidence: medium
+    currentness_status: "WORKLOAD-DEPENDENT"
+    hypothesis:
+      prediction: "Before injection, the 95% interval of the corrected estimate covers the human-audited pass rate in at least 9 of 10 weekly windows; after injection, the corrected estimate exceeds the audited rate by more than its interval half-width, while the slice-wise human audit detects the new type."
+      measurement_target: "Raw judge pass rate, estimated q0/q1 with intervals, corrected estimate with interval, human-audited pass rate on a random sample, and per-slice judge error rates."
+      falsifying_observation: "Coverage below 9 of 10 windows before injection (correction or interval is wrong), or no divergence after injection (the injected type was not accepted by the judge, so the fault design failed)."
+    limitations: ["Requires a human-labeled random sample per window; human labels have their own disagreement (Module 08, Lesson 8.6)."]
+    applicability: "LAB D pre-registered hypothesis."
+    curriculum_usage: { lessons: ["23.5"], labs: ["LAB-D"], assessments: ["Mastery-23"] }
+  - id: CLM-042
+    claim: "In a trace simulator with rare failure classes, 1% uniform head sampling will miss a 40-per-million failure class in most windows, error-keeping tail sampling will overstate failure shares unless weighted by adjusted counts, and both will undercount failures from crashed workers that never end spans."
+    provenance: HYPOTHESIS
+    domain: sampling
+    concepts: [head_sampling, tail_sampling, adjusted_count, censoring]
+    confidence: high
+    currentness_status: "WORKLOAD-DEPENDENT"
+    hypothesis:
+      prediction: "Fraction of 1,000 simulated windows with zero sampled rare failures is near 0.669; unweighted tail share is near 99.6x the truth; weighted share is within sampling error of the truth; crashed-worker failures are absent from all span-derived ratios and present only in the ingress ledger."
+      measurement_target: "Per-window sampled counts, estimated rates with and without adjusted counts, ingress-ledger offered counts, and eviction counts from the simulated tail buffer."
+      falsifying_observation: "Weighted estimates are biased beyond sampling error with no eviction, or span-derived ratios include crashed-worker failures (meaning the simulator ends spans it should not)."
+    limitations: ["Simulator, not a production collector; LAB B adds the real collector only optionally."]
+    applicability: "LAB B pre-registered hypothesis."
+    curriculum_usage: { lessons: ["23.2"], labs: ["LAB-B"], assessments: ["Mastery-23"] }
+  - id: CLM-043
+    claim: "Mastery fixture (synthetic): 20,000,000 offered requests per 30 days; availability/latency SLO 99.0% offered-outcome; quality calibration with 250 human-acceptable items of which the judge accepts 230 and 150 human-unacceptable items of which it rejects 117; last-week raw judge pass rate 0.84; complaint delay 40% within 1 day, 75% within 7 days, 95% within 30 days; 9 spans per request at 1.5 KB and 30 KB content per request; storage budget 600 GB per 30 days; proposed metric labels model 4, provider 2, operation 4, error.type 8, region 5, prompt_version 6, tenant_id 1,200; one premium tenant at 30 requests per hour."
+    provenance: EXERCISE_ASSUMPTION
+    domain: mastery_fixture
+    concepts: [offered_outcome_sli, judge_validity, cardinality, telemetry_volume]
+    confidence: high
+    currentness_status: "REFERENCE / BASELINE (exercise input)"
+    limitations: ["Synthetic; not calibrated to any real service, judge, or backend."]
+    applicability: "Section 08 transfer problem and Section 09 reference checks."
+    curriculum_usage: { lessons: ["23.3", "23.6"], labs: [], assessments: ["Mastery-23"] }
+  - id: CLM-044
+    claim: "The core 'Recording errors' convention (Status: Development) at semantic-conventions commit 70550277d98a01ca3fe83bcfc3a2dac18a0d98b7 says the span status code MUST be left unset if the operation ended without errors, that on error instrumentation SHOULD set status Error and the error.type attribute, that metrics for operations SHOULD carry error.type only when the operation failed, and that whether a status code counts as an error depends on context."
+    provenance: VERIFIED_FACT
+    domain: signal_boundaries
+    concepts: [span_status, error_classification]
+    confidence: high
+    currentness_status: "FRONTIER (Development-status specification)"
+    evidence:
+      - { source_type: specification, tier: 1, title: "Semantic conventions — Recording errors", repository: "https://github.com/open-telemetry/semantic-conventions", commit: "70550277d98a01ca3fe83bcfc3a2dac18a0d98b7", file: "docs/general/recording-errors.md", section: "What constitutes an error; Recording errors on spans; Recording errors on metrics", url: "https://github.com/open-telemetry/semantic-conventions/blob/70550277d98a01ca3fe83bcfc3a2dac18a0d98b7/docs/general/recording-errors.md", accessed_at: "2026-10-01" }
+    limitations: ["A successful status says the call returned; it says nothing about answer quality."]
+    applicability: "Why span status cannot serve as a quality SLI."
+    curriculum_usage: { lessons: ["23.1", "23.3"], labs: ["LAB-A"], assessments: ["Incident-23.1"] }
