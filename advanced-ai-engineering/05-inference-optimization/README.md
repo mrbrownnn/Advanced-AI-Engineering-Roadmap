@@ -17,7 +17,7 @@ The scope is single-node inference mechanisms: IO-aware attention, kernel fusion
 **Research Cutoff:** 2026-09-30. The sources in Section 05 were re-read on 2026-10-01 at the depth stated per entry. No exhaustive search for work published between 2026-09-27 and the cutoff was done; that gap is an open verification item, not a claim that nothing new exists.
 
 **Module Orientation**
-
+- **Why This Matters**: Inference optimization sits where engineering and business constraints meet: every request consumes GPU time, so an unoptimized serving path raises both cost per request and latency. When traffic rises suddenly, a GPU running inefficient kernels reaches its capacity sooner, and users see queueing, timeouts, or rejected requests. This module stays within one GPU node and teaches how to choose, implement, and verify the mechanisms that reduce that cost: IO-aware attention, kernel fusion with Triton, quantization, and speculative decoding. None of these is a mandatory step. Each is adopted only when a measured bottleneck calls for it and the result still passes correctness and quality gates.
 - **Engineering Problem**: Choose, implement, compose, and defend inference optimizations for a pinned model, runtime, hardware target, workload distribution, and SLO.
 - **What You Will Do**: Compare reference and IO-aware attention; write and profile a fused Triton kernel; build and validate quantized artifacts; instrument speculative cycles; trace a current FlashAttention source path; and diagnose an optimization stack that regresses production goodput.
 - **Environment**: Python 3.10+, PyTorch, Triton or an equivalent kernel environment, and a supported GPU for execution labs; analytical and artifact-manifest work can proceed without every backend.
