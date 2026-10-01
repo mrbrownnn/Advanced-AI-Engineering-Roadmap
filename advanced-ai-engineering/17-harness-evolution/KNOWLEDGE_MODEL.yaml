@@ -1,59 +1,72 @@
 module: "17-harness-evolution"
-registry_version: "1.0.0"
+registry_version: "1.1.0"
 
-required_concepts: [harness_manifest, change_surface, provider_lifecycle, parameter_compatibility, behavior_drift, format_sensitivity, paired_evaluation, regression_flip, prompt_optimization, surrogate_search, winners_curse, holdout_governance, shadow_traffic, canary, guardrail_metric, rollback_state, migration_ledger]
+required_concepts: [harness_manifest, change_surface, identity_evidence, causal_contrast, provider_lifecycle, parameter_compatibility, behavior_drift, format_sensitivity, paired_evaluation, block_effect, regression_flip, noninferiority_gate, prompt_optimization, surrogate_search, winners_curse, independent_confirmation, holdout_governance, shadow_traffic, canary, guardrail_metric, unequal_allocation, fixed_horizon, sequential_look_policy, rollback_state, migration_ledger]
 prerequisite_concepts: [effective_request, provider_adapter, replay_manifest, evaluation_contract, grader_validity, paired_inference, falsification_contract, durable_state]
-first_occurrence_concepts: [harness_manifest, change_surface, regression_flip, winners_curse, holdout_governance, canary, rollback_state, migration_ledger]
+first_occurrence_concepts: [harness_manifest, change_surface, identity_evidence, causal_contrast, regression_flip, winners_curse, independent_confirmation, canary, unequal_allocation, fixed_horizon, rollback_state, migration_ledger]
 
 concept_dependencies:
   - { concept: harness_manifest, depends_on: [effective_request, replay_manifest] }
   - { concept: change_surface, depends_on: [harness_manifest, provider_adapter] }
+  - { concept: identity_evidence, depends_on: [harness_manifest] }
+  - { concept: causal_contrast, depends_on: [identity_evidence, falsification_contract] }
   - { concept: regression_flip, depends_on: [paired_inference, evaluation_contract] }
+  - { concept: block_effect, depends_on: [paired_inference, evaluation_contract] }
+  - { concept: noninferiority_gate, depends_on: [block_effect, evaluation_contract] }
   - { concept: prompt_optimization, depends_on: [evaluation_contract, grader_validity] }
   - { concept: winners_curse, depends_on: [prompt_optimization, paired_inference] }
+  - { concept: independent_confirmation, depends_on: [winners_curse, holdout_governance] }
   - { concept: holdout_governance, depends_on: [winners_curse] }
   - { concept: canary, depends_on: [guardrail_metric, paired_inference] }
+  - { concept: unequal_allocation, depends_on: [canary] }
+  - { concept: fixed_horizon, depends_on: [canary] }
+  - { concept: sequential_look_policy, depends_on: [fixed_horizon, evaluation_contract] }
   - { concept: rollback_state, depends_on: [durable_state, harness_manifest] }
   - { concept: migration_ledger, depends_on: [harness_manifest, regression_flip, canary] }
 
 mechanisms:
-  - { id: "MECH-01", description: "A harness manifest pins model identifier/snapshot, provider/runtime, parameters, prompt, tool/output schemas, parser/validator, retry and routing versions so every production response maps to one reproducible configuration.", evidence_ids: ["CLM-001"], derived_from: [] }
+  - { id: "MECH-01", description: "A harness manifest pins model identifier/snapshot, provider/runtime, parameters, prompt, tool/output schemas, parser/validator, retry and routing versions so every production response maps to one logged configuration; its digest proves identity, not cause.", evidence_ids: ["CLM-001", "CLM-017"], derived_from: [] }
   - { id: "MECH-02", description: "Change classification separates forced changes (retirement, parameter deprecation) from elective changes (new model, prompt edit, optimizer output) and checks request validity per target before behavior evaluation.", evidence_ids: ["CLM-002", "CLM-003"], derived_from: ["MECH-01"] }
-  - { id: "MECH-03", description: "Migration evaluation runs old and new manifests on the same frozen items with repeated samples, reporting improvements, regressions, and slice-level flips rather than aggregate score alone.", evidence_ids: ["CLM-004", "CLM-005", "CLM-006"], derived_from: ["MECH-01"] }
-  - { id: "MECH-04", description: "Automated prompt optimization searches instructions and demonstrations against a metric on train/validation data; the selected candidate must then pass a sealed test and paired regression gate.", evidence_ids: ["CLM-007", "CLM-008", "CLM-009", "CLM-016"], derived_from: ["MECH-03"] }
-  - { id: "MECH-05", description: "Holdout governance limits adaptive reuse of validation data, records the number of candidates compared, and reserves sealed data for final decisions.", evidence_ids: ["CLM-010", "CLM-011", "CLM-012"], derived_from: ["MECH-04"] }
-  - { id: "MECH-06", description: "Progressive rollout moves from offline replay to shadow traffic, randomized canary against a concurrent control, staged ramp, and full rollout with predeclared guardrails and rollback triggers.", evidence_ids: ["CLM-013", "CLM-014"], derived_from: ["MECH-03"] }
+  - { id: "MECH-03", description: "Migration evaluation runs old and new manifests on the same rows, averages paired new-minus-old effects inside independent blocks, and applies predeclared global and critical-slice margin gates; flips remain descriptive evidence.", evidence_ids: ["CLM-004", "CLM-005", "CLM-006", "CLM-018", "CLM-021"], derived_from: ["MECH-01"] }
+  - { id: "MECH-04", description: "Automated prompt optimization searches instructions and demonstrations against a metric on train/validation data; the selected candidate then faces independent confirmatory evidence with declared population scope and a paired block gate.", evidence_ids: ["CLM-007", "CLM-008", "CLM-009", "CLM-016", "CLM-019"], derived_from: ["MECH-03"] }
+  - { id: "MECH-05", description: "Holdout governance limits adaptive reuse, records candidate dependence and adaptive history, and keeps independent confirmatory evidence out of candidate selection; an observed validation-confirmation gap has multiple possible causes.", evidence_ids: ["CLM-010", "CLM-011", "CLM-012", "CLM-019"], derived_from: ["MECH-04"] }
+  - { id: "MECH-06", description: "Progressive rollout uses concurrent randomized control, declares equal graded-control subsampling or unequal allocation, analyzes independent blocks, and separates fixed-horizon or valid sequential ramp gates from fast operational stop rules.", evidence_ids: ["CLM-013", "CLM-014", "CLM-018"], derived_from: ["MECH-03"] }
+  - { id: "MECH-08", description: "Causal attribution requires a controlled one-change contrast, factorial ablation/replay for joint changes, or another discriminating intervention; when contrasts or logged state are missing the report must preserve unknown or interacting causes.", evidence_ids: ["CLM-017"], derived_from: ["MECH-01"] }
   - { id: "MECH-07", description: "Rollback and dual-version compatibility require that state and artifacts produced under either version stay readable, migratable, or quarantined when traffic returns to the prior version.", evidence_ids: ["CLM-015"], derived_from: ["MECH-01", "MECH-06"] }
 
 mathematical_models:
   - { id: "MATH-01", description: "Paired migration table: n items, b old-pass/new-fail, c old-fail/new-pass. Accuracy change = (c-b)/n; regression rate = b/n. Equal accuracy only implies b=c.", evidence_ids: ["CLM-006"], derived_from: ["MECH-03"] }
-  - { id: "MATH-02", description: "Winner's curse: for K equal-quality candidates with independent Gaussian noise sigma, expected optimistic bias of the selected validation score is sigma*E[max of K N(0,1)] (≈0.56, 1.16, 1.54, 1.87 sigma for K=2, 5, 10, 20).", evidence_ids: ["CLM-010"], derived_from: ["MECH-05"] }
-  - { id: "MATH-03", description: "Canary per-arm sample size for a proportion drop delta: n ≈ (z_{1-alpha/2}+z_{1-beta})^2 (p1(1-p1)+p2(1-p2))/delta^2; required duration = n / (canary traffic rate × graded fraction).", evidence_ids: ["CLM-014"], derived_from: ["MECH-06"] }
+  - { id: "MATH-02", description: "Toy only: for K equal-quality candidates with independent equal-variance Gaussian noise sigma, expected validation optimism is sigma*E[max of K N(0,1)] (≈0.564, 1.163, 1.539, 1.867 sigma for K=2,5,10,20); dependence, adaptivity, unequal quality, test uncertainty, and shift break the optimizer interpretation.", evidence_ids: ["CLM-010", "CLM-019"], derived_from: ["MECH-05"] }
+  - { id: "MATH-03", description: "For independent Bernoulli outcomes, equal allocation uses n/arm ≈ k[v1+v2]/delta^2; if n_control=r*n_canary, n_canary ≈ k[v_canary+v_control/r]/delta^2. Duration follows the slower graded arm; block clustering and multiple looks require design-specific adjustment.", evidence_ids: ["CLM-014", "CLM-018"], derived_from: ["MECH-06"] }
+  - { id: "MATH-04", description: "Module 15's migration gate uses paired new-minus-old block effects and whole-block intervals: noninferiority passes only when the lower bound is at least -tau; any-of-K claims use alpha/K, L planned looks use alpha/L, and decisions are RELEASE, HOLD, or INCONCLUSIVE.", evidence_ids: ["CLM-018"], derived_from: ["MECH-03", "MECH-06"] }
 
 implementation_mechanisms:
-  - { id: "IMPL-01", description: "A migration ledger records manifest diff, change class, compatibility checks, paired offline results, optimizer runs and candidate counts, sealed-test result, shadow/canary evidence, rollout stage, and rollback decision.", evidence_ids: ["CLM-001", "CLM-006", "CLM-013"], derived_from: ["MECH-01", "MECH-03", "MECH-06"] }
+  - { id: "IMPL-01", description: "A migration ledger records manifest identity/diff, causal evidence or unknown/interacting status, paired block gates, optimizer candidate history, independent-confirmation population/result, canary allocation/blocks/looks, stage decision, and rollback state.", evidence_ids: ["CLM-001", "CLM-006", "CLM-013", "CLM-017", "CLM-018", "CLM-019"], derived_from: ["MECH-01", "MECH-03", "MECH-05", "MECH-06", "MECH-08"] }
   - { id: "IMPL-02", description: "Pinned DSPy source shows MIPROv2 validation splitting and best-candidate selection, BootstrapFewShot metric-filtered demonstrations, and Evaluate failure_score handling.", evidence_ids: ["CLM-012"], derived_from: ["MECH-04", "MECH-05"] }
 
 failure_modes:
-  - { id: "FAIL-01", description: "Silent snapshot drift: an alias or provider-side change alters behavior with no manifest change, so regressions appear as unexplained metric drift.", evidence_ids: ["CLM-001", "CLM-004"], derived_from: ["MECH-01"] }
+  - { id: "FAIL-01", description: "Identity/causality confusion: a manifest digest reconstructs logged configuration, but joint changes, provider-side drift, and unlogged state make a single-cause claim unsupported without controlled contrast or ablation.", evidence_ids: ["CLM-001", "CLM-004", "CLM-017"], derived_from: ["MECH-01", "MECH-08"] }
   - { id: "FAIL-02", description: "Forced-migration outage: a retired model or deprecated parameter causes request rejection because compatibility was not checked before the deadline.", evidence_ids: ["CLM-002", "CLM-003"], derived_from: ["MECH-02"] }
   - { id: "FAIL-03", description: "Aggregate masking: equal or improved mean score hides many per-item or per-slice regressions.", evidence_ids: ["CLM-006"], derived_from: ["MECH-03"] }
   - { id: "FAIL-04", description: "Prompt carry-over: a prompt tuned to one model's format sensitivities is reused unchanged on a replacement with different sensitivities.", evidence_ids: ["CLM-005"], derived_from: ["MECH-03"] }
-  - { id: "FAIL-05", description: "Optimizer overfitting: repeated selection on one validation set, metric gaming, or errored examples silently scored as failures/successes inflate reported gains.", evidence_ids: ["CLM-010", "CLM-011", "CLM-012"], derived_from: ["MECH-04", "MECH-05"] }
-  - { id: "FAIL-06", description: "Underpowered or confounded canary: before/after comparison, too few graded requests, or non-random assignment declare a regression safe.", evidence_ids: ["CLM-013", "CLM-014"], derived_from: ["MECH-06"] }
+  - { id: "FAIL-05", description: "Optimizer evidence failure: adaptive selection, dependence, metric gaming, confirmation noise/shift, or scored execution errors create a validation-confirmation gap that cannot be assigned wholly to winner's curse.", evidence_ids: ["CLM-010", "CLM-011", "CLM-012", "CLM-019"], derived_from: ["MECH-04", "MECH-05"] }
+  - { id: "FAIL-06", description: "Invalid canary inference: equal-arm arithmetic on 5%/95% graded counts, too few independent blocks, row analysis of sessions, or unadjusted repeated looks distorts detection and false-alarm rates; a short horizon has low, not zero, detection.", evidence_ids: ["CLM-013", "CLM-014", "CLM-018"], derived_from: ["MECH-06"] }
   - { id: "FAIL-07", description: "Incomplete rollback: traffic reverts but persisted outputs, cached prefixes, or schema changes from the new version break the old version or downstream consumers.", evidence_ids: ["CLM-015"], derived_from: ["MECH-07"] }
 
 production_connections:
-  - { id: "PROD-01", description: "Migration playbook: inventory manifests, track provider lifecycle dates, run compatibility checks, paired offline evaluation, re-optimization with sealed test, shadow, powered canary, staged ramp, and state-aware rollback.", evidence_ids: ["CLM-002", "CLM-006", "CLM-013", "CLM-015"], derived_from: ["MECH-02", "MECH-03", "MECH-06", "MECH-07"] }
-  - { id: "PROD-02", description: "Harness-evolution health is tracked by time-to-migrate before deadlines, regression flips caught offline vs online, canary false-pass rate, rollback completeness, and optimizer validation-to-test gap.", evidence_ids: ["CLM-006", "CLM-010", "CLM-014"], derived_from: ["MECH-03", "MECH-05", "MECH-06"] }
+  - { id: "PROD-01", description: "Recommended migration baseline: manifest identity plus causal limits, lifecycle/compatibility checks, paired block gates, governed optimization with independent confirmation, concurrent fixed or valid sequential canary, staged ramp, and state-aware rollback; industry prevalence is TODO_VERIFY.", evidence_ids: ["CLM-002", "CLM-006", "CLM-013", "CLM-015", "CLM-017", "CLM-018", "CLM-019", "CLM-020"], derived_from: ["MECH-02", "MECH-03", "MECH-05", "MECH-06", "MECH-07", "MECH-08"] }
+  - { id: "PROD-02", description: "Harness-evolution health includes deadline slack, offline/online flip evidence, gate states, canary detection and false-alarm estimates, rollback completeness, and validation-confirmation gaps reported with candidate history and population scope.", evidence_ids: ["CLM-006", "CLM-010", "CLM-014", "CLM-018", "CLM-019"], derived_from: ["MECH-03", "MECH-05", "MECH-06"] }
 
 research_connections:
   - { id: "RESEARCH-01", description: "DSPy, MIPRO, and GEPA form a progression from bootstrapped demonstrations to surrogate-guided and reflective prompt search; reported gains are workload-specific.", evidence_ids: ["CLM-007", "CLM-008", "CLM-009"], derived_from: ["MECH-04"] }
-  - { id: "RESEARCH-02", description: "Adaptive data analysis and model-drift studies explain why repeated validation reuse and unpinned model versions undermine evidence.", evidence_ids: ["CLM-004", "CLM-011"], derived_from: ["MECH-03", "MECH-05"] }
+  - { id: "RESEARCH-02", description: "Adaptive data analysis and model-drift studies explain why repeated validation reuse and unpinned model versions undermine evidence; recent migration work also reports bidirectional item-level changes hidden by aggregates on its evaluated API migrations.", evidence_ids: ["CLM-004", "CLM-011", "CLM-021"], derived_from: ["MECH-03", "MECH-05"] }
 
 candidate_capabilities:
-  - { capability: "Specify a harness manifest and classify forced versus elective changes with compatibility checks.", mapped_mechanisms: ["MECH-01", "MECH-02", "FAIL-01", "FAIL-02"] }
-  - { capability: "Evaluate migrations with paired flip analysis and slice-level regression gates.", mapped_mechanisms: ["MECH-03", "MATH-01", "FAIL-03", "FAIL-04"] }
-  - { capability: "Run automated prompt optimization with holdout governance and quantify selection bias.", mapped_mechanisms: ["MECH-04", "MECH-05", "MATH-02", "IMPL-02", "FAIL-05"] }
-  - { capability: "Design a powered shadow/canary rollout with guardrails and rollback triggers.", mapped_mechanisms: ["MECH-06", "MATH-03", "FAIL-06"] }
+  - { capability: "Specify a harness manifest, classify forced versus elective changes, and separate identity from causal evidence using ablation or an unknown/interacting disposition.", mapped_mechanisms: ["MECH-01", "MECH-02", "MECH-08", "FAIL-01", "FAIL-02"] }
+  - { capability: "Evaluate migrations with paired block effects, whole-block intervals, practical margins, slice gates, and RELEASE/HOLD/INCONCLUSIVE.", mapped_mechanisms: ["MECH-03", "MATH-01", "MATH-04", "FAIL-03", "FAIL-04"] }
+  - { capability: "Run automated prompt optimization with adaptive-use governance, independent scoped confirmation, and a labeled selection-bias toy.", mapped_mechanisms: ["MECH-04", "MECH-05", "MATH-02", "IMPL-02", "FAIL-05"] }
+  - { capability: "Design a concurrent canary with correct equal or unequal graded allocation, independent blocks, fixed or adjusted looks, stop/ramp separation, and rollback triggers.", mapped_mechanisms: ["MECH-06", "MATH-03", "MATH-04", "FAIL-06"] }
   - { capability: "Plan state-aware rollback and maintain a migration ledger.", mapped_mechanisms: ["MECH-07", "IMPL-01", "FAIL-07", "PROD-01"] }
+
+todo_verify:
+  - { id: "TODO-01", description: "Industry prevalence of full manifests, paired block migration gates, independent optimizer confirmation, and statistically planned LLM canaries was not established by an adoption survey.", evidence_ids: ["CLM-020"], derived_from: [] }
