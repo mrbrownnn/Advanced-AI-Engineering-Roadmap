@@ -1,7 +1,9 @@
 module: "18-ai-security"
-registry_version: "1.0.0"
-research_cutoff: "2026-09-27"
-change_reason: "Replace generated placeholders with a trust-boundary threat model, prompt-injection and poisoning mechanisms, adaptive-attack evaluation, capability-based controls, output handling, and security evaluation evidence."
+registry_version: "1.1.0"
+previous_version: "1.0.0"
+research_cutoff: "2026-09-30"
+change_reason: "Close Module 18 audit findings: correct security-utility dominance, add principal-keyed reservation and egress enforcement, separate retrieval from target match and causal adoption, add full-text experiment context, and scope recommended practice versus prevalence."
+changed_claims: [CLM-001, CLM-002, CLM-004, CLM-006, CLM-007, CLM-008, CLM-010, CLM-011, CLM-012, CLM-013, CLM-014, CLM-016, CLM-017, CLM-018, CLM-019, CLM-020, CLM-021, CLM-022]
 claims:
   - id: CLM-001
     claim: "An LLM application threat model must enumerate assets, principals, trust boundaries, untrusted input sources, privileged sinks (tools, data stores, renderers, code execution), and the authority each component exercises, because the model processes instructions and data in one token stream."
@@ -9,7 +11,7 @@ claims:
     domain: threat_modeling
     concepts: [trust_boundary, source_sink, authority]
     confidence: high
-    currentness_status: "CURRENT DEFAULT"
+    currentness_status: "RECOMMENDED ENGINEERING BASELINE"
     assumptions: ["The application passes some externally controlled text to the model and grants the model's outputs influence over actions or rendering."]
     derivation: "Without an architectural separation between instruction and data channels, any text reaching the context can influence output; risk is therefore determined by which untrusted sources reach which privileged sinks."
     limitations: ["Enumeration does not prove completeness; new tools or sources change the model."]
@@ -21,7 +23,7 @@ claims:
     domain: threat_taxonomy
     concepts: [owasp_llm_top10, risk_taxonomy]
     confidence: high
-    currentness_status: "CURRENT DEFAULT"
+    currentness_status: "REFERENCE TAXONOMY"
     evidence: [{ source_type: official_docs, tier: 2, title: "OWASP Top 10 for LLM Applications 2025", authors: "OWASP GenAI Security Project", year: "2025", url: "https://genai.owasp.org/llm-top-10/", section: "LLM01–LLM10:2025", accessed_at: "2026-09-27" }]
     limitations: ["A community taxonomy for ideation and communication; not a complete threat model or ranking for a specific system."]
     applicability: "Threat enumeration checklist."
@@ -38,14 +40,22 @@ claims:
     applicability: "Any system that places untrusted retrieved, browsed, emailed, or tool-returned text in model context."
     curriculum_usage: { lessons: ["18.2"], labs: ["LAB-B"], assessments: ["Incident-18.1"] }
   - id: CLM-004
-    claim: "PoisonedRAG reports a 90% attack success rate on targeted questions when injecting five malicious texts per target question into a knowledge database with millions of texts, and found evaluated defenses insufficient."
+    claim: "PoisonedRAG v3 reports targeted-answer ASR of 0.74–0.99 across its three corpora, black/white-box retriever settings, and eight models after injecting five texts per target question; the abstract summarizes this as 90%."
     provenance: VERIFIED_FACT
     domain: retrieval_poisoning
     concepts: [knowledge_corruption, retrieval_poisoning, targeted_attack]
     confidence: high
     currentness_status: "REFERENCE / WORKLOAD-DEPENDENT"
-    evidence: [{ source_type: paper, tier: 1, title: "PoisonedRAG: Knowledge Corruption Attacks to Retrieval-Augmented Generation of Large Language Models", authors: "Wei Zou, Runpeng Geng, Binghui Wang, Jinyuan Jia", year: "2025", url: "https://arxiv.org/abs/2402.07867", section: "Abstract; USENIX Security 2025", accessed_at: "2026-09-27" }]
-    limitations: ["Rates are for evaluated datasets, retrievers, models, and attacker knowledge; they are not a universal prevalence."]
+    evidence: [{ source_type: paper, tier: 1, title: "PoisonedRAG: Knowledge Corruption Attacks to Retrieval-Augmented Generation of Large Language Models", authors: "Wei Zou, Runpeng Geng, Binghui Wang, Jinyuan Jia", year: "2024", version: "arXiv:2402.07867v3 (to appear USENIX Security 2025)", url: "https://arxiv.org/abs/2402.07867", section: "Sections 3.1, 4, 5.1, 7, 8; Tables 1, 2, 12, 13", accessed_at: "2026-10-01" }]
+    numeric_metadata:
+      numeric_type: measured_behavior
+      workload: "NQ, HotpotQA, MS-MARCO; 100 chosen closed-ended target questions per corpus; corpus sizes 2,681,468, 5,233,329, and 8,841,823 texts."
+      hardware: "Not needed for the retained ASR claim; consult paper for generation runtime setup."
+      model: "PaLM 2, GPT-3.5, GPT-4, LLaMA-2 7B/13B, Vicuna 7B/13B/33B."
+      configuration: "Top-5 RAG, five injected texts per target; Contriever default, also Contriever-ms and ANCE; black-box or retriever-white-box attacker."
+      metric_definition: "Fraction of target questions whose generated answer contains the attacker target answer; substring matching checked against author human evaluation."
+      measurement_method: "Author-reported Table 1 over 10 questions × 10 trials per corpus; not reproduced."
+    limitations: ["Chosen closed-ended target questions; attacker has corpus write capability; N=5 equals top-k=5; not deployment prevalence."]
     applicability: "Write access to corpora, user-generated content, web-crawled indexes."
     curriculum_usage: { lessons: ["18.2"], labs: ["LAB-B"], assessments: ["Mastery-18"] }
   - id: CLM-005
@@ -60,26 +70,42 @@ claims:
     applicability: "Why model alignment alone is not a security boundary."
     curriculum_usage: { lessons: ["18.2"], labs: ["LAB-B"], assessments: ["Mastery-18"] }
   - id: CLM-006
-    claim: "Hines et al. propose spotlighting—input transformations that give a continuous provenance signal—and report reducing indirect-injection attack success from above 50% to below 2% in their experiments with minimal task impact."
+    claim: "Spotlighting v1 reports selected reductions from above 50% to below 2% against a fixed 1,000-document keyword-payload corpus; results vary by transformation, task, and model, including 8.0% for GPT-3.5-Turbo datamarking on QA."
     provenance: VERIFIED_FACT
     domain: injection_mitigation
     concepts: [spotlighting, provenance_marking, prompt_defense]
-    confidence: medium
+    confidence: high
     currentness_status: "WORKLOAD-DEPENDENT"
-    evidence: [{ source_type: paper, tier: 1, title: "Defending Against Indirect Prompt Injection Attacks With Spotlighting", authors: "Keegan Hines, Gary Lopez, Matthew Hall, Federico Zarfati, Yonatan Zunger, Emre Kiciman", year: "2024", url: "https://arxiv.org/abs/2403.14720", section: "Abstract", accessed_at: "2026-09-27" }]
-    limitations: ["Author-reported against the evaluated attacks; prompt-level defenses are probabilistic and not evaluated here against adaptive attackers."]
-    applicability: "Defense-in-depth layer, not an authorization boundary."
+    evidence: [{ source_type: paper, tier: 1, title: "Defending Against Indirect Prompt Injection Attacks With Spotlighting", authors: "Keegan Hines, Gary Lopez, Matthew Hall, Federico Zarfati, Yonatan Zunger, Emre Kiciman", year: "2024", version: "arXiv:2403.14720v1", url: "https://arxiv.org/abs/2403.14720", section: "Sections IV, V, VIII-A; Figures 3–8", accessed_at: "2026-10-01" }]
+    numeric_metadata:
+      numeric_type: measured_behavior
+      workload: "1,000 synthetic documents carrying variants of one keyword-payload attack; summarization and document QA."
+      hardware: "Not material to retained rate; black-box API experiments."
+      model: "text-davinci-003, GPT-3.5-Turbo June 2023, GPT-4 June 2023."
+      configuration: "Temperature 1.0; instruction-only, delimiting, datamarking, encoding; static attack not adapted to defense."
+      metric_definition: "Fraction of corpus documents causing the special-keyword attack outcome."
+      measurement_method: "Author-reported Figures 3–8; not reproduced; no intervals reported."
+    limitations: ["Static single-family attack; abstract headline applies to selected cells, not every model/task/transform; paper itself warns delimiting is subvertible."]
+    applicability: "Defense-in-depth layer, not authorization boundary."
     curriculum_usage: { lessons: ["18.3"], labs: ["LAB-C"], assessments: ["Mastery-18"] }
   - id: CLM-007
-    claim: "Nasr et al. (2025) report that adaptive attacks using gradient descent, reinforcement learning, random search, and human-guided exploration bypassed 12 recent jailbreak and prompt-injection defenses, most of which originally reported near-zero attack success, with above 90% success for most."
+    claim: "The Attacker Moves Second v1 reports adaptive gradient, reinforcement-learning, search, and human attacks against 12 defenses, with above-90% ASR for most; its AgentDojo search uses up to 800 queries per scenario and yields 47–100% across defended model combinations in Table 7."
     provenance: VERIFIED_FACT
     domain: adaptive_evaluation
     concepts: [adaptive_attack, defense_evaluation, static_benchmark_bias]
     confidence: high
-    currentness_status: "FRONTIER / CURRENT EVALUATION STANDARD"
-    evidence: [{ source_type: paper, tier: 1, title: "The Attacker Moves Second: Stronger Adaptive Attacks Bypass Defenses Against LLM Jailbreaks and Prompt Injections", authors: "Milad Nasr, Nicholas Carlini, Chawin Sitawarin, Sander V. Schulhoff, Jamie Hayes, Michael Ilie, Juliette Pluto, Shuang Song, Harsh Chaudhari, Ilia Shumailov, Abhradeep Thakurta, Kai Yuanqing Xiao, Andreas Terzis, Florian Tramèr", year: "2025", url: "https://arxiv.org/abs/2510.09023", section: "Abstract", accessed_at: "2026-09-27" }]
-    limitations: ["Specific defenses and budgets are those evaluated; the result establishes an evaluation standard, not that every future defense fails."]
-    applicability: "Security evaluation of any detector, filter, or prompt defense."
+    currentness_status: "FRONTIER / AUTHOR-RECOMMENDED PRACTICE"
+    evidence: [{ source_type: paper, tier: 1, title: "The Attacker Moves Second: Stronger Adaptive Attacks Bypass Defenses Against LLM Jailbreaks and Prompt Injections", authors: "Milad Nasr, Nicholas Carlini, Chawin Sitawarin, Sander V. Schulhoff, Jamie Hayes, Michael Ilie, Juliette Pluto, Shuang Song, Harsh Chaudhari, Ilia Shumailov, Abhradeep Thakurta, Kai Yuanqing Xiao, Andreas Terzis, Florian Tramèr", year: "2025", version: "arXiv:2510.09023v1", url: "https://arxiv.org/abs/2510.09023", section: "Sections 3–6; Appendices B, F.2, G.1; Table 7", accessed_at: "2026-10-01" }]
+    numeric_metadata:
+      numeric_type: measured_behavior
+      workload: "Defense-specific HarmBench, AgentDojo, OpenPromptInject, or Alpaca-derived tasks; AgentDojo subset is 80 samples from three suites."
+      hardware: "Large attacker compute assumed; exact hardware varies by attack and is not used as a transferable claim."
+      model: "Defense-specific; AgentDojo Table 7 uses Gemini 2.5 Pro, GPT-5 Mini, Llama-3.3 70B, MetaSecAlign 70B."
+      configuration: "Adaptive gradient/RL/search/human attacks; AgentDojo search up to 800 target queries and detector score/flag feedback."
+      metric_definition: "Fraction of scenarios for which a successful trigger is found within budget."
+      measurement_method: "Author-reported; not reproduced; benchmarks differ across defenses."
+    limitations: ["Numbers are not comparable across all defenses; plan-then-execute defenses including CaMeL were not search-attacked; not proof every defense fails."]
+    applicability: "Security evaluation of probabilistic defenses."
     curriculum_usage: { lessons: ["18.3", "18.6"], labs: ["LAB-C"], assessments: ["Mastery-18"] }
   - id: CLM-008
     claim: "Stacking detectors multiplies miss probabilities only if misses are independent; an adaptive attacker optimizes against the composed pipeline, so residual risk is bounded below by the best joint evasion found, not by the product of individual miss rates."
@@ -87,7 +113,7 @@ claims:
     domain: defense_composition
     concepts: [layered_defense, correlated_miss, adaptive_attacker]
     confidence: high
-    currentness_status: "CURRENT DEFAULT"
+    currentness_status: "RECOMMENDED EVALUATION BASELINE"
     assumptions: ["The attacker can query or approximate the full pipeline."]
     derivation: "P(all miss)=Π(1-d_i) requires independence. Optimization against the composition selects inputs that evade all layers jointly, making misses positively correlated by construction."
     limitations: ["Non-adaptive, opportunistic traffic may approximate independence better."]
@@ -110,21 +136,29 @@ claims:
     domain: agent_authorization
     concepts: [excessive_agency, per_action_authorization, provenance]
     confidence: high
-    currentness_status: "CURRENT DEFAULT"
+    currentness_status: "RECOMMENDED ENGINEERING BASELINE"
     assumptions: ["Tool calls are chosen by the model after it has read untrusted content."]
     derivation: "The model is the deputy; its credential is ambient; the injected instruction plays the role of the caller-supplied name. Per-action checks bound to the user's intent and data origin restore the missing binding."
     limitations: ["Intent is not always formally specifiable; approvals can be fatigued."]
     applicability: "Email, calendar, banking, code, and browsing agents."
     curriculum_usage: { lessons: ["18.4"], labs: ["LAB-D"], assessments: ["Incident-18.1", "Mastery-18"] }
   - id: CLM-011
-    claim: "CaMeL extracts control and data flow from the trusted user query, isolates untrusted data handling, and enforces capability-based policies at tool calls; its authors report solving 77% of AgentDojo tasks with provable security versus 84% for an undefended system."
+    claim: "CaMeL v2 separates privileged planning from quarantined data handling and checks capability policies before tool calls; on one AgentDojo/model row it reports 77.3% benign utility versus 84.5% for native tool calling, while other rows lose 3.1–32.0 points."
     provenance: VERIFIED_FACT
     domain: secure_agent_design
     concepts: [control_data_separation, quarantined_llm, capability_policy]
     confidence: high
     currentness_status: "FRONTIER"
-    evidence: [{ source_type: paper, tier: 1, title: "Defeating Prompt Injections by Design", authors: "Edoardo Debenedetti, Ilia Shumailov, Tianqi Fan, Jamie Hayes, Nicholas Carlini, Daniel Fabian, Christoph Kern, Chongyang Shi, Andreas Terzis, Florian Tramèr", year: "2025", url: "https://arxiv.org/abs/2503.18813", section: "Abstract (v2)", accessed_at: "2026-09-27" }]
-    limitations: ["Guarantees cover the stated policy model; utility cost and policy authoring burden are workload-dependent."]
+    evidence: [{ source_type: paper, tier: 1, title: "Defeating Prompt Injections by Design", authors: "Edoardo Debenedetti, Ilia Shumailov, Tianqi Fan, Jamie Hayes, Nicholas Carlini, Daniel Fabian, Christoph Kern, Chongyang Shi, Andreas Terzis, Florian Tramèr", year: "2025", version: "arXiv:2503.18813v2", url: "https://arxiv.org/abs/2503.18813", section: "Sections 3, 3.1, 6, 7, 9.3; Tables 1, 2, 4", accessed_at: "2026-10-01" }]
+    numeric_metadata:
+      numeric_type: measured_behavior
+      workload: "97 AgentDojo benign tasks; 949 attack cases for security table."
+      hardware: "Black-box API models; not material to retained task-success claim."
+      model: "Claude 4 Sonnet, Gemini 2.5 Flash/Pro, o3 high, o4-mini high; retained headline row is o3 high."
+      configuration: "CaMeL privileged/quarantined models and interpreter versus same model's native tool-calling API."
+      metric_definition: "Fraction of benign tasks solved; successful attacks counted out of 949 separately."
+      measurement_method: "Author-reported Table 2/4; not reproduced; no adaptive attack against CaMeL."
+    limitations: ["Exact AgentDojo suite version behind 949 cases unresolved; text-only attacks are out of scope; side channels remain; formal interpreter verification is future work; data-dependent actions reduce utility."]
     applicability: "Design pattern for agents with high-authority tools."
     curriculum_usage: { lessons: ["18.4"], labs: ["LAB-D"], assessments: ["Mastery-18"] }
   - id: CLM-012
@@ -133,34 +167,42 @@ claims:
     domain: output_handling
     concepts: [improper_output_handling, sandbox, egress_control]
     confidence: high
-    currentness_status: "CURRENT DEFAULT"
+    currentness_status: "RECOMMENDED ENGINEERING BASELINE"
     assumptions: ["Output content can be influenced by untrusted input (CLM-003)."]
     derivation: "If an attacker can influence model output, the output inherits the attacker's trust level; standard injection defenses for that interpreter therefore apply."
     limitations: ["Sandbox strength depends on isolation technology and configuration."]
     applicability: "Rendering, code execution, database, and fetch tools."
     curriculum_usage: { lessons: ["18.5"], labs: ["LAB-D"], assessments: ["Mastery-18"] }
   - id: CLM-013
-    claim: "AgentDojo is an extensible environment with 97 realistic agent tasks and 629 security test cases; its authors report that state-of-the-art LLMs fail many tasks even without attacks and that existing attacks break some but not all security properties."
+    claim: "AgentDojo v3 defines benign utility, utility under attack, and targeted ASR and contains 97 user tasks, 27 injection tasks, and 629 pair-level security cases across four suites."
     provenance: VERIFIED_FACT
     domain: security_evaluation
     concepts: [agentdojo, utility_under_attack, security_test_case]
     confidence: high
-    currentness_status: "CURRENT DEFAULT / BENCHMARK"
-    evidence: [{ source_type: paper, tier: 1, title: "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents", authors: "Edoardo Debenedetti, Jie Zhang, Mislav Balunović, Luca Beurer-Kellner, Marc Fischer, Florian Tramèr", year: "2024", url: "https://arxiv.org/abs/2406.13352", section: "Abstract", accessed_at: "2026-09-27" }]
-    limitations: ["Benchmark tasks and injections are finite and static unless extended with adaptive attacks."]
+    currentness_status: "REFERENCE BENCHMARK"
+    evidence: [{ source_type: paper, tier: 1, title: "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents", authors: "Edoardo Debenedetti, Jie Zhang, Mislav Balunović, Luca Beurer-Kellner, Marc Fischer, Florian Tramèr", year: "2024", version: "arXiv:2406.13352v3", url: "https://arxiv.org/abs/2406.13352", section: "Sections 3–5; Tables 1, 3, 4, 5", accessed_at: "2026-10-01" }]
+    numeric_metadata:
+      numeric_type: measured_behavior
+      workload: "97 user tasks and 629 security cases: Workspace 40x6, Slack 21x5, Travel 20x7, Banking 16x9."
+      hardware: "Provider-hosted and open models; not material to benchmark-size or metric-definition claim."
+      model: "Paper evaluates multiple models; retained Table 5 comparison uses GPT-4o."
+      configuration: "Static important-message attack and other templates; Max selects best of four templates per case."
+      metric_definition: "Benign utility over user tasks; utility under attack and targeted goal success over security pairs."
+      measurement_method: "Author-reported tables with 95% confidence intervals; not reproduced."
+    limitations: ["Default attacks are static; data card says default-attacks-only use is unsuitable for robustness claims."]
     applicability: "Agent security regression evaluation."
     curriculum_usage: { lessons: ["18.6"], labs: ["LAB-C"], assessments: ["Mastery-18"] }
   - id: CLM-014
-    claim: "At AgentDojo commit 089ed468cf3ed0322acc66b0211f26d9d90dbf60, run_task_with_injection_tasks records separate utility and security booleans per (user task, injection task) pair, PromptInjectionDetector replaces flagged tool output with a placeholder or raises AbortAgentError, and ToolsExecutionLoop bounds tool iterations with max_iters (default 15)."
+    claim: "At AgentDojo commit 089ed468cf3ed0322acc66b0211f26d9d90dbf60, pair runs record utility and an injection-success boolean named security; context/server errors set utility false and security true; the detector redacts or aborts; the tool loop caps iterations at 15 by default but not tool fan-out, tokens, or cost."
     provenance: VERIFIED_FACT
     domain: security_runtime
     concepts: [agentdojo, pi_detector, tool_loop]
     confidence: high
-    currentness_status: "CURRENT SOURCE SNAPSHOT"
+    currentness_status: "PINNED SOURCE SNAPSHOT"
     evidence:
-      - { source_type: source_code, tier: 1, title: "AgentDojo benchmark runner", repository: "https://github.com/ethz-spylab/agentdojo", commit: "089ed468cf3ed0322acc66b0211f26d9d90dbf60", verification_date: "2026-09-27", file: "src/agentdojo/benchmark.py", symbol: "run_task_with_injection_tasks; benchmark_suite_with_injections; aggregate_results", entry_point: "benchmark_suite_with_injections(agent_pipeline, suite, attack, ...)", execution_path: "for each user task and injection task -> attack builds injections -> suite.run_task_with_pipeline -> (utility, security) recorded per pair -> aggregate_results averages booleans", url: "https://github.com/ethz-spylab/agentdojo/blob/089ed468cf3ed0322acc66b0211f26d9d90dbf60/src/agentdojo/benchmark.py", accessed_at: "2026-09-27" }
-      - { source_type: source_code, tier: 1, title: "AgentDojo pipeline defenses and tool loop", repository: "https://github.com/ethz-spylab/agentdojo", commit: "089ed468cf3ed0322acc66b0211f26d9d90dbf60", verification_date: "2026-09-27", file: "src/agentdojo/agent_pipeline/pi_detector.py; src/agentdojo/agent_pipeline/tool_execution.py", symbol: "PromptInjectionDetector.query; PromptInjectionDetector.transform; TransformersBasedPIDetector.detect; ToolsExecutionLoop.query", entry_point: "pipeline element query over messages", execution_path: "tool output -> detect (per message or full conversation) -> replace with '<Data omitted because a prompt injection was detected>' or raise AbortAgentError; ToolsExecutionLoop iterates elements until no tool_calls or max_iters", url: "https://github.com/ethz-spylab/agentdojo/tree/089ed468cf3ed0322acc66b0211f26d9d90dbf60/src/agentdojo/agent_pipeline", accessed_at: "2026-09-27" }
-    limitations: ["Static inspection only; benchmark was not executed and detector accuracy was not measured."]
+      - { source_type: source_code, tier: 1, title: "AgentDojo benchmark runner and task checks", repository: "https://github.com/ethz-spylab/agentdojo", commit: "089ed468cf3ed0322acc66b0211f26d9d90dbf60", verification_date: "2026-10-01", file: "src/agentdojo/benchmark.py; src/agentdojo/task_suite/task_suite.py; src/agentdojo/base_tasks.py", symbol: "run_task_with_injection_tasks; benchmark_suite_with_injections; aggregate_results; TaskSuite.run_task_with_pipeline; BaseInjectionTask.security", entry_point: "benchmark_suite_with_injections(agent_pipeline, suite, attack, ...)", execution_path: "user/injection pair -> run_task_with_pipeline -> utility and injection-task security check -> booleans recorded; errors assign false/true -> aggregate_results averages", url: "https://github.com/ethz-spylab/agentdojo/tree/089ed468cf3ed0322acc66b0211f26d9d90dbf60/src/agentdojo", accessed_at: "2026-10-01" }
+      - { source_type: source_code, tier: 1, title: "AgentDojo pipeline defenses and tool loop", repository: "https://github.com/ethz-spylab/agentdojo", commit: "089ed468cf3ed0322acc66b0211f26d9d90dbf60", verification_date: "2026-10-01", file: "src/agentdojo/agent_pipeline/pi_detector.py; src/agentdojo/agent_pipeline/tool_execution.py", symbol: "PromptInjectionDetector.query; PromptInjectionDetector.transform; TransformersBasedPIDetector.detect; ToolsExecutor.query; ToolsExecutionLoop.query", entry_point: "pipeline element query over messages", execution_path: "trailing tool output -> detector redacts or raises; ToolsExecutor runs all tool calls in message; ToolsExecutionLoop repeats up to max_iters", url: "https://github.com/ethz-spylab/agentdojo/tree/089ed468cf3ed0322acc66b0211f26d9d90dbf60/src/agentdojo/agent_pipeline", accessed_at: "2026-10-01" }
+    limitations: ["Static inspection only; source path not executed; published treatment of error pairs not traced beyond runner assignment; detector accuracy not measured."]
     applicability: "Source-reading example for utility/security separation and detector placement."
     curriculum_usage: { lessons: ["18.6"], labs: ["LAB-C"], assessments: ["Production-Source-Trace"] }
   - id: CLM-015
@@ -177,3 +219,85 @@ claims:
     limitations: ["Some products require all three legs; then per-action authorization and approvals are the remaining controls."]
     applicability: "Agent architecture decisions."
     curriculum_usage: { lessons: ["18.4", "18.6"], labs: ["LAB-D"], assessments: ["Mastery-18"] }
+  - id: CLM-016
+    claim: "For one poisoning trial, target match decomposes as P(T)=P(R)P(T|R)+P(not R)P(T|not R); target match without retrieval triggers alternate-path investigation rather than deletion, and causal adoption through retrieval requires controls and provenance."
+    provenance: DERIVED
+    domain: retrieval_poisoning_measurement
+    concepts: [conditional_denominator, causal_adoption, provenance]
+    confidence: high
+    currentness_status: "RECOMMENDED EVALUATION BASELINE"
+    assumptions: ["R records whether a poisoned passage was in delivered context and T records target-answer match on the same trial.", "No-poison and no-retrieval controls use matched queries and settings."]
+    derivation: "Law of total probability partitions trials on R. T can occur through prior knowledge, cache, or another source when R is false, so R is not inferred from T. The no-poison contrast estimates attributable change; per-trial provenance identifies observed alternate paths."
+    limitations: ["A control contrast does not identify individual causal effects without stronger design; clustered paraphrase/seed trials need cluster-aware uncertainty."]
+    applicability: "RAG poisoning and any staged attack where upstream exposure and downstream outcome differ."
+    curriculum_usage: { lessons: ["18.2"], labs: ["LAB-B"], assessments: ["Mastery-18"] }
+  - id: CLM-017
+    claim: "A cost ceiling is hard only when model calls, exact input tokens, server-capped output tokens, tool fan-out, physical retries, and unit prices have enforced maxima and every action reserves worst-case charge atomically before dispatch; security additionally keys the ledger by authenticated principal and limits that principal across episodes."
+    provenance: DERIVED
+    domain: consumption_control
+    concepts: [budget_reservation, authenticated_principal, cross_episode_limit]
+    confidence: high
+    currentness_status: "RECOMMENDED ENGINEERING BASELINE"
+    assumptions: ["Gateway obtains principal from authenticated session independently of model-controlled content.", "Every billed resource included in a hard cost claim has an enforceable pre-dispatch maximum."]
+    derivation: "With maximum N calls, Tin/Tout tokens, fan-out F, inner retries ks, and capped unit costs, Cmax=N(Tin*p_in+Tout*p_out)+NF(1+ks)c_tool. The Module 12 invariant C+R<=B converts that bound into admission. Episode-only keying resets under repeated episodes, so all episodes of one authenticated principal share a second ledger."
+    limitations: ["If any billed quantity lacks a cap, cost is an estimate; durability across crashes belongs to Module 14; time and side effects need separate controls."]
+    applicability: "Agent loops exposed to attacker-controlled context or requests."
+    curriculum_usage: { lessons: ["18.5"], labs: ["LAB-D"], assessments: ["Mastery-18"] }
+  - id: CLM-018
+    claim: "Egress control requires one proxy path that authorizes destination before lookup, validates resolved addresses, and reapplies policy to redirects; query stripping is only request shaping because data can move through path, subdomain, redirect, or an allowed host."
+    provenance: DERIVED
+    domain: egress_control
+    concepts: [destination_policy, dns_resolution, redirect_policy]
+    confidence: high
+    currentness_status: "RECOMMENDED ENGINEERING BASELINE"
+    assumptions: ["Renderer, fetch tools, and sandbox cannot bypass the proxy.", "Proxy connects only to the address that it validated."]
+    derivation: "A network request reveals at least destination and timing even with no query. URL paths, host labels, and redirect targets carry data. Therefore policy must decide the destination and every redirect hop, while resolution checking prevents allowed names from reaching prohibited addresses."
+    limitations: ["Allowed destinations still receive path data and traffic patterns; non-network sinks need their own gateway policies."]
+    applicability: "Rendered remote content, URL fetchers, browsers, and code sandboxes."
+    curriculum_usage: { lessons: ["18.5"], labs: ["LAB-D"], assessments: ["Mastery-18"] }
+  - id: CLM-019
+    claim: "A configuration Pareto-dominates another only if it is no worse on every declared security and utility metric; when points trade benign utility against ASR, selection requires an explicit utility floor or objective rather than a dominance claim."
+    provenance: DERIVED
+    domain: security_release_decision
+    concepts: [pareto_frontier, utility_floor, aligned_protocol]
+    confidence: high
+    currentness_status: "RECOMMENDED EVALUATION BASELINE"
+    assumptions: ["All rows use the same model, cases, denominator, and attack protocol for each metric."]
+    derivation: "Pareto dominance is coordinatewise weak improvement plus one strict improvement. A lower benign-utility coordinate defeats dominance even when every attack metric improves. Predeclared floors and ceilings select among undominated trade-offs without changing the vector after seeing results."
+    limitations: ["Point estimates need paired uncertainty before small differences drive release; stronger attacker budgets can move the frontier."]
+    applicability: "Utility-aware release gates for security controls."
+    curriculum_usage: { lessons: ["18.6"], labs: ["LAB-C", "LAB-D"], assessments: ["Mastery-18"] }
+  - id: CLM-020
+    claim: "All Module 18 worked-example rates, costs, canaries, corpora, endpoints, and procurement constraints are synthetic exercise assumptions, not repository measurements or provider prices."
+    provenance: EXERCISE_ASSUMPTION
+    domain: instructional_fixture
+    concepts: [synthetic_data, worked_example]
+    confidence: high
+    currentness_status: "NOT_EMPIRICAL"
+    limitations: ["Learner must replace fixture values with measured and priced values for a real design."]
+    applicability: "Lessons 18.1–18.6, Labs A–D, and Mastery reference checks."
+    curriculum_usage: { lessons: ["18.1", "18.2", "18.3", "18.4", "18.5", "18.6"], labs: ["LAB-A", "LAB-B", "LAB-C", "LAB-D"], assessments: ["Mastery-18"] }
+  - id: CLM-021
+    claim: "OWASP SSRF guidance recommends allowlisting identified trusted destinations, disabling automatic redirect following, and treating DNS resolution as both a disclosure and rebinding risk."
+    provenance: VERIFIED_FACT
+    domain: egress_control
+    concepts: [ssrf, allowlist, dns_rebinding, redirects]
+    confidence: high
+    currentness_status: "REFERENCE GUIDANCE"
+    evidence: [{ source_type: official_docs, tier: 2, title: "Server-Side Request Forgery Prevention Cheat Sheet", authors: "OWASP Cheat Sheet Series", year: "undated", url: "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html", section: "Case 1 allowlist; DNS pinning; redirect note", accessed_at: "2026-10-01" }]
+    limitations: ["General web guidance; application to model-rendered output is derived in CLM-018."]
+    applicability: "Proxy implementation and sandbox egress tests."
+    curriculum_usage: { lessons: ["18.5"], labs: ["LAB-D"], assessments: ["Mastery-18"] }
+  - id: CLM-022
+    claim: "OWASP LLM05 recommends context-aware output encoding, parameterized queries, and strict CSP; LLM10 recommends per-source quotas, timeouts, throttling, and sandboxing against unbounded consumption."
+    provenance: VERIFIED_FACT
+    domain: output_and_consumption_controls
+    concepts: [output_encoding, csp, quotas, throttling]
+    confidence: high
+    currentness_status: "REFERENCE GUIDANCE"
+    evidence:
+      - { source_type: official_docs, tier: 2, title: "LLM05:2025 Improper Output Handling", authors: "OWASP GenAI Security Project", year: "2025", url: "https://genai.owasp.org/llmrisk/llm052025-improper-output-handling/", section: "Prevention and Mitigation Strategies", accessed_at: "2026-10-01" }
+      - { source_type: official_docs, tier: 2, title: "LLM10:2025 Unbounded Consumption", authors: "OWASP GenAI Security Project", year: "2025", url: "https://genai.owasp.org/llmrisk/llm102025-unbounded-consumption/", section: "Prevention and Mitigation Strategies", accessed_at: "2026-10-01" }
+    limitations: ["Recommended mitigations do not prove adoption or effectiveness in a particular deployment."]
+    applicability: "Output sinks and consumption guard design."
+    curriculum_usage: { lessons: ["18.5"], labs: ["LAB-D"], assessments: ["Mastery-18"] }
