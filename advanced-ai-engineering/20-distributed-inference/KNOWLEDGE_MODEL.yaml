@@ -1,9 +1,9 @@
 module: "20-distributed-inference"
-registry_version: "1.0.0"
+registry_version: "1.1.0"
 
-required_concepts: [parallelism_taxonomy, replica, model_parallel_group, collective_cost, all_reduce, busbw, latency_bandwidth_model, tensor_parallelism, rank_layout, pipeline_parallelism, pipeline_bubble, stage_imbalance, expert_parallelism, all_to_all, redundant_experts, context_parallelism, ring_attention, pd_disaggregation, kv_transfer, kv_connector, goodput, prefix_aware_routing, load_balancing, failure_domain, straggler]
+required_concepts: [parallelism_taxonomy, replica, model_parallel_group, collective_cost, all_reduce, busbw, latency_bandwidth_model, tensor_parallelism, rank_layout, pipeline_parallelism, pipeline_bubble, forward_only_schedule, stage_imbalance, expert_parallelism, all_to_all, redundant_experts, context_parallelism, ring_attention, pd_disaggregation, kv_transfer, kv_connector, goodput, prefix_aware_routing, load_balancing, failure_domain, straggler]
 prerequisite_concepts: [parameter_accounting, gpu_memory_hierarchy, roofline, kv_payload, paged_kv, ttft_tpot, continuous_batching, chunked_prefill, moe_routing]
-first_occurrence_concepts: [parallelism_taxonomy, replica, model_parallel_group, collective_cost, busbw, latency_bandwidth_model, tensor_parallelism, rank_layout, pipeline_parallelism, pipeline_bubble, stage_imbalance, expert_parallelism, all_to_all, redundant_experts, context_parallelism, ring_attention, pd_disaggregation, kv_transfer, kv_connector, prefix_aware_routing, failure_domain, straggler]
+first_occurrence_concepts: [parallelism_taxonomy, replica, model_parallel_group, collective_cost, busbw, latency_bandwidth_model, tensor_parallelism, rank_layout, pipeline_parallelism, pipeline_bubble, forward_only_schedule, stage_imbalance, expert_parallelism, all_to_all, redundant_experts, context_parallelism, ring_attention, pd_disaggregation, kv_transfer, kv_connector, prefix_aware_routing, failure_domain, straggler]
 
 concept_dependencies:
   - { concept: parallelism_taxonomy, depends_on: [parameter_accounting, kv_payload] }
@@ -12,6 +12,7 @@ concept_dependencies:
   - { concept: tensor_parallelism, depends_on: [parameter_accounting, all_reduce, latency_bandwidth_model] }
   - { concept: pipeline_parallelism, depends_on: [parallelism_taxonomy] }
   - { concept: pipeline_bubble, depends_on: [pipeline_parallelism] }
+  - { concept: forward_only_schedule, depends_on: [pipeline_parallelism] }
   - { concept: expert_parallelism, depends_on: [moe_routing, all_to_all] }
   - { concept: context_parallelism, depends_on: [ring_attention, kv_payload] }
   - { concept: pd_disaggregation, depends_on: [ttft_tpot, chunked_prefill, kv_transfer] }
@@ -29,7 +30,7 @@ mechanisms:
 
 mathematical_models:
   - { id: "MATH-01", description: "All-reduce time T ≈ α + 2(n-1)/n · S/B_bus; decode S = batch × hidden × bytes; per step 2L all-reduces for L layers under Megatron TP.", evidence_ids: ["CLM-002", "CLM-004", "CLM-005"], derived_from: ["MECH-02", "MECH-03"] }
-  - { id: "MATH-02", description: "Pipeline bubble fraction (p-1)/m (training), (1/v)(p-1)/m interleaved; forward-only utilization m/(m+p-1); throughput 1/max(t_i).", evidence_ids: ["CLM-006", "CLM-007", "CLM-008"], derived_from: ["MECH-04"] }
+  - { id: "MATH-02", description: "Pipeline bubble fraction (p-1)/m (training), (1/v)(p-1)/m interleaved; forward-only one-shot utilization m/(m+p-1); autoregressive decode ring cycle max(Σ(t_i+x_i), m·max t_i) with throughput m/cycle.", evidence_ids: ["CLM-006", "CLM-007", "CLM-008"], derived_from: ["MECH-04"] }
   - { id: "MATH-03", description: "KV transfer bytes = 2 × layers × kv_heads × head_dim × bytes × uncached prompt tokens; non-overlapped transfer time adds to TTFT.", evidence_ids: ["CLM-020"], derived_from: ["MECH-05"] }
   - { id: "MATH-04", description: "Affinity hotspot: a prefix with traffic share f pinned to one of R replicas gives that replica load ≥ f versus fair share 1/R.", evidence_ids: ["CLM-024"], derived_from: ["MECH-06"] }
 

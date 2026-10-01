@@ -1,7 +1,9 @@
 module: "20-distributed-inference"
-registry_version: "1.0.0"
+registry_version: "1.1.0"
+previous_version: "1.0.0"
 research_cutoff: "2026-09-30"
-change_reason: "Replace the generated placeholder (mis-titled 'Module 16', training-centric 1F1B framing) with an evidence-backed distributed-inference model covering placement decisions, collective cost, tensor/pipeline/expert/context parallelism, prefill/decode disaggregation and KV transfer, multi-replica routing, and failure domains, pinned to vLLM source and scoped 2025-2026 frontier work."
+change_reason: "Replace the generated placeholder (mis-titled 'Module 16', training-centric 1F1B framing) with an evidence-backed distributed-inference model covering placement decisions, collective cost, tensor/pipeline/expert/context parallelism, prefill/decode disaggregation and KV transfer, multi-replica routing, and failure domains, pinned to vLLM source and scoped 2025-2026 frontier work. v1.1.0 restates CLM-008 as an explicit forward-only model with the autoregressive decode ring."
+changed_claims: ["CLM-008"]
 claims:
   - id: CLM-001
     claim: "A distributed inference plan is a choice of what each GPU holds (replicated versus sharded weights, KV, experts, or sequence) and which communication sits on each token's critical path; data-parallel replicas add throughput and failure isolation without per-token communication, while tensor, pipeline, expert, and context parallelism add capacity or reduce per-request work at the cost of synchronous communication inside a group."
@@ -35,7 +37,7 @@ claims:
     currentness_status: "CURRENT SOURCE SNAPSHOT"
     evidence:
       - { source_type: source_code, tier: 1, title: "vLLM parallel linear layers and parallel state", repository: "https://github.com/vllm-project/vllm", commit: "863475eb9cd78ae6a4a22f1b90df7fe85e0af438", verification_date: "2026-09-30", file: "vllm/model_executor/layers/linear.py; vllm/distributed/communication_op.py; vllm/distributed/parallel_state.py", symbol: "ColumnParallelLinear.forward; RowParallelLinear.forward; tensor_model_parallel_all_reduce; GroupCoordinator.all_reduce; initialize_model_parallel", entry_point: "Model layers constructed with ColumnParallelLinear/QKVParallelLinear followed by RowParallelLinear (e.g., o_proj, down_proj)", execution_path: "ColumnParallelLinear.forward: quant_method.apply -> optional tensor_model_parallel_all_gather -> RowParallelLinear.forward: split input if not input_is_parallel -> quant_method.apply (bias only on rank 0) -> tensor_model_parallel_all_reduce -> get_tp_group().all_reduce -> world_size==1 bypass or device_communicator.all_reduce", url: "https://github.com/vllm-project/vllm/blob/863475eb9cd78ae6a4a22f1b90df7fe85e0af438/vllm/model_executor/layers/linear.py", accessed_at: "2026-09-30" }
-    limitations: ["Static inspection only; which device communicator (custom all-reduce, NCCL, symmetric memory) runs is configuration- and hardware-dependent and was not traced.", "Contiguous TP ranks usually but not necessarily map to one node; the launcher's rank-to-host assignment decides."]
+    limitations: ["Static inspection only; which device communicator (custom all-reduce, NCCL, symmetric memory) runs is configuration- and hardware-dependent and was not traced.", "Contiguous TP ranks usually but not necessarily map to one node; the launcher's rank-to-host assignment decides.", "The EP-group condition in source is 'model_config is None or model_config.is_moe'; dense models with a model config get no EP group."]
     applicability: "Production source trace for TP communication and group layout."
     curriculum_usage: { lessons: ["20.3"], labs: ["LAB-B"], assessments: ["Production-Source-Trace"] }
   - id: CLM-004
@@ -84,16 +86,16 @@ claims:
     applicability: "Reference form of the bubble fraction."
     curriculum_usage: { lessons: ["20.4"], labs: ["LAB-C"], assessments: ["Mastery-20"] }
   - id: CLM-008
-    claim: "In forward-only pipelined inference with p equal stages, a single request's step still traverses all p stages sequentially, so pipeline parallelism does not reduce per-token latency and adds p-1 inter-stage transfers; stage utilization approaches m/(m+p-1) only when m independent batches are in flight, and unequal stages or variable per-batch work make the slowest stage set throughput."
+    claim: "Inference pipelines run forward passes only. A one-shot pass of m independent batches through p equal stages takes (m+p-1)·t_s, giving stage utilization m/(m+p-1). In autoregressive decode, a batch's next step cannot enter stage 1 until its previous step leaves stage p, so m circulating batches have cycle time max(Σ(t_i + x_i), m·max t_i): a single batch uses each stage at most t_s out of every p(t_s + x), per-token latency is never below the sum of stage and transfer times, and the slowest stage bounds throughput."
     provenance: DERIVED
     domain: pipeline_parallelism
-    concepts: [pipeline_parallelism, pipeline_bubble, stage_imbalance]
+    concepts: [pipeline_parallelism, pipeline_bubble, stage_imbalance, forward_only_schedule]
     confidence: high
     currentness_status: "CURRENT DEFAULT"
-    assumptions: ["Equal stage times t_s; transfers not overlapped; m batches ready to enter."]
-    derivation: "A pass over m batches takes (m+p-1)·t_s while each stage is busy m·t_s, giving utilization m/(m+p-1), the forward-only analogue of CLM-006/CLM-007. A single batch's latency is p·t_s plus transfers regardless of m. With stage times t_i the steady-state rate is 1/max(t_i)."
-    limitations: ["Runtimes schedule decode steps of different batches into the pipeline dynamically; measure utilization rather than assuming the equal-stage formula."]
-    applicability: "Deciding when PP serves capacity rather than latency."
+    assumptions: ["Stage i takes t_i per batch step and serves one batch at a time", "Each hop (including returning the sampled token to stage 1) takes x_i and does not occupy the stage", "m batches are continuously available; no backward pass exists at inference"]
+    derivation: "One-shot: the last of m batches enters stage 1 at (m-1)·t_s and needs p·t_s more, while each stage is busy m·t_s, the forward-only analogue of CLM-006/CLM-007. Decode ring: one batch needs Σ(t_i + x_i) per step because of the autoregressive dependency; each stage must serve all m batches once per cycle, needing m·t_i; the cycle is the larger of the two bounds, throughput is m/cycle batch-steps, and stage i utilization is m·t_i/cycle."
+    limitations: ["Runtimes may interleave prefill chunks and decode steps of different batches; measure per-stage busy time instead of assuming the equal-stage formula.", "Training schedules such as 1F1B interleave forward and backward work and do not describe inference."]
+    applicability: "Deciding when PP serves capacity rather than latency, and sizing in-flight batches."
     curriculum_usage: { lessons: ["20.4"], labs: ["LAB-C"], assessments: ["Mastery-20", "Incident-20.1"] }
   - id: CLM-009
     claim: "Pope et al. develop an analytical model for inference efficiency used to select multi-dimensional partitioning layouts for TPU v4 slices by application latency and throughput requirements, and report that with appropriate partitioning, multiquery attention's lower memory enables up to 32x longer context, a 29 ms per-token low-batch generation latency with int8 weights, and 76% MFU for large-batch prompt processing on PaLM 540B."
