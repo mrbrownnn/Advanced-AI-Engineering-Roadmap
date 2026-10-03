@@ -95,5 +95,5 @@ Passing the validator does not certify technical correctness; semantic review wa
 - **Static inspection only.** No lab, benchmark, or pinned runtime was executed. Every source trace is a static read at a pinned commit; worked-example and fixture numbers are synthetic and labeled.
 - **TODO_VERIFY items remain** in most modules, recorded in each registry: industry-prevalence surveys were not done, some papers were read at abstract level only, and some 2025–2026 frontier areas were searched but not surveyed exhaustively. None supports a required outcome.
 - **Verification dates.** Some pinned sources were re-read on 2026-10-01, one day after the 2026-09-30 research cutoff; the dated sources themselves fall on or before the cutoff.
-- **Citation coverage.** Modules 04, 10, 11, and 12 have registry claims that are not cited inline in the README; this is reported as a validator warning, not an error.
+- **Citation coverage.** Every registry claim in Modules 00–24 is cited inline in its README; the validator reports no warnings.
 - **Per-package reports** are in `audit-reports/` (gitignored): `WP-B`, `WP-F1`, `WP-F2`, `WP-D1`, `WP-D2`, `WP-A1a`, `WP-A1b`, `WP-A2a`, `WP-A2b`, and `module19-review` through `module24-audit`.
