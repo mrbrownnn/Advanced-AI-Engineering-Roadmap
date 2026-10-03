@@ -1,7 +1,7 @@
 # Curriculum Content Audit Summary — Module 04 Alignment
 
-**Audit date:** 2026-09-27  
-**Task phase:** Task 1 — existing authored modules only  
+**Audit date:** 2026-09-27 (Task 1); correction and authoring pass 2026-09-30 to 2026-10-03\
+**Task phase:** Task 1 and Task 2 complete — Modules 00–24\
 **Golden reference:** `04-serving-scheduling-capacity/README.md`
 
 ## Scope and Decision Rule
@@ -73,15 +73,27 @@ Named transfer problems and numbered deliverables were added so mastery must sur
 
 ## Verification Record
 
-The final Task 1 verification must record:
+The checklist above was written on 2026-09-27 for Task 1 (Modules 00–16). The record below states what was actually verified in the correction and authoring pass of 2026-09-30 to 2026-10-03, which followed the root audit (`../audit.md`) and replaces the earlier plan. Earlier "audited" labels for Modules 00–16 did not mean the later audit findings were already fixed.
 
-- exact heading/order compliance for Modules 00–16;
-- per-lesson and per-lab scaffold coverage;
-- evidence-registry and knowledge-model schema validity;
-- claim, evidence, and dependency cross-reference integrity;
-- retained source URL and pinned source-symbol checks;
-- Markdown/diff hygiene and absence of generated placeholders;
-- explicit confirmation that Module 04 was not modified;
-- explicit confirmation that Modules 17–24 were not accepted as Task 1 content.
+### Scope completed
 
-Final counts and any scoped exceptions are appended only after these checks pass.
+- **Baseline (AUD-B01–B04):** Module 04 was corrected rather than left unchanged: absolute parameter units with explicit GB/GiB, an expectation-form latency identity with a covariance counterexample, Little's Law conditions, reconciled effort, a solved swap/recompute example, and a solvable mastery fixture.
+- **Authored modules (AUD-00 to AUD-19):** every listed finding for Modules 00–19 was addressed by one owner per module. P1 correctness items were fixed before depth items.
+- **Outline modules (AUD-N20–N24):** Modules 20–24 were authored from their outlines to the same contract, each with an evidence registry, knowledge model, pinned production source trace, six lessons, four labs, an incident, and a mastery fixture.
+- **Shared contracts (AUD-G01–G02):** `INSTRUCTIONAL_SCHEMA.md` now matches the Module 04 spine; `CURRICULUM.md`, `ROADMAP.md`, and `README.md` use the real 00–24 map with no broken local links; the evidence and knowledge-model schemas reject VERIFIED_FACT claims without evidence, unpinned source-code evidence, and empty published knowledge models, enforced by negative fixtures and `tools/validate_curriculum.py`.
+
+### Static results (validator, 2026-10-03)
+
+- 25 modules, 160 lessons, 102 labs, 665h of declared module effort; program total ≈755–770h against the 730–780h budget.
+- 559 registry claims, 718 knowledge-model entries, 1,910 knowledge-model evidence references; all resolve.
+- Every module: schema-valid registry and knowledge model, identical H2 spine to Module 04, lesson/lab targets resolved, O/D/H labels matching registry provenance, effort components summing to the declared total, no empty Concepts subsections. All negative fixtures are rejected.
+
+Passing the validator does not certify technical correctness; semantic review was done per module by its owner and spot-checked during integration (recomputed worked numbers, pinned commits and symbols opened at their revisions).
+
+### Known limits and open items
+
+- **Static inspection only.** No lab, benchmark, or pinned runtime was executed. Every source trace is a static read at a pinned commit; worked-example and fixture numbers are synthetic and labeled.
+- **TODO_VERIFY items remain** in most modules, recorded in each registry: industry-prevalence surveys were not done, some papers were read at abstract level only, and some 2025–2026 frontier areas were searched but not surveyed exhaustively. None supports a required outcome.
+- **Verification dates.** Some pinned sources were re-read on 2026-10-01, one day after the 2026-09-30 research cutoff; the dated sources themselves fall on or before the cutoff.
+- **Citation coverage.** Modules 04, 10, 11, and 12 have registry claims that are not cited inline in the README; this is reported as a validator warning, not an error.
+- **Per-package reports** are in `audit-reports/` (gitignored): `WP-B`, `WP-F1`, `WP-F2`, `WP-D1`, `WP-D2`, `WP-A1a`, `WP-A1b`, `WP-A2a`, `WP-A2b`, and `module19-review` through `module24-audit`.
