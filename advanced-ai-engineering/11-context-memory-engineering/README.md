@@ -116,7 +116,7 @@ Token-counting facts needed here (taught at first use; Module 01 only establishe
 
 - A **tokenizer** maps text to a sequence of integer token IDs from a model-specific vocabulary. The count of IDs, not characters or words, is what the context limit measures. The same text can produce different counts under different tokenizers, and counts per character vary with language, code, and numbers.
 - A chat request is **serialized** before tokenization. Role markers, message delimiters, tool schemas, tool-call IDs, and tool results are turned into tokens by the model's chat template or by the server. A UI may hide them; the limit still counts them.
-- An **exact count** comes from running the target tokenizer on the exact serialized request, or from the usage figures the server returns. A **heuristic count** (for example a fixed characters-per-token ratio) is an estimate with an error that has to be measured.
+- An **exact count** comes from running the target tokenizer on the exact serialized request, or from the usage figures the server returns. A **heuristic count** (for example a fixed characters-per-token ratio) is an estimate with an error that has to be measured (**D**, CLM-002).
 
 For a declared model, tokenizer, message protocol, and endpoint (**D**, CLM-001):
 
@@ -200,7 +200,7 @@ Maximum accepted length asks “can the request be processed?” Effective conte
 - prompt/template and model revision;
 - answer format, reasoning budget, latency, and cost.
 
-RULER shows that simple needle retrieval can conceal failures on multi-needle, tracing, aggregation, and QA tasks as length grows. Lost in the Middle shows position sensitivity in evaluated models. Neither implies a universal degradation curve. A model upgrade can improve one slice and regress another.
+RULER shows that simple needle retrieval can conceal failures on multi-needle, tracing, aggregation, and QA tasks as length grows (**O**, CLM-003). Lost in the Middle shows position sensitivity in evaluated models (**O**, CLM-004). Neither implies a universal degradation curve. A model upgrade can improve one slice and regress another.
 
 **Worked Example:** A model can accept 128k tokens and retrieve one unique string near the end while failing multi-fact aggregation at a shorter length. Acceptance and one needle task therefore do not define the same envelope.
 
@@ -235,7 +235,7 @@ Use types to encode different semantics:
 - **procedural artifacts:** reviewed strategies, plans, examples, or code;
 - **summaries/reflections:** derived, lossy views that never silently replace raw provenance.
 
-MemGPT is a reference for moving information between bounded in-context and external tiers. Generative Agents is a reference for an event stream, retrieval, and reflection. These are mechanism families, not proof of infinite, lossless, safe, or human-like memory.
+MemGPT is a reference for moving information between bounded in-context and external tiers (**O**, CLM-006). Generative Agents is a reference for an event stream, retrieval, and reflection (**O**, CLM-007). These are mechanism families, not proof of infinite, lossless, safe, or human-like memory.
 
 **Worked Example — typed memory records** (synthetic records for one user `u1` in tenant `t1`).
 
@@ -283,9 +283,9 @@ How does memory converge under retries, concurrent corrections, expiry, deletion
 
 **Concepts & Definitions:**
 
-A write policy asks whether an event is eligible, novel, durable, attributable, consented, and safe to retain. Store stable identity, source, confidence, privacy class, valid time, transaction time, TTL, supersession, and derived-from lineage. Append-only growth can retain prompt injection, transient mood, wrong tool output, or another user's data.
+A write policy asks whether an event is eligible, novel, durable, attributable, consented, and safe to retain. Store stable identity, source, confidence, privacy class, valid time, transaction time, TTL, supersession, and derived-from lineage. Append-only growth can retain prompt injection, transient mood, wrong tool output, or another user's data (**D**, CLM-008).
 
-A read policy first applies hard access, validity, deletion, and task constraints; only then rank by workload-tested relevance, recency, importance, authority, confidence, and prior utility. Similarity alone does not prove applicability. Selected records need lineage in the request trace.
+A read policy first applies hard access, validity, deletion, and task constraints; only then rank by workload-tested relevance, recency, importance, authority, confidence, and prior utility. Similarity alone does not prove applicability (**D**, CLM-009). Selected records need lineage in the request trace.
 
 Concurrent or multi-writer updates need an explicit compare/version rule. Conditional writes, monotonic sequence or transaction versions, and a domain conflict policy make lost updates observable; last-writer-wins is valid only when its clock and product semantics are declared. Backfills, TTL expiry, tombstones, indexes, replicas, and caches must converge before physical garbage collection removes recovery evidence.
 
@@ -348,7 +348,7 @@ Compaction options have different failure modes:
 - retrieval externalizes history but can miss or misrank it;
 - learned/token compression adds another model, overhead, and corruption surface.
 
-Treat summaries as versioned derived artifacts. Link each claim to source events, allow rebuild, and periodically compare with raw history. Recursive summarization can turn an interpretation into an apparent fact.
+Treat summaries as versioned derived artifacts. Link each claim to source events, allow rebuild, and periodically compare with raw history. Recursive summarization can turn an interpretation into an apparent fact (**D**, CLM-010).
 
 Define:
 

@@ -108,7 +108,7 @@ Can a delivered answer be reconstructed from an immutable request and evidence b
 
 Pin the request's query intent and time, tenant/access scope, corpus or index revision, original and transformed queries, retrieval/context budgets, model and prompt versions, answer format, citation semantics, and abstention policy. “Latest” is not a version. A response built from unrecorded mutable state cannot be reproduced or audited.
 
-The original RAG architecture is a reference: generation is conditioned on retrieved non-parametric evidence. Production systems add many lossy boundaries. Keep three values separate:
+The original RAG architecture is a reference: generation is conditioned on retrieved non-parametric evidence (**O**, CLM-001). Production systems add many lossy boundaries. Keep three values separate:
 
 - **available:** the required evidence exists in the authorized source snapshot;
 - **opportunity:** the required evidence reaches candidates or assembled context;
@@ -151,7 +151,7 @@ $$
 L_{visible}=t_{query\ visible}-t_{source\ event}.
 $$
 
-The relation is exact for declared endpoints; decomposing it into stage times requires the actual dependency graph because work may overlap. Record event time semantics and clock skew. Report a distribution and stale-read fraction by source/slice, not only a mean.
+The relation is exact for declared endpoints; decomposing it into stage times requires the actual dependency graph because work may overlap. Record event time semantics and clock skew. Report a distribution and stale-read fraction by source/slice, not only a mean. In Elasticsearch, for example, a write can return before it is searchable, and refresh trades visibility latency against indexing and search work (**O**, CLM-008).
 
 **Stable IDs and versions are inputs to idempotency; they do not create it.** A retry is safe only if the *store* applies an acceptance rule to every write, and applies it atomically. Each logical source item has a stable `doc_id`. The source assigns each change a monotonically increasing `version` (an event sequence number or source revision, never a worker's wall clock). The store keeps one record per `doc_id`: `(version_s, content_hash_s, state_s ∈ {live, tombstone})`. An incoming event `(op, doc_id, version_e, hash_e)` is decided as follows (**D**, CLM-018):
 
@@ -252,11 +252,11 @@ Which query transformation and context packing choices improve evidence opportun
 
 **Concepts & Definitions:**
 
-Preserving the original query is a valid route. Rewriting, expansion, decomposition, and multi-step retrieval are interventions that can improve evidence opportunity or silently alter identifiers, negation, scope, entity, and time. Log every transformation and compare it with the original using paired slices.
+Preserving the original query is a valid route. Rewriting, expansion, decomposition, and multi-step retrieval are interventions that can improve evidence opportunity or silently alter identifiers, negation, scope, entity, and time. Log every transformation and compare it with the original using paired slices (**H**, CLM-009).
 
-Context assembly is constrained selection, not concatenation. Candidate evidence differs in relevance, authority, freshness, length, redundancy, conflict, and access eligibility. Deduplicate by stable identity/version, retain source boundaries, budget tokens, and vary order deliberately.
+Context assembly is constrained selection, not concatenation. Candidate evidence differs in relevance, authority, freshness, length, redundancy, conflict, and access eligibility. Deduplicate by stable identity/version, retain source boundaries, budget tokens, and vary order deliberately (**D**, CLM-010).
 
-Fusion-in-Decoder shows that a model can aggregate multiple retrieved passages in a scoped QA setup. Lost in the Middle and FreshLLMs show why “more context” is not a universal rule: evidence position, amount, and order can matter. Test depth/order matrices, relevant-plus-distractor mixtures, duplicate amplification, and truncation for the target model and prompt.
+Fusion-in-Decoder shows that a model can aggregate multiple retrieved passages in a scoped QA setup (**O**, CLM-002). Lost in the Middle (**O**, CLM-003) and FreshLLMs (**O**, CLM-004) show why “more context” is not a universal rule: evidence position, amount, and order can matter. Test depth/order matrices, relevant-plus-distractor mixtures, duplicate amplification, and truncation for the target model and prompt.
 
 **Worked Example — packing five candidates into a 1,000-token evidence budget** (synthetic candidates, registry CLM-022).
 
@@ -304,9 +304,9 @@ Contradiction can occur among source documents, revisions of one source, retriev
  source_identity, authority, scope)
 ```
 
-Two passages may be temporally different rather than contradictory. Ten mirrors of a stale article do not outrank one authoritative update. “Newest” is unsafe when publication time differs from effective time. Model confidence does not establish source authority.
+Two passages may be temporally different rather than contradictory. Ten mirrors of a stale article do not outrank one authoritative update. “Newest” is unsafe when publication time differs from effective time. Model confidence does not establish source authority (**D**, CLM-012).
 
-Real-document experiments report that models can retain incorrect parametric answers despite corrective context. Therefore test both directions: trusted context correcting model memory, and untrusted context attempting to override a valid prior. If authority/time/scope cannot resolve the evidence, surface the conflict or abstain.
+Real-document experiments report that models can retain incorrect parametric answers despite corrective context (**O**, CLM-011). Therefore test both directions: trusted context correcting model memory, and untrusted context attempting to override a valid prior. If authority/time/scope cannot resolve the evidence, surface the conflict or abstain.
 
 **Worked Example — authority and valid-time conflict table** (synthetic sources).
 
@@ -411,7 +411,7 @@ source absent?
   -> correct claim but wrong/incomplete citation?
 ```
 
-Record evaluator identity and uncertainty. Automated NLI or LLM judges are measurements with errors, not ground truth.
+Each stage admits a different intervention, so attribute the failure to the earliest failing stage rather than to one answer score (**D**, CLM-014). Record evaluator identity and uncertainty. Automated NLI or LLM judges are measurements with errors, not ground truth.
 
 **Worked Example — one claim-citation table, three metrics** (synthetic answer; entailment labels are assumed to come from an adjudicated human check).
 
@@ -481,9 +481,9 @@ $$
 U(route)=Q(route)-\lambda_L L(route)-\lambda_C C(route),
 $$
 
-subject to hard access, safety, freshness, and consistency constraints. This is a product-specific heuristic: quality definition and weights are not universal. Published comparisons through 2025 report different task-dependent outcomes, which is evidence against a universal winner.
+subject to hard access, safety, freshness, and consistency constraints. This is a product-specific heuristic: quality definition and weights are not universal. Published comparisons through 2025 report different task-dependent outcomes, which is evidence against a universal winner (**O**, CLM-015).
 
-Self-RAG, corrective RAG, and hybrid routing demonstrate adaptive mechanism families. They add evaluator/router errors, correlated self-judgment, extra model or search calls, new source-quality risks, latency, and cost. Treat them as workload-dependent/frontier until calibrated on the target service.
+Self-RAG, corrective RAG, and hybrid routing demonstrate adaptive mechanism families. They add evaluator/router errors, correlated self-judgment, extra model or search calls, new source-quality risks, latency, and cost. Treat them as workload-dependent/frontier until calibrated on the target service (**O**, CLM-016).
 
 **Worked Example — route decision with hard constraints and declared weights** (all values synthetic, invented for this exercise; they are not measurements of any model or product).
 
@@ -555,7 +555,7 @@ Interpretation and limits: the example shows the order of operations (constraint
 - Revision: `8a5406eea71a0fc19e94c4b9a5cd96df2158a45a`
 - Verified: 2026-09-26, static inspection only. On 2026-09-30, `answer_builder.py` and `document_writer.py` were re-read at the same revision (reference-pattern parsing and the `referenced` metadata flag in `AnswerBuilder.run`; `DuplicatePolicy` passed to the document store in `DocumentWriter.run`). `pipeline.py` and `prompt_builder.py` were not re-read, so the registry date for the whole trace is unchanged.
 - Files/symbols: `Pipeline.run/_run_component`, `PromptBuilder.run`, `DocumentWriter.run`, and `AnswerBuilder.run` in the registry-recorded paths.
-- Execution: pipeline dispatch invokes component `run`; prompt variables are rendered; document writes delegate to the configured store; answer building parses reference indices and attaches document copies. No semantic citation-entailment validation was observed in that path.
+- Execution: pipeline dispatch invokes component `run`; prompt variables are rendered; document writes delegate to the configured store; answer building parses reference indices and attaches document copies. No semantic citation-entailment validation was observed in that path (**O**, CLM-017).
 - Relation to Lesson 10.2: `DocumentWriter` exposes an ID-based `DuplicatePolicy` (`NONE`, `SKIP`, `OVERWRITE`, `FAIL`) and delegates to `document_store.write_documents`. No version comparison appears in this component. `OVERWRITE` is therefore last-writer-wins by ID at this layer, and `SKIP` keeps the first writer; the version acceptance rule has to come from the document store or from code the learner adds. Whether a given store backend adds version checks was not inspected.
 - Scope: pinned Haystack behavior, not a general definition of RAG orchestration or consistency.
 - **Trace practice (the 2h `source_trace` effort):** at the pinned revision, follow `DocumentWriter.run` to the `write_documents` call and `AnswerBuilder.run` to the point where the `referenced` flag is set. Answer in writing: (1) which component decides what happens on a duplicate ID, and does it see a version? (2) what input would make `AnswerBuilder` mark a document as referenced although it does not support the sentence? Expected answers: (1) the policy value is passed through and the store decides; this component compares no version; (2) any reply that contains an in-range reference number matching the pattern; the flag is set per reply from the pattern match alone, with no claim-to-document mapping and no entailment check. A common error is to conclude that the framework "handles deduplication" or "validates citations" from the names of the parameters.

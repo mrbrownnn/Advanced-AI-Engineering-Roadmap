@@ -107,11 +107,11 @@ def check_module(mod):
             if rel not in provenance:
                 errs.append(f"{c['id']} related to unknown {rel}")
 
-    cited = set(re.findall(r"CLM-\d{3}", readme))
+    cited = set(re.findall(r"CLM-\d{3}[a-z]?", readme))
     for cid in sorted(cited - set(ids)):
         errs.append(f"README cites unknown {cid}")
-    for label, group in re.findall(r"\*\*([ODH])\*\*,\s*((?:CLM-\d{3}(?:,\s*)?)+)", readme):
-        for cid in re.findall(r"CLM-\d{3}", group):
+    for label, group in re.findall(r"\*\*([ODH])\*\*,\s*((?:CLM-\d{3}[a-z]?(?:,\s*)?)+)", readme):
+        for cid in re.findall(r"CLM-\d{3}[a-z]?", group):
             if cid in provenance and PROVENANCE_LABEL.get(provenance[cid]) != label:
                 errs.append(f"README labels {cid} as {label} but provenance is {provenance[cid]}")
 

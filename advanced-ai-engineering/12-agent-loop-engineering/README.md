@@ -132,7 +132,7 @@ This is exact bookkeeping for a declared state schema. It is not automatically a
 **Mechanism Explanation:**
 The controller—not the model—owns legal states, action validation, authorization, tool dispatch, budget accounting, terminal outcomes, and the trajectory ledger. The model may emit `call_tool`, `respond`, `abstain`, `ask`, or `escalate`; each is a proposal until the controller validates it.
 
-ReAct is a reference pattern for interleaving reasoning and environment actions on evaluated tasks. It does not prove that an unbounded reasoning/action transcript is safe or generally reliable.
+ReAct is a reference pattern for interleaving reasoning and environment actions on evaluated tasks. It does not prove that an unbounded reasoning/action transcript is safe or generally reliable (**O**, CLM-002).
 
 **Worked Example:**
 Trace `READY → PROPOSED → AUTHORIZED → DISPATCHED → OBSERVED → VERIFIED → SUCCEEDED` for a read-only lookup. Then replace the result with a timeout after dispatch: the legal next state is `EFFECT_UNKNOWN`, not automatic success or an assumption that nothing happened.
@@ -172,9 +172,9 @@ A production tool contract includes:
 - structured result, effect status, postcondition evidence, and provenance.
 
 **Mechanism Explanation:**
-Natural-language descriptions help model selection but are not an execution contract. Toolformer is evidence that a model can learn decisions about whether, when, and how to invoke scoped APIs; it does not supply runtime permission, transaction, timeout, or retry policy.
+Natural-language descriptions help model selection but are not an execution contract. Toolformer is evidence that a model can learn decisions about whether, when, and how to invoke scoped APIs; it does not supply runtime permission, transaction, timeout, or retry policy (**O**, CLM-003).
 
-Every result becomes an observation envelope containing call ID, tool/version, canonical arguments, timestamps, raw and parsed output, validation result, error class, effect state, truncation, and lineage. Empty, truncated, malformed, stale, or adversarial content must not be observationally equivalent to success.
+Every result becomes an observation envelope containing call ID, tool/version, canonical arguments, timestamps, raw and parsed output, validation result, error class, effect state, truncation, and lineage. Empty, truncated, malformed, stale, or adversarial content must not be observationally equivalent to success (**D**, CLM-009).
 
 **Quantitative Model / Derivation:**
 For validation predicates $V_{schema}$, $V_{policy}$, and $V_{pre}$, dispatch is permitted only when
@@ -258,7 +258,7 @@ $$
 A step cap bounds one dimension; it neither proves success nor prevents a single expensive or harmful step. Semantic outcomes include verified success, explicit failure, safe abstention, escalation, cancellation, and unknown effect. Module 18 uses this ledger for its cost ceiling under attack; durable storage of the ledger across crashes is a Module 14 concern.
 
 **Mechanism Explanation:**
-Classify a failed call before choosing a response:
+Classify a failed call before choosing a response, because retry and recovery differ by class (**D**, CLM-006):
 
 | Failure class | Typical next decision |
 |---|---|
@@ -347,12 +347,12 @@ Map error class and effect certainty to retry, repair, verify, replan, alternati
 How can a controller stop genuine no-progress without terminating legitimate polling or iterative refinement?
 
 **Concepts & Definitions:**
-Step count is not progress. Instrument verified subgoals, state hashes/deltas, action signatures, repeated error classes, tool-result novelty, plan similarity, and remaining budget. Repeated actions, alternating states, or nearly identical plans are useful stall signals, but legitimate polling and iterative refinement can look similar.
+Step count is not progress. Instrument verified subgoals, state hashes/deltas, action signatures, repeated error classes, tool-result novelty, plan similarity, and remaining budget. Repeated actions, alternating states, or nearly identical plans are useful stall signals, but legitimate polling and iterative refinement can look similar (**H**, CLM-010).
 
 **Mechanism Explanation:**
 Treat online stall detection as a hypothesis. Compare a preregistered detector with a step-cap baseline and report early-stop savings, false stops, recovered success, effect errors, and cost. A detector that merely stops hard tasks sooner may reduce spend while destroying utility.
 
-Reflexion is a reference mechanism that stores verbal feedback for later trials. Reflection is not independent evidence: a fluent explanation can preserve a wrong diagnosis. Admit a reflection into state or memory only with its source, outcome, confidence, validity window, and evidence; compare self-reflection with no-reflection, external-feedback, and oracle-feedback baselines.
+Reflexion is a reference mechanism that stores verbal feedback for later trials. Reflection is not independent evidence: a fluent explanation can preserve a wrong diagnosis (**O**, CLM-008). Admit a reflection into state or memory only with its source, outcome, confidence, validity window, and evidence; compare self-reflection with no-reflection, external-feedback, and oracle-feedback baselines.
 
 **Quantitative Model / Trade-off Comparison:**
 For a detector, report false-stop rate among episodes that the baseline later solves, saved calls among genuinely stalled episodes, and net verified utility after cost. No single count is sufficient because aggressive stopping can improve cost while reducing success.
@@ -430,7 +430,7 @@ Demonstrate that a model cannot widen authority and cannot claim a side effect w
 Which trajectory-level measurements distinguish a useful recovery mechanism from one that hides failures or amplifies cost?
 
 **Concepts & Definitions:**
-AgentBench is reference evidence that interactive environments expose heterogeneous failure modes. A single aggregate score cannot establish general agent capability.
+AgentBench is reference evidence that interactive environments expose heterogeneous failure modes. A single aggregate score cannot establish general agent capability (**O**, CLM-012).
 
 **Quantitative Model / Derivation:**
 For a strictly sequential episode, wall time decomposes into controller, model, validation, tool, observation-processing, queue, and network components. For parallel branches, use critical-path timing; summing overlapping spans overstates elapsed time.
@@ -442,6 +442,8 @@ Report by workload and failure slice:
 - steps, model/tool calls, retries, tokens, tool/model latency, elapsed time, and cost;
 - recovery conditioned on perturbation and on opportunity to recover;
 - terminal reason and unfinished episodes.
+
+Success-only scores can reward wasteful or unsafe paths, so these outcomes are reported together (**D**, CLM-013).
 
 Define episode goodput under a declared SLO as verified, policy-compliant successes per wall-clock time. Define cost of success with all included episode spend and an explicit zero-success policy. Never drop aborted, rejected, timed-out, or failed episodes merely because they lack a final answer.
 

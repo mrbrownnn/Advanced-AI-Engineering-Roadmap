@@ -78,7 +78,7 @@ Let $o_i$ be the client-observed arrival time of output token or output event $i
 $$ITL_i = o_i-o_{i-1} \quad \text{for } i \in [2,N_{out}]$$
 $$T_{e2e} = o_{N_{out}}-t_0 = T_{TTFT}+\sum_{i=2}^{N_{out}}ITL_i$$
 $$TPOT = \frac{T_{e2e}-T_{TTFT}}{N_{out}-1}=\frac{1}{N_{out}-1}\sum_{i=2}^{N_{out}}ITL_i$$
-These identities assume one observed event per token. If a runtime emits multiple tokens per event, event-level ITL and token-amortized TPOT differ.
+These identities assume one observed event per token (**D**, CLM-008). If a runtime emits multiple tokens per event, event-level ITL and token-amortized TPOT differ.
 
 *Assumptions*: $t_0$, $t_1$, and the output timestamps share a clock and explicitly defined observation boundary; generation produces $N_{out} \ge 2$ output events. A narrower engine-side decomposition must separately account for host, sampling, serialization, buffering, and network time before comparing it with client-observed TTFT.
 
@@ -127,7 +127,7 @@ When does fixed batch membership waste execution slots in autoregressive workloa
 **Concepts & Definitions:**
 - **Static Batching**: Requests are grouped into a fixed batch of size $B$ at arrival. The entire batch executes synchronously through prefill and all decode steps until every single request in the batch emits its end-of-sequence (`<eos>`) token or hits `max_tokens`.
 - **Execution Bubbles (Wasted Slots)**: When requests in a fixed-membership batch have uneven completion lengths, finished slots cannot be replaced until the batch boundary. Some implementations execute masked or padded work for inactive slots; others avoid part of that work but still lose the opportunity to admit waiting requests.
-- **Continuous Batching (Iteration-Level Scheduling)**: Batch composition is re-evaluated dynamically at each discrete token-generation step. Terminated sequences immediately exit the batch and release their resources, while waiting requests are admitted into empty batch slots on the very next iteration.
+- **Continuous Batching (Iteration-Level Scheduling)**: Batch composition is re-evaluated dynamically at each discrete token-generation step. Terminated sequences immediately exit the batch and release their resources, while waiting requests are admitted into empty batch slots on the very next iteration (**O**, CLM-001).
 
 **Mechanism Explanation:**
 In static batching, batch execution duration is governed by the maximum output length: $T_{batch} = \max_{j \in [1, B]} (N_{out, j}) \times \tau_{step}$. The total useful token compute is $\sum_{j=1}^B N_{out, j}$, while the expended compute is $B \times \max_{j} (N_{out, j})$.
@@ -182,13 +182,13 @@ Quantify the compute bubble waste of static batching and explain the iteration-l
 When does long prefill work interfere with active decodes, and how should chunk size and token budget be chosen without assuming chunking improves every metric?
 
 **Concepts & Definitions:**
-- **Prefill vs. Decode Regimes**: Prefill exposes parallel work across prompt tokens; decode advances active sequences incrementally. Prefill often reaches higher arithmetic intensity and decode often becomes sensitive to weight/KV traffic, but model, batch size, sequence length, precision, kernels, and hardware can change either regime.
-- **Inter-Phase Interference**: Long prefill work can delay decode through launch ordering or contention for SM, cache, HBM, and runtime budgets. A time-aligned scheduler trace plus GPU counters is required to identify the actual cause.
+- **Prefill vs. Decode Regimes**: Prefill exposes parallel work across prompt tokens; decode advances active sequences incrementally. Prefill often reaches higher arithmetic intensity and decode often becomes sensitive to weight/KV traffic, but model, batch size, sequence length, precision, kernels, and hardware can change either regime (**O**, CLM-002).
+- **Inter-Phase Interference**: Long prefill work can delay decode through launch ordering or contention for SM, cache, HBM, and runtime budgets. A time-aligned scheduler trace plus GPU counters is required to identify the actual cause (**H**, CLM-002b).
 - **Chunked Prefill**: Dividing an input prompt of length $N_{in}$ into multiple chunks of size at most $C$ (e.g., $C = 512$). In a simple fixed-size model the prompt needs $\lceil N_{in}/C\rceil$ chunks; block alignment and runtime-specific constraints can alter boundaries. Chunking creates opportunities to schedule decode work between or alongside chunks, but does not guarantee that every iteration contains both phases.
 
 **Mechanism Explanation:**
 In a hypothetical scheduler that executes an arriving 4,096-token prompt as one non-overlapped prefill step, a measured $150\text{ ms}$ step can add a comparable delay to decodes queued behind it. Actual overlap and contention must be established from a timeline.
-In the Sarathi-Serve scheduling pattern:
+In the Sarathi-Serve scheduling pattern (**O**, CLM-003):
 1. The scheduler maintains a total token budget per iteration: $T_{budget}$ (e.g., 512 tokens).
 2. Active decodes are scheduled first: $B_{dec}$ tokens.
 3. The next prefill allocation is bounded by both the configured chunk limit and remaining token budget, e.g. $C_{next}\le\min(C_{max},T_{budget}-B_{dec})$ in a simplified token-count model.
@@ -240,16 +240,16 @@ Under which assumptions does queueing delay grow nonlinearly near capacity, and 
   - *Finite window $[0,T]$*: If the boundary is empty at both $0$ and $T$, then $L=\lambda W$ holds exactly, with $L$ the time-average count, $\lambda$ = arrivals$/T$, and $W$ the mean time in the boundary. If requests are present at either end, the identity still holds only when $W$ counts time accrued inside the window. The full sojourn of a request that straddles the window edge does not satisfy it.
   - *Long run*: The identity holds when the long-run arrival rate and mean residence limits exist and are finite. It needs neither Poisson arrivals, stationarity, nor a particular queue discipline.
   - *Boundary*: $L$, $\lambda$, and $W$ must describe the same boundary and population. Use admitted arrivals, not offered arrivals, when rejected requests never enter. $L$ for an end-to-end boundary counts waiting, resident, and still-streaming requests. It is not the number of resident GPU sequences holding KV. That count needs its own boundary: $L_{resident}=\lambda_{admitted}\,\mathbb{E}[T_{resident}]$.
-  - Little's Law is a conservation identity for averages. It says nothing about percentiles, and it does not predict $W$ from $\lambda$ without a service model.
+  - Little's Law is a conservation identity for averages (**D**, CLM-004). It says nothing about percentiles, and it does not predict $W$ from $\lambda$ without a service model.
 - **Saturation Knee**: An empirically observed workload-specific region where additional offered load causes queue delay, rejection, or SLO misses to rise sharply relative to useful completions. There is no universal safe-utilization interval.
 
 **Quantitative Model / Derivation:**
 Approximating the serving system as an M/G/1 queue (Poisson arrivals, general service time distribution with mean $1/\mu$ and variance $\sigma^2$):
-According to the **Pollaczek-Khinchine (P-K) formula**:
+According to the **Pollaczek-Khinchine (P-K) formula** (**D**, CLM-005):
 $$W_q = \frac{\lambda (\sigma^2 + 1/\mu^2)}{2(1 - \rho)} = \frac{\rho \cdot \frac{1}{\mu} \left(1 + C_v^2\right)}{2(1 - \rho)}$$
 where $C_v = \sigma / (1/\mu) = \sigma \mu$ is the coefficient of variation of service time.
 Notice two critical dynamics:
-1. **The $(1 - \rho)$ Denominator**: In the M/G/1 model, mean waiting diverges as $\rho \to 1$. This is model behavior, not a percentile guarantee for a batching LLM server.
+1. **The $(1 - \rho)$ Denominator**: In the M/G/1 model, mean waiting diverges as $\rho \to 1$. This is model behavior, not a percentile guarantee for a batching LLM server (**D**, CLM-009).
 2. **The Variance Term ($C_v^2$ or $\sigma^2$)**: Under the model assumptions, higher service-time variance increases mean queue wait. Real LLM service demand depends on prompt/output lengths, batching, cache state, and scheduler decisions, so the distribution must be measured rather than inferred from output length alone.
 
 **Worked Example:**
@@ -292,9 +292,9 @@ How do serving runtimes respond when scheduled work cannot obtain KV capacity, a
 
 **Concepts & Definitions:**
 - **General mechanisms**: Delay admission, reject work, preempt and recompute, pause while retaining state, migrate/offload state, or reserve capacity. Each has latency, fairness, compute, bandwidth, and memory costs.
-- **Current pinned vLLM V1 observation**: At commit `25b0add7b8a1c944d5c4e364f2de6aa82497a2ad`, the scheduler maintains `running` and request queues. When `KVCacheManager.allocate_slots()` fails, it can select a victim and call `_preempt_request()`, which frees KV blocks, marks the request `PREEMPTED`, resets `num_computed_tokens`, increments its counter, and prepends it to the waiting queue.
-- **Historical vLLM V0 observation**: Older source/paper versions described SWAP versus RECOMPUTE modes. That path is useful as a design comparison, not as the current vLLM definition.
-- **Thrashing hypothesis**: Repeated preemption or migration can reduce completion goodput, but counters and traces must show the loop before it is diagnosed.
+- **Current pinned vLLM V1 observation**: At commit `25b0add7b8a1c944d5c4e364f2de6aa82497a2ad`, the scheduler maintains `running` and request queues. When `KVCacheManager.allocate_slots()` fails, it can select a victim and call `_preempt_request()`, which frees KV blocks, marks the request `PREEMPTED`, resets `num_computed_tokens`, increments its counter, and prepends it to the waiting queue (**O**, CLM-013).
+- **Historical vLLM V0 observation**: Older source/paper versions described SWAP versus RECOMPUTE modes. That path is useful as a design comparison, not as the current vLLM definition (**O**, CLM-007).
+- **Thrashing hypothesis**: Repeated preemption or migration can reduce completion goodput, but counters and traces must show the loop before it is diagnosed (**H**, CLM-009b).
 
 **Mechanism Explanation:**
 At the pinned V1 revision, the relevant path is conceptually:
@@ -317,7 +317,7 @@ This pseudocode is explanatory; the required artifact must cite the actual pinne
 These are lower-bound comparisons. Effective bandwidth, overlap, serialization, current load, kernel efficiency, and timeout/cancellation behavior must be measured. Keep binary and decimal units apart: 1 GiB $=2^{30}$ bytes and 1 GB $=10^9$ bytes.
 
 **Worked Example:**
-*Inputs.* All values below are **synthetic exercise values**, not measurements of any system.
+*Inputs.* All values below are **synthetic exercise values** (CLM-016), not measurements of any system.
 - Preempted state payload: 500 MiB. At the 128 KiB/token logical KV footprint of the Lesson 4.7 8B example, that is $500\cdot2^{20}/(128\cdot2^{10})=4{,}000$ tokens.
 - Effective transfer bandwidth, stated as a synthetic "measured" value: 25 GiB/s in each direction. Transfer is not overlapped with other traffic.
 - Recomputation of those 4,000 tokens on the same device, timed separately (synthetic value): 310 ms.
@@ -331,7 +331,7 @@ This is payload only. DMA setup, synchronization, block gather/scatter, and cont
 
 *Step 3: compare like with like.* Compare the measured recompute time (310 ms) with the measured transfer time. Neither should be replaced by a bound. The transfer *lower bound* is $310/39.0625\approx7.9\times$ smaller. The break-even effective bandwidth, at which payload-only transfer equals the 310 ms recompute, is $2\times500\text{ MiB}/0.310\text{ s}\approx3{,}226\text{ MiB/s}\approx3.15\text{ GiB/s}$.
 
-*Interpretation and limits.* In this fixture, transfer wins only if its measured round trip, including overheads and contention, stays well below 310 ms. It must also not steal bandwidth that other requests need, and host memory must be available for the swapped state. The lower bound is not a latency prediction. The pinned vLLM V1 path in this lesson recomputes rather than swaps, so this comparison is a design exercise, not a description of that runtime. Recompute on a loaded device competes with other requests' prefill and decode work. Measure both alternatives under the same load before choosing.
+*Interpretation and limits.* In this fixture, transfer wins only if its measured round trip, including overheads and contention, stays well below 310 ms. It must also not steal bandwidth that other requests need, and host memory must be available for the swapped state. The lower bound is not a latency prediction. The pinned vLLM V1 path in this lesson recomputes rather than swaps, so this comparison is a design exercise, not a description of that runtime. Recompute on a loaded device competes with other requests' prefill and decode work. Measure both alternatives under the same load before choosing (**D**, CLM-018).
 
 **Knowledge Check:**
 1. Under what condition does enabling CPU KV swapping degrade total cluster throughput worse than immediately aborting preempted requests?
@@ -373,7 +373,7 @@ Admission control algorithms employ three primary strategies:
 2. **Time-in-Queue Bounding (Virtual Deadline)**:
    A simple estimate $\widehat{W}_q=|Queue_{waiting}|/\mu$ requires homogeneous work and approximately constant service rate. Treat it as a calibrated predictor with uncertainty rather than proof that an SLO violation is guaranteed.
 3. **Sojourn-Time Queue Control**: Use measured queue residence time as an overload signal and shed according to a declared policy. CoDel is one reference algorithm from packet queues; applying it to heterogeneous LLM jobs requires validation rather than copying its constants.
-4. **Rate Limiting**: A token-bucket or related limiter bounds accepted arrivals over a time window and permits a configured burst. It controls ingress rate; it is not the same mechanism as sojourn-time-based queue dropping.
+4. **Rate Limiting**: A token-bucket or related limiter bounds accepted arrivals over a time window and permits a configured burst. It controls ingress rate; it is not the same mechanism as sojourn-time-based queue dropping (**O**, CLM-010).
 
 **Quantitative Model / Trade-off Comparison:**
 For an initially empty deterministic fluid queue with fixed rates and no drops:
@@ -424,7 +424,7 @@ How do we rank interacting queueing, compute, host, network, and memory constrai
   2. *Device execution pressure*: one or more kernels are limited by compute throughput, memory bandwidth, synchronization, launch behavior, or inefficient shapes. Aggregate SM activity alone does not identify which.
   3. *KV-capacity pressure*: allocation limits block admission or trigger runtime-specific preemption even when some compute counters appear low.
   4. *Host/network/control-plane pressure*: tokenization, serialization, communication, scheduler overhead, or downstream backpressure delays work outside the main GPU kernels.
-Multiple constraints can interact or transition during one incident.
+Multiple constraints can interact or transition during one incident (**H**, CLM-011).
 
 **Systematic Discrimination Matrix:**
 To diagnose an underperforming cluster, collect the following telemetry metrics and cross-reference against the discrimination signatures:
@@ -448,7 +448,7 @@ Given:
 
 *Step 1: Weight and Static Memory Footprint*:
 $$M_{weights,payload}\,[\text{bytes}] = P \times B_{param}$$
-If $P$ is quoted in billions ($P_B$), use $M_{weights,payload}=10^9\,P_B\,B_{param}$ bytes. Convert explicitly: divide by $10^9$ for GB or by $2^{30}$ for GiB. Example: $70\times10^9\times2\text{ bytes}=140\times10^9\text{ bytes}=140\text{ GB}\approx130.39\text{ GiB}$, *not* 140 GiB. This is the logical payload. The resident weight footprint $M_{weights,resident}$ also depends on the runtime, sharding, replicated tensors, and allocator, so measure it or declare it as an exercise input.
+If $P$ is quoted in billions ($P_B$), use $M_{weights,payload}=10^9\,P_B\,B_{param}$ bytes. Convert explicitly: divide by $10^9$ for GB or by $2^{30}$ for GiB. Example: $70\times10^9\times2\text{ bytes}=140\times10^9\text{ bytes}=140\text{ GB}\approx130.39\text{ GiB}$, *not* 140 GiB. This is the logical payload. The resident weight footprint $M_{weights,resident}$ also depends on the runtime, sharding, replicated tensors, and allocator, so measure it or declare it as an exercise input (**D**, CLM-017).
 $$M_{KV\_available} = M_{device,usable} - M_{weights,resident} - M_{nonKV,measured} - M_{headroom}$$
 The non-KV term and allocator/headroom policy are measured for the selected runtime and configuration; they are not universal constants.
 
@@ -460,7 +460,7 @@ The product of means $(\bar N_{out}-1)\times\overline{TPOT}$ is therefore exact 
 - the covariance is zero, for example when TPOT does not vary with output length; or
 - $\overline{TPOT}$ is replaced by the gap-weighted mean over the same population, $\overline{ITL}_{gap}=\sum_r (T_{e2e,r}-TTFT_r)/\sum_r (N_r-1)$.
 
-Otherwise it is an approximation, and its error is the covariance term.
+Otherwise it is an approximation, and its error is the covariance term (**D**, CLM-015).
 
 *Counterexample (two requests):*
 
@@ -551,6 +551,7 @@ Section pointers below were re-checked against the linked full texts on 2026-09-
 **PRODUCTION**
 - `vllm/v1/core/sched/scheduler.py` and `vllm/v1/core/kv_cache_manager.py`. Pinned commit: `25b0add7b8a1c944d5c4e364f2de6aa82497a2ad`. Statically verified 2026-09-25 and statically re-inspected 2026-09-30; not executed. — [scheduler.py](https://github.com/vllm-project/vllm/blob/25b0add7b8a1c944d5c4e364f2de6aa82497a2ad/vllm/v1/core/sched/scheduler.py) · [kv_cache_manager.py](https://github.com/vllm-project/vllm/blob/25b0add7b8a1c944d5c4e364f2de6aa82497a2ad/vllm/v1/core/kv_cache_manager.py)
   - *Inspection Focus*: `Scheduler.schedule()`, `KVCacheManager.allocate_slots()`, and `Scheduler._preempt_request()`.
+  - *Observed*: `Scheduler.schedule()` assigns token work to running requests before traversing the waiting queues, bounds that work with scheduled/input token budgets, and calls `KVCacheManager.allocate_slots()` before scheduling work that needs KV capacity (**O**, CLM-006).
   - *Scope*: One upstream snapshot. It says nothing about other releases or runtimes.
 - *Addressing Cascading Failures* (Google SRE Book, ch. 22, written by Mike Ulrich). — [sre.google](https://sre.google/sre-book/addressing-cascading-failures/)
   - *Key Sections*: Queue Management; Load Shedding and Graceful Degradation; Retries.
@@ -563,7 +564,7 @@ Section pointers below were re-checked against the linked full texts on 2026-09-
   - *Key Sections*: Section 3 (Motivation: prefill/decode cost, throughput–latency trade-off); Sections 4.1–4.3 (chunked prefills, stall-free batching, token-budget selection).
   - *Scope*: The scheduling pattern in Lesson 4.3. Its token budgets and reported gains are specific to its evaluated models, hardware, and SLOs.
 - *DistServe: Disaggregating Prefill and Decoding for Goodput-optimized Large Language Model Serving* (Zhong et al., OSDI 2024). — [USENIX page](https://www.usenix.org/conference/osdi24/presentation/zhong-yinmin) · [arXiv:2401.09670](https://arxiv.org/abs/2401.09670)
-  - *Why it matters*: Evaluates phase disaggregation under explicit workloads and exposes placement and KV-transfer trade-offs.
+  - *Why it matters*: Evaluates phase disaggregation under explicit workloads and exposes placement and KV-transfer trade-offs (**O**, CLM-014).
   - *Key Sections*: Sections 2.1–2.3 and Section 3 (prefill/decode characterization and trade-off analysis); Section 4 (placement and online scheduling).
   - *Scope*: Evidence that phase behavior is workload- and hardware-dependent, and that disaggregation is a candidate intervention in the Mastery problem. Detailed disaggregated placement belongs to Module 20.
 - *Splitwise: Efficient Generative LLM Inference Using Phase Splitting* (Patel et al., ISCA 2024). — [Microsoft Research page](https://www.microsoft.com/en-us/research/publication/splitwise-efficient-generative-llm-inference-using-phase-splitting/) · [arXiv:2311.18677](https://arxiv.org/abs/2311.18677)
@@ -651,7 +652,7 @@ Under the current baseline deployment, one engine with tensor parallelism across
 
 You must design a comprehensive serving architecture, scheduling configuration, and capacity allocation plan that targets the voice agent's strict SLOs while maximizing document summarization throughput, and define the load and failure tests required before making a production guarantee.
 
-**Workload Fixture (SYNTHETIC — exercise assumptions, not measurements of any real model, GPU, or runtime):**
+**Workload Fixture (SYNTHETIC — exercise assumptions, not measurements of any real model, GPU, or runtime; registry CLM-012):**
 
 | Input | Fixture value |
 |---|---|
